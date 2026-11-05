@@ -15,10 +15,8 @@ def write_cfg(tmp_path, bills):
 
 
 class FakeTwilio:
+    """Stands in for whichever channel build_notifier would pick."""
     sent: list[str] = []
-
-    def __init__(self, settings):
-        pass
 
     def send(self, message):
         FakeTwilio.sent.append(message)
@@ -28,7 +26,7 @@ class FakeTwilio:
 def isolate(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     FakeTwilio.sent = []
-    monkeypatch.setattr(job, "TwilioNotifier", FakeTwilio)
+    monkeypatch.setattr(job, "build_notifier", lambda settings, channel: FakeTwilio())
 
 
 def test_dry_run_prints_and_does_not_send(tmp_path, capsys):

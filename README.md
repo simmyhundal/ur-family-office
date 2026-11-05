@@ -39,11 +39,11 @@ Read-only. Pulls the Joint and Personal balances through Plaid, subtracts the bi
 
 The measure that matters: how often your partner has to ask whether the bills are covered. The goal is zero.
 
-1. `cp .env.example .env` and fill `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` (real Chase balances need Plaid production access), and the `TWILIO_*` / `ALERT_PHONE_NUMBER` values.
-2. `python scripts/link_account.py` and connect your Chase accounts (the token is stored in `.data/items.json`, gitignored).
+1. `cp .env.example .env` and fill `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` (real Chase balances need Plaid production access), and set up Telegram alerts (free): create a bot with @BotFather, put its token in `TELEGRAM_BOT_TOKEN`, have you and your partner message the bot, then `python scripts/telegram_setup.py` prints the `TELEGRAM_CHAT_IDS` line to add (`--test` sends a test message). Twilio (`TWILIO_*`, `ALERT_PHONE_NUMBER`) is optional.
+2. `python scripts/link_account.py` and connect your Chase accounts. This requests the maximum 730 days of transaction history; Plaid fixes that window when the account is first linked (default 90 days), so re-linking is the only way to get more later (the token is stored in `.data/items.json`, gitignored).
 3. Copy `docs/alert.example.json` to `.data/alert.json` and set `joint_mask`, `personal_mask` (last digits), `cushion`, `personal_floor`, `next_topup` (next paycheck or planned transfer in), and your `bills` (`"repeat": "monthly"` for rent).
-4. Try it: `python -m jobs.check_balance --joint 1500 --personal 4200` (no Plaid, dry run), then `python -m jobs.check_balance` (live balances, still dry run), then `--send` to text.
-5. Schedule `--send` daily (cron / launchd). It texts at most once per day per situation, warns if `next_topup` has passed, and logs every check to `.data/alerts_log.csv`; fill the `partner_asked` column by hand during the one-week trial in `docs/alert-trial.md`.
+4. Try it: `python -m jobs.check_balance --joint 1500 --personal 4200` (no Plaid, dry run), then `python -m jobs.check_balance` (live balances, still dry run), then `--send` to send the alert (`--channel telegram|twilio|all`; default is Telegram if configured).
+5. Schedule `--send` daily (cron / launchd). It alerts at most once per day per situation, warns if `next_topup` has passed, and logs every check to `.data/alerts_log.csv`; fill the `partner_asked` column by hand during the one-week trial in `docs/alert-trial.md`.
 
 ### Bill detection (optional)
 Set `"detect_bills": true` in `.data/alert.json` and the alert also counts bills Plaid detects as recurring on the Joint account (rent, subscriptions, card and loan payments; transfers are excluded). Manual bills always win when both describe the same bill, and anything Plaid misses can still be entered by hand.

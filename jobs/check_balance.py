@@ -1,7 +1,7 @@
 """Cron entry point for the low-balance alert.
 
   python jobs/check_balance.py                    # dry run: prints what would be sent
-  python jobs/check_balance.py --send             # texts via Twilio when low (once per day per situation)
+  python jobs/check_balance.py --send             # sends via Telegram (or Twilio) when low (once per day per situation)
   python jobs/check_balance.py --joint 1850.20 --personal 4200   # skip Plaid and test with made-up balances
 Config: .data/alert.json (see src/ufo/treasury/bills.py). Everything it writes lives under .data/ (gitignored).
 """
@@ -21,7 +21,7 @@ from ufo.providers.token_store import load_items
 from ufo.treasury.bills import load_config
 from ufo.treasury.detect import merge_bills, streams_to_bills
 from ufo.treasury.low_balance import check_balance
-from ufo.treasury.notify import ConsoleNotifier, TwilioNotifier
+from ufo.treasury.notify import ConsoleNotifier, build_notifier
 
 DATA = Path(".data")
 STATE = DATA / "alert_state.json"
@@ -55,7 +55,8 @@ def _log(now: datetime, res, sent: bool) -> None:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default=str(DATA / "alert.json"))
-    ap.add_argument("--send", action="store_true", help="actually send the text (default: dry run)")
+    ap.add_argument("--send", action="store_true", help="actually send the alert (default: dry run)")
+    ap.add_argument("--channel", choices=["auto", "telegram", "twilio", "all"], default="auto", help="auto = Telegram if configured, else Twilio")
     ap.add_argument("--joint", type=float, help="use this Joint balance instead of asking Plaid (needs --personal)")
     ap.add_argument("--personal", type=float, help="use this Personal balance instead of asking Plaid (needs --joint)")
     args = ap.parse_args(argv)
@@ -90,7 +91,7 @@ def main(argv: list[str] | None = None) -> int:
         if _already_sent(res, now.date()):
             print("Already alerted for this situation today; not sending again.")
         else:
-            notifier = TwilioNotifier(settings) if args.send else ConsoleNotifier()
+            notifier = build_notifier(settings, args.channel) if args.send else ConsoleNotifier()
             notifier.send(res.message)
             sent = args.send
             if sent:
