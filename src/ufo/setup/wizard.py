@@ -42,6 +42,8 @@ class Deps:
     make_notifier: Callable[[Settings], object] = TelegramNotifier
     run_dry_run: Callable[[Path], None] | None = None
     poll_seconds: int = 120
+    install_schedule: Callable[[Path, int, int], list] | None = None  # sets up the daily run (macOS launchd)
+    schedule_installed: Callable[[], bool] | None = None
     open_url: Callable[[str], None] | None = None  # opens a link in the browser / Telegram app (macOS: `open`)
     copy: Callable[[str], None] | None = None  # puts text on the clipboard (macOS: `pbcopy`)
     suffix: Callable[[], str] = lambda: "".join(random.choices(string.ascii_lowercase + string.digits, k=4))
@@ -276,6 +278,29 @@ def step_telegram(p: Prompter, d: Deps, s: Settings) -> None:
         p.say("Sent. Check Telegram.")
 
 
+def step_schedule(p: Prompter, d: Deps) -> None:
+    p.say("\n== 5. Run it every day ==")
+    if d.install_schedule is None:
+        p.say("Automatic daily runs are set up on macOS only. Schedule `python -m jobs.check_balance --send` with cron instead.")
+        return
+    if d.schedule_installed and d.schedule_installed():
+        p.say("A daily run is already scheduled.")
+        if not p.confirm("schedule_redo", "Change the time?", False):
+            return
+    if not p.confirm("schedule", "Check every morning and message you only when Joint is at risk?", True):
+        p.say("Skipped. Later: python scripts/schedule_daily.py")
+        return
+    from .schedule import parse_time
+    while True:
+        try:
+            hour, minute = parse_time(p.ask("schedule_time", "What time (24h)", "08:00"))
+            break
+        except ValueError:
+            p.say("Please use a time like 08:00 or 7:30.")
+    for line in d.install_schedule(d.root, hour, minute):
+        p.say(line)
+
+
 def run(p: Prompter, d: Deps | None = None) -> None:
     d = d or Deps()
     p.say("UFO setup. About five minutes. Nothing here can move money; Plaid access is read-only.")
@@ -285,8 +310,9 @@ def run(p: Prompter, d: Deps | None = None) -> None:
     flows = step_flows(p, d)
     write_config(p, d, acct, flows)
     step_telegram(p, d, s)
+    step_schedule(p, d)
     p.say("\n== Done ==")
-    p.say("Check what the alert will count:   python scripts/show_detected_bills.py\nTry it (nothing is sent):         python -m jobs.check_balance\nSend for real:                    python -m jobs.check_balance --send")
+    p.say("Check what the alert will count:   python scripts/show_detected_bills.py\nTry it (nothing is sent):         python -m jobs.check_balance\nSend now, if Joint is at risk:    python -m jobs.check_balance --send")
     if d.run_dry_run and p.confirm("dry", "Run a dry check now?", True):
         d.run_dry_run(d.root)
 
