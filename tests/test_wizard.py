@@ -239,3 +239,32 @@ def test_update_env_replaces_adds_and_keeps_other_lines(tmp_path, monkeypatch):
     assert f.read_text() == "# keep me\nA=1\nB=20\nC=3\n" and stat.S_IMODE(f.stat().st_mode) == 0o600
     assert os.environ["C"] == "3"
     monkeypatch.delenv("B"), monkeypatch.delenv("C")
+
+
+def test_offers_to_link_the_card_when_none_is_linked_then_asks_which_cards(deps):
+    no_card = [a for a in ACCOUNTS if a["type"] != "credit"]
+    state = {"linked": False}
+    deps.list_accounts = lambda s, items: ACCOUNTS if state["linked"] else no_card
+    deps.link_account = lambda s: state.update(linked=True)
+    p = Script(**{**HAPPY, "telegram": False, "link_card": True})
+    wizard.run(p, deps)
+    assert state["linked"] and "No credit card is linked" in p.output
+    assert json.loads((deps.root / ".data" / "alert.json").read_text())["credit_card_masks"] == ["9999"]
+
+
+def test_declining_the_card_link_still_finishes_with_no_cards(deps):
+    no_card = [a for a in ACCOUNTS if a["type"] != "credit"]
+    deps.list_accounts = lambda s, items: no_card
+    wizard.run(Script(**{**HAPPY, "telegram": False, "link_card": False}), deps)
+    cfg = json.loads((deps.root / ".data" / "alert.json").read_text())
+    assert cfg["credit_card_masks"] == [] and cfg["detect_bills"] is False
+
+
+def test_telegram_already_configured_is_kept_unless_you_say_otherwise(deps, monkeypatch):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", TOKEN)
+    monkeypatch.setenv("TELEGRAM_CHAT_IDS", "111")
+    asked = []
+    deps.make_admin = lambda t: asked.append(t) or FakeAdmin(t)
+    p = Script(**{**HAPPY, "telegram_redo": False})
+    wizard.run(p, deps)
+    assert "already set up" in p.output and asked == []  # never touched Telegram

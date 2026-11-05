@@ -100,6 +100,21 @@ def step_plaid(p: Prompter, d: Deps) -> tuple[Settings, list[dict]]:
     return s, accounts
 
 
+def is_card(a: dict) -> bool:
+    return a.get("type") == "credit" or a.get("subtype") == "credit card"
+
+
+def ensure_cards(p: Prompter, d: Deps, s: Settings, accounts: list[dict]) -> list[dict]:
+    """Credit-card statements are the main thing Joint pays, so if no card is linked, offer to link it now."""
+    if not accounts or any(is_card(a) for a in accounts):
+        return accounts
+    p.say("\nNo credit card is linked. The card paid from Joint is usually its biggest outflow, so without it the alert cannot count it.")
+    if p.confirm("link_card", "Link the credit card now? (Pick the card in the Chase window; you can leave the other accounts as they are.)", True):
+        d.link_account(s)
+        return d.list_accounts(s, d.load_items())
+    return accounts
+
+
 def step_accounts(p: Prompter, accounts: list[dict]) -> dict:
     p.say("\n== 2. Which accounts? ==")
     if not accounts:
@@ -110,7 +125,7 @@ def step_accounts(p: Prompter, accounts: list[dict]) -> dict:
     j = p.choose("joint", "Which is the JOINT account (the one to watch)?", names)
     rest = [i for i in range(len(accounts)) if i != j]
     pi = p.choose("personal", "Which account tops up Joint (your PERSONAL account)?", [names[i] for i in rest])
-    cards = [i for i in range(len(accounts)) if accounts[i].get("type") == "credit" or accounts[i].get("subtype") == "credit card"]
+    cards = [i for i in range(len(accounts)) if is_card(accounts[i])]
     picked: list[str] = []
     if cards:
         sel = p.choose_many("cards", "Which credit cards are paid from the Joint account?", [names[i] for i in cards])
@@ -157,6 +172,10 @@ def write_config(p: Prompter, d: Deps, accounts: dict, flows: dict) -> None:
 def step_telegram(p: Prompter, d: Deps, s: Settings) -> None:
     p.say("\n== 4. Telegram alerts (free) ==")
     p.say("Alerts are deliberately minimal: no balances, amounts or account details leave your computer, and the bot only sends.")
+    if s.telegram_bot_token and s.telegram_chat_ids:
+        p.say(f"Telegram is already set up ({len(s.telegram_chat_ids)} recipient(s)).")
+        if not p.confirm("telegram_redo", "Set it up again?", False):
+            return
     if not p.confirm("telegram", "Set up Telegram now?", True):
         p.say("Skipped. Run this again any time.")
         return
@@ -216,6 +235,7 @@ def run(p: Prompter, d: Deps | None = None) -> None:
     d = d or Deps()
     p.say("UFO setup. About five minutes. Nothing here can move money; Plaid access is read-only.")
     s, accounts = step_plaid(p, d)
+    accounts = ensure_cards(p, d, s, accounts)
     acct = step_accounts(p, accounts)
     flows = step_flows(p, d)
     write_config(p, d, acct, flows)
