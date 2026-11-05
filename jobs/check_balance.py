@@ -16,9 +16,10 @@ from datetime import date, datetime
 from pathlib import Path
 
 from ufo.config import load_settings
-from ufo.providers.plaid_client import get_balances
+from ufo.providers.plaid_client import get_balances, get_recurring_outflows
 from ufo.providers.token_store import load_items
 from ufo.treasury.bills import load_config
+from ufo.treasury.detect import merge_bills, streams_to_bills
 from ufo.treasury.low_balance import check_balance
 from ufo.treasury.notify import ConsoleNotifier, TwilioNotifier
 
@@ -69,7 +70,19 @@ def main(argv: list[str] | None = None) -> int:
         b = get_balances(settings, load_items(), [cfg.joint_mask, cfg.personal_mask])
         joint, personal = b[cfg.joint_mask][1], b[cfg.personal_mask][1]
     now = datetime.now()
+    note = ""
+    if cfg.detect_bills and args.joint is None:
+        try:
+            streams = get_recurring_outflows(settings, load_items(), cfg.joint_mask)
+            detected, skipped = streams_to_bills(streams, now.date(), cfg.include_early_detection, cfg.ignore_streams)
+            cfg.bills, dropped = merge_bills(cfg.bills, detected)
+            for line in dropped + skipped:
+                print(f"  bill detection: {line}")
+        except RuntimeError as e:  # never silently under-warn: fall back to manual bills and say so
+            print(f"Bill detection unavailable: {e}", file=sys.stderr)
+            note = " (Bill detection was unavailable, so only your manual bills are counted.)"
     res = check_balance(joint, personal, cfg, now.date())
+    res.message += note
     print(res.message)
 
     sent = False

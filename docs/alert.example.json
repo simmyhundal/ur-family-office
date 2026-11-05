@@ -5,7 +5,19 @@
   "personal_mask": "5678",
   "personal_floor": 1500,
   "bills": [
-    {"name": "Rent", "amount": 1800, "due": "2026-11-01", "repeat": "monthly"},
-    {"name": "Car insurance", "amount": 142.5, "due": "2026-11-09"}
-  ]
+    {
+      "name": "Rent",
+      "amount": 1800,
+      "due": "2026-11-01",
+      "repeat": "monthly"
+    },
+    {
+      "name": "Car insurance",
+      "amount": 142.5,
+      "due": "2026-11-09"
+    }
+  ],
+  "detect_bills": false,
+  "include_early_detection": false,
+  "ignore_streams": []
 }

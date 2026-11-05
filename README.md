@@ -10,7 +10,7 @@ It is being built for one household first (two people, a Joint and a Personal ac
 | Notify your partner, a "Joint is covered" dashboard, one-tap approval of the transfer | planned, after the manual alert proves useful |
 | Withdrawal rebalancer: proposed trades (sell/buy/full/auto modes), per-account withdrawals, Fidelity CSV input | ported from the `fin-advisor` prototype; output matches it exactly (22 tests) |
 | Order tickets | planned (issue #3) |
-| Bill detection from Plaid recurring transactions | planned |
+| Bill detection from Plaid recurring transactions | built; review with `scripts/show_detected_bills.py` before trusting it |
 | Tax-lot optimization (HIFO, TLH) | planned; needs per-lot data Plaid does not provide |
 | Multi-generational access (roles, delegation) | planned |
 
@@ -44,3 +44,12 @@ The measure that matters: how often your partner has to ask whether the bills ar
 3. Copy `docs/alert.example.json` to `.data/alert.json` and set `joint_mask`, `personal_mask` (last digits), `cushion`, `personal_floor`, `next_topup` (next paycheck or planned transfer in), and your `bills` (`"repeat": "monthly"` for rent).
 4. Try it: `python -m jobs.check_balance --joint 1500 --personal 4200` (no Plaid, dry run), then `python -m jobs.check_balance` (live balances, still dry run), then `--send` to text.
 5. Schedule `--send` daily (cron / launchd). It texts at most once per day per situation, warns if `next_topup` has passed, and logs every check to `.data/alerts_log.csv`; fill the `partner_asked` column by hand during the one-week trial in `docs/alert-trial.md`.
+
+### Bill detection (optional)
+Set `"detect_bills": true` in `.data/alert.json` and the alert also counts bills Plaid detects as recurring on the Joint account (rent, subscriptions, card and loan payments; transfers are excluded). Manual bills always win when both describe the same bill, and anything Plaid misses can still be entered by hand.
+
+- Review first: `python scripts/show_detected_bills.py` lists what was detected, what was skipped and why, and exactly which bills the alert would count.
+- Tuning: `ignore_streams` (names to skip), `include_early_detection` (count streams Plaid is not yet sure about).
+- Amounts use the larger of the last and average charge, so variable bills err toward warning you.
+- If detection is unavailable (product not ready, token missing the transactions product), the alert falls back to manual bills and says so in the text instead of silently under-warning.
+- Repeat rules: weekly, biweekly, semi-monthly (approximated as every 15 days), monthly, annually.
