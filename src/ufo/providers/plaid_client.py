@@ -132,3 +132,14 @@ def get_credit_card_liabilities(s: Settings, items: list[dict], masks: list[str]
     if missing:
         raise RuntimeError("No credit card found for mask(s): " + ", ".join(sorted(missing)) + ". Link the card, or fix credit_card_masks.")
     return out
+
+
+def list_accounts(s: Settings, items: list[dict]) -> list[dict]:
+    """Linked accounts (name, mask, type, subtype) without balances, for the setup wizard's pickers."""
+    client = make_client(s)
+    out: list[dict] = []
+    for item in items:
+        for a in client.accounts_get(AccountsGetRequest(access_token=item["access_token"]))["accounts"]:
+            d = a.to_dict()
+            out.append({"name": d["name"], "mask": d.get("mask"), "type": _val(d.get("type")), "subtype": _val(d.get("subtype"))})
+    return out

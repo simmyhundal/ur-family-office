@@ -13,8 +13,8 @@ import json
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from ufo.partner.asks import count_by_day, is_cash_ask, is_near_miss, merge_counts
-from ufo.partner.imessage import PartnerConfig, describe_senders, read_partner_messages
+from ufo.partner.asks import count_by_day, count_notices_by_day, is_cash_ask, is_near_miss, is_payment_notice, merge_counts
+from ufo.partner.imessage import PartnerConfig, describe_senders, read_chat_messages
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--config", default=".data/partner.json")
@@ -50,8 +50,10 @@ if args.add:
 
 launch = date.fromisoformat(args.launch) if args.launch else date.today()
 since = datetime.combine(launch - timedelta(days=args.baseline_days), datetime.min.time())
-msgs = read_partner_messages(cfg, since)
-auto_per_day = count_by_day(msgs)
+msgs = read_chat_messages(cfg, since)
+asks_per_day = count_by_day(msgs)
+notices_per_day = count_notices_by_day(msgs)  # your "I paid the joint account" messages: assumed to answer an ask
+auto_per_day = merge_counts(asks_per_day, notices_per_day)
 manual_per_day: dict[date, int] = {}
 if MANUAL.exists():
     for row in csv.DictReader(MANUAL.open()):
@@ -61,20 +63,25 @@ per_day = merge_counts(auto_per_day, manual_per_day)
 
 before = {d: n for d, n in per_day.items() if d < launch}
 after = {d: n for d, n in per_day.items() if d >= launch}
-print(f"Messages from your partner scanned: {len(msgs)} (since {since:%Y-%m-%d}); asks found automatically: {sum(auto_per_day.values())}, logged by hand: {sum(manual_per_day.values())}")
-print(f"Baseline ({args.baseline_days} days before {launch}): {sum(before.values())} asks on {len(before)} day(s)")
-print(f"Since launch ({launch}): {sum(after.values())} asks on {len(after)} day(s)")
+print(f"Messages scanned: {len(msgs)} (since {since:%Y-%m-%d})")
+print(f"  partner asked: {sum(asks_per_day.values())} message(s) on {len(asks_per_day)} day(s)")
+print(f"  you reported paying the joint account: {len(notices_per_day)} day(s)  (counted as answered asks)")
+print(f"  logged by hand: {sum(manual_per_day.values())}")
+print(f"Baseline ({args.baseline_days} days before {launch}): {sum(before.values())} ask event(s) on {len(before)} day(s)")
+print(f"Since launch ({launch}): {sum(after.values())} ask event(s) on {len(after)} day(s)")
 if args.review:
     print("\nMatched messages (shown here only, not stored):")
-    for when, text in msgs:
-        if is_cash_ask(text):
-            print(f"  {when:%Y-%m-%d} {text[:160]!r}")
+    for m in msgs:
+        if not m.from_me and is_cash_ask(m.text):
+            print(f"  {m.when:%Y-%m-%d} partner: {m.text[:150]!r}")
+        elif m.from_me and is_payment_notice(m.text):
+            print(f"  {m.when:%Y-%m-%d} you:     {m.text[:150]!r}")
 
 if args.near_misses:
     print("\nNear misses (money-related, not flagged; shown here only, not stored):")
-    for when, text in msgs:
-        if is_near_miss(text):
-            print(f"  {when:%Y-%m-%d} {text[:150]!r}")
+    for m in msgs:
+        if not m.from_me and is_near_miss(m.text):
+            print(f"  {m.when:%Y-%m-%d} {m.text[:150]!r}")
 
 out = Path(".data/partner_asks.csv")
 out.parent.mkdir(exist_ok=True)

@@ -39,7 +39,7 @@ class BillSpec(BaseModel):
 
 class DepositSpec(BaseModel):
     """Money you expect to arrive in Joint, e.g. a regular transfer from Personal that matches the rent your partner pays.
-    Enter a conservative amount: if the real one varies (say with an exchange rate), use the low end."""
+    If the amount varies, enter the low end."""
     name: str
     amount: float
     due: date

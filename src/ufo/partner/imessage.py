@@ -9,10 +9,17 @@ import re
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import NamedTuple
 
 from pydantic import BaseModel
 
 APPLE_EPOCH = datetime(2001, 1, 1)
+
+
+class ChatMessage(NamedTuple):
+    when: datetime
+    text: str
+    from_me: bool
 
 
 class PartnerConfig(BaseModel):
@@ -64,6 +71,24 @@ def mask_identifier(i: str | None) -> str:
         return i[0] + "…" + i[i.find("@"):]
     d = re.sub(r"\D", "", i)
     return "…" + d[-4:] if len(d) >= 7 else i
+
+
+def read_chat_messages(cfg: PartnerConfig, since: datetime, until: datetime | None = None) -> list[ChatMessage]:
+    """The partner's messages AND yours in the configured chats (nobody else's), oldest first. Yours are used only to spot
+    'I paid the joint account' notices, which we assume answer an ask."""
+    con = sqlite3.connect(f"file:{cfg.db_path}?mode=ro", uri=True)
+    handles = matching_handles(con, cfg)
+    if not cfg.chat_ids:
+        return []
+    ns = lambda d: int((d - APPLE_EPOCH).total_seconds() * 1e9)  # noqa: E731
+    hq = f"msg.handle_id in ({','.join('?' * len(handles))})" if handles else "0"
+    q = f"""select msg.date, msg.text, msg.attributedBody, msg.is_from_me from message msg
+            join chat_message_join m on m.message_id = msg.ROWID
+            where m.chat_id in ({",".join("?" * len(cfg.chat_ids))}) and msg.date >= ? and msg.date < ?
+              and (msg.is_from_me = 1 or {hq}) order by msg.date"""
+    end = until or datetime.now() + timedelta(days=1)
+    rows = con.execute(q, [*cfg.chat_ids, ns(since), ns(end), *handles]).fetchall()
+    return [ChatMessage(APPLE_EPOCH + timedelta(seconds=d / 1e9), decode_body(t, b), bool(me)) for d, t, b, me in rows]
 
 
 def read_partner_messages(cfg: PartnerConfig, since: datetime, until: datetime | None = None) -> list[tuple[datetime, str]]:
