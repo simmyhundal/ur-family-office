@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from datetime import date, datetime
+from datetime import date
 
 _TAPBACK = re.compile(r"^\s*(Liked|Loved|Disliked|Laughed at|Emphasized|Questioned|A ajouté un|A aimé|A adoré|A ri de)\b", re.I)
 _PATTERNS = [

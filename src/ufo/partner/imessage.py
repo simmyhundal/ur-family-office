@@ -93,7 +93,6 @@ def read_chat_messages(cfg: PartnerConfig, since: datetime, until: datetime | No
 
 def read_partner_messages(cfg: PartnerConfig, since: datetime, until: datetime | None = None) -> list[tuple[datetime, str]]:
     con = sqlite3.connect(f"file:{cfg.db_path}?mode=ro", uri=True)
-    digits = lambda s: re.sub(r"\D", "", s or "")  # noqa: E731
     handles = matching_handles(con, cfg)
     if not handles or not cfg.chat_ids:
         return []

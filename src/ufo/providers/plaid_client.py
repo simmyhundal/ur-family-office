@@ -64,6 +64,11 @@ def link_account(s: Settings, timeout_s: int = 900) -> None:
     raise TimeoutError("Timed out waiting for the link to complete.")
 
 
+def _val(x):
+    """Plaid enum models expose .value; plain strings pass through."""
+    return getattr(x, "value", x) or ""
+
+
 def pick_account_balance(accounts: list[dict], mask: str) -> tuple[str, float]:
     """Find the account with this mask and return (label, available balance), falling back to current.
     Pure so it can be tested."""

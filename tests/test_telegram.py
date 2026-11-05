@@ -7,7 +7,7 @@ import pytest
 from ufo.config import Settings
 from ufo.providers.plaid_client import HISTORY_DAYS, build_link_request
 from ufo.treasury import notify
-from ufo.treasury.notify import ConsoleNotifier, MultiNotifier, TelegramNotifier, TwilioNotifier, build_notifier
+from ufo.treasury.notify import MultiNotifier, TelegramNotifier, TwilioNotifier, build_notifier
 
 TG = Settings(telegram_bot_token="123:SECRET", telegram_chat_ids=["111", "222"])
 

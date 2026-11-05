@@ -22,7 +22,7 @@ from ..config import Settings, load_settings
 from ..providers import plaid_client, telegram_admin
 from ..providers.token_store import load_items
 from ..treasury.bills import AlertConfig
-from ..treasury.notify import ConsoleNotifier, TelegramNotifier
+from ..treasury.notify import TelegramNotifier
 from .envfile import update_env
 from .prompts import Prompter
 

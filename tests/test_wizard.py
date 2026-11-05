@@ -2,7 +2,6 @@ import json
 import os
 import stat
 from datetime import date
-from pathlib import Path
 
 import pytest
 
