@@ -16,43 +16,43 @@ TODAY = date(2026, 11, 3)
 
 def cfg(**kw):
     base = dict(cushion=1500, next_topup=date(2026, 11, 30), joint_mask="4821", personal_mask="7390", personal_floor=1500,
-                bills=[BillSpec(name="Chase Sapphire …9999 payment", amount=3495.47, due=date(2026, 11, 28))])
+                bills=[BillSpec(name="Chase Sapphire …9999 payment", amount=3210.80, due=date(2026, 11, 28))])
     base.update(kw)
     return AlertConfig(**base)
 
 
 # ---- the "headroom" level: a checkable claim without exact figures
-@pytest.mark.parametrize("n,expected", [(4453.61, "$4,000.00"), (500, "$500.00"), (499.99, "under $500.00"), (0, "under $500.00"), (-1, "below $0")])
+@pytest.mark.parametrize("n,expected", [(4909.55, "$4,500.00"), (500, "$500.00"), (499.99, "under $500.00"), (0, "under $500.00"), (-1, "below $0")])
 def test_about_floor_rounds_down_to_the_nearest_500(n, expected):
     assert about_floor(n) == expected
 
 
 def test_headroom_message_for_a_covered_joint_is_checkable_but_not_exact():
-    r = check_balance(7949.08, 9000, cfg(), TODAY)  # lowest point 4453.61
+    r = check_balance(8120.35, 9000, cfg(), TODAY)  # lowest point 4909.55
     assert r.status == "ok"
-    assert r.headroom_message == "UFO: Joint is covered through Nov 30, including upcoming bills. At its lowest it stays above $4,000.00 (your cushion is $1,500.00)."
-    assert "4,453" not in r.headroom_message and "7,949" not in r.headroom_message and "3,495" not in r.headroom_message
+    assert r.headroom_message == "UFO: Joint is covered through Nov 30, including upcoming bills. At its lowest it stays above $4,500.00 (your cushion is $1,500.00)."
+    assert "4,909" not in r.headroom_message and "8,120" not in r.headroom_message and "3,210" not in r.headroom_message
 
 
 def test_headroom_message_when_low_has_no_transfer_amount():
-    r = check_balance(4000, 9000, cfg(), TODAY)  # 4000 - 3495.47 = 504.53 < 1500
+    r = check_balance(4000, 9000, cfg(), TODAY)  # 4000 - 3210.80 = 504.53 < 1500
     assert r.status == "low"
     assert r.headroom_message == "UFO: Joint may dip below its $1,500.00 cushion before Nov 28. Its lowest point is about $500.00."
     assert "Move" not in r.headroom_message and "transfer" not in r.headroom_message.lower()
 
 
-@pytest.mark.parametrize("joint,personal", [(7949.08, 9000), (4000, 9000), (4000, 1500), (123.45, 98765.43), (-50, 1500), (60000, 4200)])
+@pytest.mark.parametrize("joint,personal", [(8120.35, 9000), (4000, 9000), (4000, 1500), (123.45, 98765.43), (-50, 1500), (60000, 4200)])
 def test_headroom_message_never_leaks_exact_figures_accounts_or_bill_names(joint, personal):
     r = check_balance(joint, personal, cfg(), TODAY)
     m = r.headroom_message
     amounts = [float(x.replace(",", "")) for x in re.findall(r"\$([\d,]+(?:\.\d+)?)", m)]
     assert all(a == 1500.0 or a % 500 == 0 for a in amounts), f"only the cushion and $500-rounded figures: {amounts}"
-    for secret in ("4821", "7390", "Sapphire", "9999", "3,495", "Chase", "Personal", f"{joint:,.2f}"):
+    for secret in ("4821", "7390", "Sapphire", "9999", "3,210", "Chase", "Personal", f"{joint:,.2f}"):
         assert secret not in m
 
 
 def test_minimal_message_is_unchanged_and_still_has_no_dollar_figures():
-    r = check_balance(7949.08, 9000, cfg(), TODAY)
+    r = check_balance(8120.35, 9000, cfg(), TODAY)
     assert r.public_message == "UFO: Joint is covered through Nov 30." and "$" not in r.public_message
 
 
