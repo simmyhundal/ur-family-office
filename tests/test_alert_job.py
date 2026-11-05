@@ -114,3 +114,64 @@ def test_a_dead_bank_connection_prints_a_plain_message_and_exits_nonzero(tmp_pat
     assert job.main(["--config", path]) == 2
     err = capsys.readouterr().err
     assert "Could not read your balances" in err and "sign in again" in err and "Traceback" not in err
+
+
+# ---- on-demand report and look-ahead override
+def test_report_sends_a_covered_message_even_though_everything_is_fine(tmp_path):
+    path = write_cfg(tmp_path, [])
+    job.main(["--config", path, "--joint", "5000", "--personal", "4200", "--send"])
+    assert FakeTwilio.sent == []  # normal behaviour: silence when all is well
+    job.main(["--config", path, "--joint", "5000", "--personal", "4200", "--send", "--report"])
+    assert len(FakeTwilio.sent) == 1 and FakeTwilio.sent[0].startswith("UFO: Joint is covered through")
+    assert "$" not in FakeTwilio.sent[0]
+
+
+def test_report_ignores_the_once_a_day_limit_and_does_not_use_it_up(tmp_path):
+    path = write_cfg(tmp_path, [{"name": "Rent", "amount": 1800, "due": str(date.today() + timedelta(days=2))}])
+    args = ["--config", path, "--joint", "1500", "--personal", "4200", "--send"]
+    job.main(args)  # the regular alert sends once...
+    job.main(args)  # ...and is not repeated
+    assert len(FakeTwilio.sent) == 1
+    job.main([*args, "--report"])
+    job.main([*args, "--report"])
+    assert len(FakeTwilio.sent) == 3  # reports always go out
+
+
+def test_a_report_does_not_suppress_the_regular_scheduled_message(tmp_path):
+    path = write_cfg(tmp_path, [{"name": "Rent", "amount": 1800, "due": str(date.today() + timedelta(days=2))}])
+    args = ["--config", path, "--joint", "1500", "--personal", "4200", "--send"]
+    job.main([*args, "--report"])
+    assert not (tmp_path / ".data" / "alert_state.json").exists()
+    job.main(args)
+    assert len(FakeTwilio.sent) == 2
+
+
+def test_report_without_send_is_a_dry_run(tmp_path, capsys):
+    job.main(["--config", write_cfg(tmp_path, []), "--joint", "5000", "--personal", "4200", "--report"])
+    assert FakeTwilio.sent == [] and "[dry run, not sent" in capsys.readouterr().out
+
+
+def test_through_eom_extends_the_window_to_the_end_of_the_month(tmp_path):
+    import calendar
+
+    today = date.today()
+    eom = today.replace(day=calendar.monthrange(today.year, today.month)[1])
+    path = write_cfg(tmp_path, [])
+    job.main(["--config", path, "--joint", "5000", "--personal", "4200", "--send", "--report", "--through", "eom"])
+    assert FakeTwilio.sent[0].startswith(f"UFO: Joint is covered through {eom:%b} {eom.day:02d}")
+
+
+def test_through_counts_bills_inside_the_longer_window(tmp_path):
+    due = date.today() + timedelta(days=25)
+    path = write_cfg(tmp_path, [{"name": "Big bill", "amount": 4800, "due": str(due)}])  # beyond the 10-day default window
+    job.main(["--config", path, "--joint", "5000", "--personal", "4200", "--send"])
+    assert FakeTwilio.sent == []  # not looked at yet
+    job.main(["--config", path, "--joint", "5000", "--personal", "4200", "--send", "--through", str(due)])
+    assert FakeTwilio.sent and FakeTwilio.sent[0].startswith("UFO: Joint may run short")
+
+
+def test_through_rejects_a_past_or_invalid_date(tmp_path):
+    path = write_cfg(tmp_path, [])
+    for bad in (str(date.today() - timedelta(days=1)), "soon"):
+        with pytest.raises(SystemExit):
+            job.main(["--config", path, "--joint", "5000", "--personal", "4200", "--through", bad])
