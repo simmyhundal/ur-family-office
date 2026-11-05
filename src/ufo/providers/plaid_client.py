@@ -12,6 +12,7 @@ from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchan
 from plaid.model.link_token_create_hosted_link import LinkTokenCreateHostedLink
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUser
+from plaid.model.link_token_transactions import LinkTokenTransactions
 from plaid.model.link_token_get_request import LinkTokenGetRequest
 from plaid.model.products import Products
 from plaid.model.transactions_recurring_get_request import TransactionsRecurringGetRequest
@@ -19,6 +20,7 @@ from plaid.model.transactions_recurring_get_request import TransactionsRecurring
 from ..config import Settings
 from .token_store import save_item
 
+HISTORY_DAYS = 730  # Plaid's maximum
 _HOSTS = {"sandbox": plaid.Environment.Sandbox, "production": plaid.Environment.Production}
 
 
@@ -29,14 +31,21 @@ def make_client(s: Settings) -> plaid_api.PlaidApi:
     return plaid_api.PlaidApi(plaid.ApiClient(cfg))
 
 
-def link_account(s: Settings, timeout_s: int = 900) -> None:
-    """One-time: open the printed URL, connect your bank; the access token is stored in .data/items.json."""
-    client = make_client(s)
-    link = client.link_token_create(LinkTokenCreateRequest(
+def build_link_request() -> LinkTokenCreateRequest:
+    return LinkTokenCreateRequest(
         client_name="UFO", language="en", country_codes=[CountryCode("US")],
         user=LinkTokenCreateRequestUser(client_user_id="me"), products=[Products("transactions")],
         hosted_link=LinkTokenCreateHostedLink(),
-    ))
+        # History is chosen once, when the Item is created (default 90 days; cannot be raised later without re-linking).
+        # Recurring-bill detection works best with 180+ days, so ask for the maximum.
+        transactions=LinkTokenTransactions(days_requested=HISTORY_DAYS),
+    )
+
+
+def link_account(s: Settings, timeout_s: int = 900) -> None:
+    """One-time: open the printed URL, connect your bank; the access token is stored in .data/items.json."""
+    client = make_client(s)
+    link = client.link_token_create(build_link_request())
     print(f"Open this URL in your browser and connect your account:\n\n  {link['hosted_link_url']}\n\nWaiting (Ctrl-C to cancel)...")
     deadline = time.time() + timeout_s
     while time.time() < deadline:

@@ -13,6 +13,8 @@ class Settings(BaseModel):
     twilio_auth_token: str | None = None
     twilio_from_number: str | None = None
     alert_phone_number: str | None = None
+    telegram_bot_token: str | None = None
+    telegram_chat_ids: list[str] = []  # one per person who should get alerts
     cushion_usd: float = 1000.0
 
 
@@ -41,5 +43,7 @@ def load_settings() -> Settings:
         twilio_auth_token=e.get("TWILIO_AUTH_TOKEN"),
         twilio_from_number=e.get("TWILIO_FROM_NUMBER"),
         alert_phone_number=e.get("ALERT_PHONE_NUMBER"),
+        telegram_bot_token=e.get("TELEGRAM_BOT_TOKEN"),
+        telegram_chat_ids=[c.strip() for c in e.get("TELEGRAM_CHAT_IDS", "").split(",") if c.strip()],
         cushion_usd=float(e.get("CUSHION_USD", "1000")),
     )
