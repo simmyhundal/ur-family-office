@@ -7,7 +7,8 @@ It is being built for one household first; each feature has to earn its place.
 | Area | State |
 |---|---|
 | Low-balance alert (v1): balance minus bills due soon vs a cushion, text when below | next |
-| Withdrawal rebalancer: proposed trades, order tickets | prototyped in `fin-advisor` (Node); port is planned |
+| Withdrawal rebalancer: proposed trades (sell/buy/full/auto modes), per-account withdrawals, Fidelity CSV input | ported from the `fin-advisor` prototype; output matches it exactly (22 tests) |
+| Order tickets | planned (issue #3) |
 | Bill detection from Plaid recurring transactions | planned |
 | Tax-lot optimization (HIFO, TLH) | planned; needs per-lot data Plaid does not provide |
 | Multi-generational access (roles, delegation) | planned |
