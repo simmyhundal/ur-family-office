@@ -17,15 +17,21 @@ def collect_bills(settings: Settings, items: list[dict], cfg: AlertConfig, today
     detected: list[BillSpec] = []
     info: list[str] = []
     failures: list[str] = []
-    try:
-        streams = get_recurring_outflows(settings, items, cfg.joint_mask)
-        rent, skipped = streams_to_bills(streams, today, cfg.include_early_detection, cfg.ignore_streams, cfg.rent_streams, cfg.include_other_recurring)
-        detected += rent
-        info += [f"skipped: {s}" for s in skipped]
-        if not rent:
-            info.append("no rent stream detected; add your landlord's name to rent_streams or enter rent as a manual bill")
-    except RuntimeError as e:
-        failures.append(f"rent detection: {e}")
+    if cfg.rent_paid_from_joint or cfg.include_other_recurring:
+        try:
+            streams = get_recurring_outflows(settings, items, cfg.joint_mask)
+            found, skipped = streams_to_bills(streams, today, cfg.include_early_detection, cfg.ignore_streams,
+                                              cfg.rent_streams if cfg.rent_paid_from_joint else [], cfg.include_other_recurring)
+            if not cfg.rent_paid_from_joint:  # rent is paid elsewhere: keep only the other recurring spend the user opted into
+                found = [b for b in found if not any(r.casefold() in b.name.casefold() for r in cfg.rent_streams)]
+            detected += found
+            info += [f"skipped: {s}" for s in skipped]
+            if cfg.rent_paid_from_joint and not any(b for b in found):
+                info.append("no rent stream detected; add your landlord's name to rent_streams or enter rent as a manual bill")
+        except RuntimeError as e:
+            failures.append(f"recurring detection: {e}")
+    if not cfg.rent_paid_from_joint:
+        info.append("rent is not paid from Joint, so it counts as $0")
     if cfg.credit_card_masks:
         try:
             cards, skipped = credit_card_bills(get_credit_card_liabilities(settings, items, cfg.credit_card_masks), today, cfg.credit_card_amount)

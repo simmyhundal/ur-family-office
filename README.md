@@ -35,21 +35,35 @@ pytest
 ```
 
 ## Low-balance alert (v1)
-Read-only. Pulls the Joint and Personal balances through Plaid, subtracts the bills you entered that fall due before your next top-up, and texts you when Joint would end up under your cushion. The text says exactly how much to move from Personal (the shortfall rounded up to the next $10), keeping Personal above a minimum ($1,500 by default). If Personal cannot cover it, the text says how much it can send and how much is left uncovered.
+Read-only. Watches the **Joint** account and texts you before it would dip below your cushion, then tells you (locally) exactly how much to move from **Personal**.
 
-The measure that matters: how often your partner has to ask whether the bills are covered. The goal is zero.
+**How a check works.** Starting from today's Joint balance, it walks day by day through the look-ahead window (14 days by default, or until `next_topup`): bills go out, scheduled deposits come in, and it tracks the **lowest point** the balance reaches. A card payment that lands before your regular deposit is a real dip even if the end balance looks fine. If the lowest point is under the cushion, you get an alert. The amount to move is the shortfall rounded up to the next $10, and Personal keeps a minimum ($1,500 by default) after also funding any scheduled deposit it pays for. If Personal cannot cover it, you are told how much it can send and how much is left uncovered.
 
-1. `cp .env.example .env` and fill `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` (real Chase balances need Plaid production access), and set up Telegram alerts (free): create a bot with @BotFather, put its token in `TELEGRAM_BOT_TOKEN`, have you and your partner message the bot, then `python scripts/telegram_setup.py` prints the `TELEGRAM_CHAT_IDS` line to add (`--test` sends a test message). Twilio (`TWILIO_*`, `ALERT_PHONE_NUMBER`) is optional.
-2. `python scripts/link_account.py` and connect your Chase accounts. This requests the maximum 730 days of transaction history; Plaid fixes that window when the account is first linked (default 90 days), so re-linking is the only way to get more later (the token is stored in `.data/items.json`, gitignored).
-3. Copy `docs/alert.example.json` to `.data/alert.json` and set `joint_mask`, `personal_mask` (last digits), `cushion`, `personal_floor`, `next_topup` (next paycheck or planned transfer in), and your `bills` (`"repeat": "monthly"` for rent).
-4. Try it: `python -m jobs.check_balance --joint 1500 --personal 4200` (no Plaid, dry run), then `python -m jobs.check_balance` (live balances, still dry run), then `--send` to send the alert (`--channel telegram|twilio|all`; default is Telegram if configured).
-5. Schedule `--send` daily (cron / launchd). It alerts at most once per day per situation, warns if `next_topup` has passed, and logs every check to `.data/alerts_log.csv`; fill the `partner_asked` column by hand during the one-week trial in `docs/alert-trial.md`.
+**What counts as outflow (v1):**
+- **Rent: $0 by default.** Many households pay rent from elsewhere. Set `"rent_paid_from_joint": true` only if rent comes out of Joint (then it is detected from recurring transactions; put your landlord's name in `rent_streams` if it is paid by Zelle).
+- **Credit cards:** the statement balance and due date from Plaid Liabilities for the cards in `credit_card_masks` (the cards paid from Joint). `credit_card_amount: "minimum"` counts only the minimum payment.
+- **Manual bills** always work and win when they describe the same bill as a detected one.
+- Other recurring spend (subscriptions, utilities, ...) is a later stage; `include_other_recurring` opts in early.
 
-### Bill detection (optional)
-Set `"detect_bills": true` in `.data/alert.json` and the alert also counts bills Plaid detects as recurring on the Joint account (rent, subscriptions, card and loan payments; transfers are excluded). Manual bills always win when both describe the same bill, and anything Plaid misses can still be entered by hand.
+**What counts as inflow:** `scheduled_deposits`, for example a regular transfer from Personal that matches the rent your partner pays. Enter a conservative amount if the real one varies (say with an exchange rate).
 
-- Review first: `python scripts/show_detected_bills.py` lists what was detected, what was skipped and why, and exactly which bills the alert would count.
-- Tuning: `ignore_streams` (names to skip), `include_early_detection` (count streams Plaid is not yet sure about).
-- Amounts use the larger of the last and average charge, so variable bills err toward warning you.
-- If detection is unavailable (product not ready, token missing the transactions product), the alert falls back to manual bills and says so in the text instead of silently under-warning.
-- Repeat rules: weekly, biweekly, semi-monthly (approximated as every 15 days), monthly, annually.
+**What leaves your machine (Telegram / SMS).** Remote channels are not end-to-end encrypted, so they only ever get a minimal message with **no balances, amounts, bill names or account details**:
+
+> UFO: Joint may run short before Nov 07. Please check your bank app.
+
+The full breakdown and the amount to move are printed when you run the job and saved to `.data/last_alert.txt` (owner-only). The Telegram bot is **write-only**: the alert code can only call `sendMessage`, never reads incoming messages and cannot answer questions. Run `python scripts/telegram_setup.py --harden` once to give the bot a send-only description, remove its commands and check it cannot join groups or have a webhook. (Telegram cannot stop people messaging a bot; nothing happens when they do, because nothing listens.)
+
+### Setup
+1. `cp .env.example .env`, fill `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` (real Chase data needs Plaid production access).
+2. `python scripts/link_account.py` and connect your Chase accounts. This asks for the maximum 730 days of history (Plaid fixes the window when an account is first linked; the default is 90 days and re-linking is the only way to get more) and the optional `liabilities` product for card statement balances.
+3. Telegram (free): create a bot with @BotFather, put its token in `TELEGRAM_BOT_TOKEN`, have you and your partner message the bot, then `python scripts/telegram_setup.py` prints the `TELEGRAM_CHAT_IDS` line to add; `--test` sends a test message. Twilio is optional.
+4. Copy `docs/alert.example.json` to `.data/alert.json` and fill in `joint_mask`, `personal_mask` (last digits), `cushion`, `personal_floor`, `rent_paid_from_joint`, `credit_card_masks`, and `scheduled_deposits`.
+5. Review: `python scripts/show_detected_bills.py` shows exactly which bills and deposits the alert would count, and what each detector skipped and why.
+6. Try it: `python -m jobs.check_balance --joint 1500 --personal 4200` (no Plaid, dry run), then `python -m jobs.check_balance` (live balances, still dry run), then `--send` (`--channel telegram|twilio|all`).
+7. Schedule `--send` daily (cron / launchd). It alerts at most once per day per situation, says so when a detector fails instead of silently under-warning, and logs every check to `.data/alerts_log.csv`.
+
+### Measuring the trial: how often your partner has to ask
+`python scripts/partner_asks.py --launch YYYY-MM-DD --review` counts the messages in which your partner asks whether Joint can cover things, from your Messages history (macOS; needs Full Disk Access for the terminal), and compares the baseline before launch with the trial. Only per-day counts are saved (`.data/partner_asks.csv`); message text is never stored. `--fill-log` fills the log's `partner_asked` column.
+- Copy `docs/partner.example.json` to `.data/partner.json`: the chats, plus **every** number and email the partner messages from (one person often appears under several handles; `--discover` lists who sends in the configured chats, masked).
+- The matcher is a keyword heuristic. `--near-misses` shows money-related messages it did not flag, so it can be tuned by eye.
+- Asks that happen outside Messages (in person, calls, other apps) can be logged with `--add YYYY-MM-DD --channel in-person` and are counted too.

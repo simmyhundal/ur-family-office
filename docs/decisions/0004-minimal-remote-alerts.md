@@ -1,0 +1,4 @@
+# 4. Minimal, write-only remote alerts
+**Decision:** anything sent over Telegram or SMS contains no balances, amounts, bill names or account details ("Joint may run short before Nov 07. Please check your bank app."). The alert bot is write-only: it can only send, never reads messages or answers. The full breakdown (including the amount to move from Personal) is shown locally and saved to `.data/last_alert.txt`.
+**Why:** bot chats are not end-to-end encrypted, and a leaked bot token or a chat export should reveal nothing financial. A bot that never reads input cannot be talked into revealing anything.
+**Trade-off:** the alert is a nudge, not the answer; you open your bank app or run the job locally for the number. A private channel for the full detail (a local notification, or an end-to-end encrypted messenger) can be added later.

@@ -1,4 +1,5 @@
 {
   "chat_ids": [3, 1124],
-  "sender_number_suffixes": ["1234", "5678"]
+  "sender_number_suffixes": ["1234", "5678"],
+  "sender_emails": ["partner@example.com"]
 }

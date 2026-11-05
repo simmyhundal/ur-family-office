@@ -19,9 +19,12 @@ class CheckResult(BaseModel):
     joint_balance: float
     personal_balance: float
     bills_total: float
-    projected: float  # joint balance after the bills: what is left at the next top-up
+    projected: float  # Joint balance at the end of the window, after bills and deposits
+    lowest_balance: float  # the lowest the running balance gets inside the window (this is what is compared to the cushion)
+    lowest_on: date | None
+    deposits: list[tuple[str, float, date]] = []
     cushion: float
-    shortfall: float  # how far below the cushion (0 when ok)
+    shortfall: float  # how far the lowest point is below the cushion (0 when ok)
     transfer_amount: float  # what to move from Personal to Joint (0 when ok)
     personal_sendable: float  # Personal balance above its floor
     personal_covers: bool  # can Personal cover the whole shortfall?
@@ -48,41 +51,66 @@ def public_low(by: date, personal_covers: bool) -> str:
 
 
 def check_balance(joint: float, personal: float, cfg: AlertConfig, today: date) -> CheckResult:
-    sendable = round(max(0.0, personal - cfg.personal_floor), 2)
-    base = dict(joint_balance=joint, personal_balance=personal, cushion=cfg.cushion, window_end=cfg.next_topup,
-                personal_sendable=sendable)
-    if cfg.next_topup < today:
-        return CheckResult(status="stale_config", bills_total=0, projected=joint, shortfall=0, transfer_amount=0,
-                           personal_covers=True, uncovered=0, bills=[], **base,
-                           message=f"UFO: your next_topup date ({cfg.next_topup:%b %d}) has passed; update the alert config so bills are counted.",
-                           public_message="UFO: alert settings need an update (the next top-up date has passed). Bills are not being counted.")
-    due = bills_due(cfg.bills, today, cfg.next_topup)
+    end = cfg.window_end(today)
+    due = bills_due(cfg.bills, today, end)
+    deps = bills_due(cfg.scheduled_deposits, today, end)
+    from_personal = round(sum(a for (n, a, d), spec in _deposit_specs(cfg, today, end) if spec.from_personal), 2)
+    sendable = round(max(0.0, personal - cfg.personal_floor - from_personal), 2)
+    base = dict(joint_balance=joint, personal_balance=personal, cushion=cfg.cushion, window_end=end, personal_sendable=sendable)
+    if cfg.next_topup is not None and cfg.next_topup < today:
+        return CheckResult(status="stale_config", bills_total=0, projected=joint, lowest_balance=joint, lowest_on=None, shortfall=0,
+                           transfer_amount=0, personal_covers=True, uncovered=0, bills=[], **base,
+                           message=f"UFO: your next_topup date ({cfg.next_topup:%b %d}) has passed; update or remove it so bills are counted.",
+                           public_message="UFO: alert settings need an update (the end date of the look-ahead window has passed). Bills are not being counted.")
+
+    # Walk the balance day by day. On the same day bills go first (conservative): an overdraft happens in the dip, not at the end.
+    events = sorted([(d, 0, -a) for _, a, d in due] + [(d, 1, a) for _, a, d in deps], key=lambda e: (e[0], e[1]))
+    bal, lowest, lowest_on = joint, joint, today
+    for d, _, delta in events:
+        bal = round(bal + delta, 2)
+        if bal < lowest:
+            lowest, lowest_on = bal, d
     total = round(sum(a for _, a, _ in due), 2)
-    projected = round(joint - total, 2)
-    shortfall = round(max(0.0, cfg.cushion - projected), 2)
+    dep_total = round(sum(a for _, a, _ in deps), 2)
+    shortfall = round(max(0.0, cfg.cushion - lowest), 2)
     first = due[0][2] if due else None
+    common = dict(bills_total=total, projected=bal, lowest_balance=lowest, lowest_on=lowest_on, shortfall=shortfall, bills=due,
+                  deposits=deps, first_bill_due=first, **base)
     if shortfall == 0:
-        msg = f"UFO: Joint {money(joint)}; after {money(total)} of bills by {cfg.next_topup:%b %d} it keeps {money(projected)} (cushion {money(cfg.cushion)})."
-        return CheckResult(status="ok", bills_total=total, projected=projected, shortfall=0, transfer_amount=0,
-                           personal_covers=True, uncovered=0, bills=due, first_bill_due=first, message=msg,
-                           public_message=f"UFO: Joint is covered through {cfg.next_topup:%b %d}.", **base)
+        extra = f" and {money(dep_total)} of deposits" if deps else ""
+        msg = f"UFO: Joint {money(joint)}; after {money(total)} of bills{extra} by {end:%b %d} it never drops below {money(lowest)} (cushion {money(cfg.cushion)})."
+        return CheckResult(status="ok", transfer_amount=0, personal_covers=True, uncovered=0, message=msg,
+                           public_message=f"UFO: Joint is covered through {end:%b %d}.", **common)
 
     wanted = round_up_to_10(shortfall)
     transfer = wanted if sendable >= wanted else (shortfall if sendable >= shortfall else sendable)
     covers = sendable >= shortfall
     uncovered = round(max(0.0, shortfall - sendable), 2)
     listing = ", ".join(f"{n} {money(a)} ({d:%b %d})" for n, a, d in due) or "no bills"
-    by = f" before {first:%b %d}" if first else ""
-    msg = (f"UFO: Joint is {money(joint)}. Due by {cfg.next_topup:%b %d}: {listing} = {money(total)}. "
-           f"That leaves {money(projected)}, {money(shortfall)} under your {money(cfg.cushion)} cushion. ")
+    by = f" before {(lowest_on if deps else first or end):%b %d}"
+    if deps:
+        dep_list = ", ".join(f"{n} {money(a)} ({d:%b %d})" for n, a, d in deps)
+        msg = (f"UFO: Joint is {money(joint)}. Bills by {end:%b %d}: {listing} = {money(total)}. Scheduled deposits: {dep_list}. "
+               f"At its lowest ({lowest_on:%b %d}) Joint holds {money(lowest)}, {money(shortfall)} under your {money(cfg.cushion)} cushion. ")
+    else:
+        msg = (f"UFO: Joint is {money(joint)}. Due by {end:%b %d}: {listing} = {money(total)}. "
+               f"That leaves {money(bal)}, {money(shortfall)} under your {money(cfg.cushion)} cushion. ")
+    if from_personal:
+        msg += f"(Personal also funds {money(from_personal)} of scheduled deposits.) "
     if covers:
-        msg += f"Move {money(transfer)} from Personal to Joint{by} (Personal keeps {money(personal - transfer)}, above its {money(cfg.personal_floor)} minimum)."
+        msg += f"Move {money(transfer)} from Personal to Joint{by} (Personal keeps {money(personal - from_personal - transfer)}, above its {money(cfg.personal_floor)} minimum)."
     elif transfer > 0:
         msg += (f"Personal can only send {money(transfer)} (it keeps a {money(cfg.personal_floor)} minimum), leaving {money(uncovered)} uncovered. "
                 f"Move {money(transfer)} from Personal{by} and find {money(uncovered)} more.")
     else:
         msg += (f"Personal ({money(personal)}) has nothing above its {money(cfg.personal_floor)} minimum to send; "
                 f"{money(uncovered)} is uncovered{by}.")
-    return CheckResult(status="low", bills_total=total, projected=projected, shortfall=shortfall, transfer_amount=round(transfer, 2),
-                       personal_covers=covers, uncovered=uncovered, bills=due, first_bill_due=first, message=msg,
-                       public_message=public_low(first or cfg.next_topup, covers), **base)
+    return CheckResult(status="low", transfer_amount=round(transfer, 2), personal_covers=covers, uncovered=uncovered, message=msg,
+                       public_message=public_low(lowest_on if deps else (first or end), covers), **common)
+
+
+def _deposit_specs(cfg: AlertConfig, today: date, end: date):
+    """Pair every deposit occurrence in the window with the spec it came from (to know whether Personal funds it)."""
+    for spec in cfg.scheduled_deposits:
+        for row in bills_due([spec], today, end):
+            yield row, spec

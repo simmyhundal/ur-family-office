@@ -1,0 +1,4 @@
+# 5. Start small on bills, and check the running balance
+**Decision:** v1 models Joint's real cash flows rather than forecasting spending: credit-card statement balances (Plaid Liabilities, a known number, not a guess from past payments), manual bills, and scheduled deposits (such as a regular transfer from Personal). Rent counts as $0 unless it is paid from Joint (asked at setup). Other categories (subscriptions, utilities, groceries) are a later stage, as is a general spending-prediction model.
+**Why:** a few large, lumpy, predictable items explain most near-term shortfalls. The alert compares the *lowest point* of the running balance to the cushion, not the end balance, because a card payment landing before a deposit overdrafts even if the end balance looks fine. Personal's sendable amount is reduced by deposits it funds.
+**Revisit:** after the one-week trial, using missed warnings and noise to decide which categories to add first.

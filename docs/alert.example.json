@@ -1,16 +1,24 @@
 {
   "cushion": 1000,
-  "next_topup": "2026-11-15",
+  "lookahead_days": 14,
   "joint_mask": "1234",
   "personal_mask": "5678",
   "personal_floor": 1500,
-  "bills": [
+  "rent_paid_from_joint": false,
+  "credit_card_masks": [
+    "9999"
+  ],
+  "credit_card_amount": "statement_balance",
+  "scheduled_deposits": [
     {
-      "name": "Rent",
+      "name": "Rent match from Personal",
       "amount": 1800,
-      "due": "2026-11-01",
-      "repeat": "monthly"
-    },
+      "due": "2026-11-02",
+      "repeat": "monthly",
+      "from_personal": true
+    }
+  ],
+  "bills": [
     {
       "name": "Car insurance",
       "amount": 142.5,
@@ -18,6 +26,8 @@
     }
   ],
   "detect_bills": false,
+  "rent_streams": [],
+  "include_other_recurring": false,
   "include_early_detection": false,
   "ignore_streams": []
 }
