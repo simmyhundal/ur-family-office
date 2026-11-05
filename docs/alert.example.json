@@ -1,0 +1,9 @@
+{
+  "cushion": 1000,
+  "next_topup": "2026-11-15",
+  "account_mask": null,
+  "bills": [
+    {"name": "Rent", "amount": 1800, "due": "2026-11-01", "repeat": "monthly"},
+    {"name": "Car insurance", "amount": 142.5, "due": "2026-11-09"}
+  ]
+}
