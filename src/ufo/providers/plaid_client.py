@@ -50,34 +50,26 @@ def link_account(s: Settings, timeout_s: int = 900) -> None:
     raise TimeoutError("Timed out waiting for the link to complete.")
 
 
-def _val(x):
-    """Plaid enum models expose .value; plain strings pass through."""
-    return getattr(x, "value", x) or ""
-
-
-def pick_checking_balance(accounts: list[dict], mask: str | None = None) -> tuple[str, float]:
-    """Choose the checking account (by mask if given) and return (label, available balance).
-    Falls back to the current balance when Plaid has no available figure. Pure so it can be tested."""
-    checking = [a for a in accounts if _val(a.get("subtype")) == "checking" and (not mask or a.get("mask") == mask)]
-    if not checking:
-        raise ValueError(f"No checking account found{f' with mask {mask}' if mask else ''}.")
-    if len(checking) > 1:
-        raise ValueError("Several checking accounts found; set account_mask in the alert config: " + ", ".join(f"{a['name']} …{a['mask']}" for a in checking))
-    a = checking[0]
+def pick_account_balance(accounts: list[dict], mask: str) -> tuple[str, float]:
+    """Find the account with this mask and return (label, available balance), falling back to current.
+    Pure so it can be tested."""
+    found = [a for a in accounts if a.get("mask") == mask]
+    if not found:
+        raise ValueError(f"No linked account with mask {mask}. Run scripts/link_account.py, or check the mask in the alert config.")
+    if len(found) > 1:
+        raise ValueError(f"Several accounts end in {mask}; use a longer mask.")
+    a = found[0]
     bal = a["balances"]["available"]
     if bal is None:
         bal = a["balances"]["current"]
     return f"{a['name']} …{a['mask']}", float(bal)
 
 
-def get_checking_balance(s: Settings, items: list[dict], mask: str | None = None) -> tuple[str, float]:
+def get_balances(s: Settings, items: list[dict], masks: list[str]) -> dict[str, tuple[str, float]]:
+    """Live balances for the given account masks across all linked items: {mask: (label, available)}."""
     client = make_client(s)
+    accounts: list[dict] = []
     for item in items:
         resp = client.accounts_balance_get(AccountsBalanceGetRequest(access_token=item["access_token"]))
-        accounts = [a.to_dict() for a in resp["accounts"]]
-        try:
-            return pick_checking_balance(accounts, mask)
-        except ValueError as e:
-            if "No checking" not in str(e):
-                raise
-    raise ValueError("No linked item has a matching checking account. Run scripts/link_account.py first.")
+        accounts += [a.to_dict() for a in resp["accounts"]]
+    return {m: pick_account_balance(accounts, m) for m in masks}

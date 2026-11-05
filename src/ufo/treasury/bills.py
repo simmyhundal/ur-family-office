@@ -2,9 +2,11 @@
 
 Example .data/alert.json:
 {
-  "cushion": 1000,
-  "next_topup": "2026-11-15",          # next paycheck or planned transfer in
-  "account_mask": "1234",               # optional: which checking account (last digits)
+  "cushion": 1000,                      # what Joint should still hold at the next top-up
+  "next_topup": "2026-11-15",           # next paycheck or planned transfer in
+  "joint_mask": "1234",                 # last digits of the Joint account (monitored)
+  "personal_mask": "5678",              # last digits of the Personal account (funds the transfer)
+  "personal_floor": 1500,               # Personal never drops below this
   "bills": [
     {"name": "Rent", "amount": 1800, "due": "2026-11-01", "repeat": "monthly"},
     {"name": "Car insurance", "amount": 142.5, "due": "2026-11-09"}
@@ -32,7 +34,9 @@ class BillSpec(BaseModel):
 class AlertConfig(BaseModel):
     cushion: float = 1000.0
     next_topup: date
-    account_mask: str | None = None
+    joint_mask: str
+    personal_mask: str
+    personal_floor: float = 1500.0
     bills: list[BillSpec] = []
 
 

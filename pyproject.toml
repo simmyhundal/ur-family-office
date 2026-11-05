@@ -1,7 +1,7 @@
 [project]
 name = "ur-family-office"
 version = "0.0.1"
-description = "UFO (Your Family Office): warns you before your checking account runs low, and grows into a family office for everyday households."
+description = "UFO (Ur Family Office): warns your household before the joint account runs low, tells you exactly how much to move, and grows into a family office for everyday households."
 requires-python = ">=3.11"
 dependencies = [
   "pydantic>=2.7",

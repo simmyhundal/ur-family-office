@@ -2,7 +2,7 @@
 
   python jobs/check_balance.py                    # dry run: prints what would be sent
   python jobs/check_balance.py --send             # texts via Twilio when low (once per day per situation)
-  python jobs/check_balance.py --balance 1850.20  # skip Plaid and test with a made-up balance
+  python jobs/check_balance.py --joint 1850.20 --personal 4200   # skip Plaid and test with made-up balances
 Config: .data/alert.json (see src/ufo/treasury/bills.py). Everything it writes lives under .data/ (gitignored).
 """
 from __future__ import annotations
@@ -16,7 +16,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from ufo.config import load_settings
-from ufo.providers.plaid_client import get_checking_balance
+from ufo.providers.plaid_client import get_balances
 from ufo.providers.token_store import load_items
 from ufo.treasury.bills import load_config
 from ufo.treasury.low_balance import check_balance
@@ -28,7 +28,7 @@ LOG = DATA / "alerts_log.csv"
 
 
 def _fingerprint(res) -> str:
-    return hashlib.sha1(json.dumps([res.status, res.shortfall, [(n, a, str(d)) for n, a, d in res.bills]]).encode()).hexdigest()
+    return hashlib.sha1(json.dumps([res.status, res.shortfall, res.transfer_amount, [(n, a, str(d)) for n, a, d in res.bills]]).encode()).hexdigest()
 
 
 def _already_sent(res, today: date) -> bool:
@@ -45,26 +45,32 @@ def _log(now: datetime, res, sent: bool) -> None:
     with LOG.open("a", newline="") as f:
         w = csv.writer(f)
         if new:
-            w.writerow(["timestamp", "balance", "bills_total", "projected", "cushion", "status", "sent"])
-        w.writerow([now.isoformat(timespec="seconds"), res.balance, res.bills_total, res.projected, res.cushion, res.status, sent])
+            w.writerow(["timestamp", "joint", "personal", "bills_total", "projected", "cushion", "status", "transfer", "personal_covers", "sent", "partner_asked"])
+        # partner_asked is filled in by hand during the trial: did your partner have to ask if the bills were covered?
+        w.writerow([now.isoformat(timespec="seconds"), res.joint_balance, res.personal_balance, res.bills_total, res.projected,
+                    res.cushion, res.status, res.transfer_amount, res.personal_covers, sent, ""])
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default=str(DATA / "alert.json"))
     ap.add_argument("--send", action="store_true", help="actually send the text (default: dry run)")
-    ap.add_argument("--balance", type=float, help="use this balance instead of asking Plaid")
+    ap.add_argument("--joint", type=float, help="use this Joint balance instead of asking Plaid (needs --personal)")
+    ap.add_argument("--personal", type=float, help="use this Personal balance instead of asking Plaid (needs --joint)")
     args = ap.parse_args(argv)
 
     settings = load_settings()
     cfg = load_config(args.config)
-    if args.balance is not None:
-        label, balance = "manual balance", args.balance
+    if (args.joint is None) != (args.personal is None):
+        ap.error("--joint and --personal go together")
+    if args.joint is not None:
+        joint, personal = args.joint, args.personal
     else:
-        label, balance = get_checking_balance(settings, load_items(), cfg.account_mask)
+        b = get_balances(settings, load_items(), [cfg.joint_mask, cfg.personal_mask])
+        joint, personal = b[cfg.joint_mask][1], b[cfg.personal_mask][1]
     now = datetime.now()
-    res = check_balance(balance, cfg, now.date())
-    print(f"{label}: {res.message}")
+    res = check_balance(joint, personal, cfg, now.date())
+    print(res.message)
 
     sent = False
     if res.status != "ok":
