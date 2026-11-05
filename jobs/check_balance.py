@@ -1,5 +1,8 @@
 """Cron entry point for the low-balance alert.
 
+Remote channels (Telegram/SMS) only ever get the minimal public message: no balances, amounts or account details.
+The full message is printed here and saved to .data/last_alert.txt (owner-only).
+
   python jobs/check_balance.py                    # dry run: prints what would be sent
   python jobs/check_balance.py --send             # sends via Telegram (or Twilio) when low (once per day per situation)
   python jobs/check_balance.py --joint 1850.20 --personal 4200   # skip Plaid and test with made-up balances
@@ -16,10 +19,10 @@ from datetime import date, datetime
 from pathlib import Path
 
 from ufo.config import load_settings
-from ufo.providers.plaid_client import get_balances, get_recurring_outflows
+from ufo.providers.plaid_client import get_balances
 from ufo.providers.token_store import load_items
 from ufo.treasury.bills import load_config
-from ufo.treasury.detect import merge_bills, streams_to_bills
+from ufo.treasury.sources import collect_bills
 from ufo.treasury.low_balance import check_balance
 from ufo.treasury.notify import ConsoleNotifier, build_notifier
 
@@ -52,6 +55,14 @@ def _log(now: datetime, res, sent: bool) -> None:
                     res.cushion, res.status, res.transfer_amount, res.personal_covers, sent, ""])
 
 
+def _save_local(res) -> None:
+    """The full message (amounts, balances) is kept only in a private local file."""
+    DATA.mkdir(exist_ok=True)
+    f = DATA / "last_alert.txt"
+    f.write_text(res.message + "\n")
+    f.chmod(0o600)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default=str(DATA / "alert.json"))
@@ -71,20 +82,19 @@ def main(argv: list[str] | None = None) -> int:
         b = get_balances(settings, load_items(), [cfg.joint_mask, cfg.personal_mask])
         joint, personal = b[cfg.joint_mask][1], b[cfg.personal_mask][1]
     now = datetime.now()
-    note = ""
+    failures: list[str] = []
     if cfg.detect_bills and args.joint is None:
-        try:
-            streams = get_recurring_outflows(settings, load_items(), cfg.joint_mask)
-            detected, skipped = streams_to_bills(streams, now.date(), cfg.include_early_detection, cfg.ignore_streams)
-            cfg.bills, dropped = merge_bills(cfg.bills, detected)
-            for line in dropped + skipped:
-                print(f"  bill detection: {line}")
-        except RuntimeError as e:  # never silently under-warn: fall back to manual bills and say so
-            print(f"Bill detection unavailable: {e}", file=sys.stderr)
-            note = " (Bill detection was unavailable, so only your manual bills are counted.)"
+        cfg.bills, info, failures = collect_bills(settings, load_items(), cfg, now.date())
+        for line in info:
+            print(f"  bills: {line}")
+        for f in failures:  # never silently under-warn: say so, and keep counting what we do have
+            print(f"Bill detection problem: {f}", file=sys.stderr)
     res = check_balance(joint, personal, cfg, now.date())
-    res.message += note
-    print(res.message)
+    if failures:
+        res.message += " (Some bills could not be detected, so only the rest are counted.)"
+        res.public_message += " Some bills could not be checked."
+    print(res.message)  # full detail stays on this machine
+    _save_local(res)
 
     sent = False
     if res.status != "ok":
@@ -92,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
             print("Already alerted for this situation today; not sending again.")
         else:
             notifier = build_notifier(settings, args.channel) if args.send else ConsoleNotifier()
-            notifier.send(res.message)
+            notifier.send(res.public_message)  # remote channels are not end-to-end encrypted: minimal text only
             sent = args.send
             if sent:
                 DATA.mkdir(exist_ok=True)

@@ -97,3 +97,22 @@ def test_link_requests_the_maximum_history_for_recurring_detection():
     req = build_link_request()
     assert req.transactions.days_requested == 730
     assert [p.value for p in req.products] == ["transactions"]
+
+
+def test_alert_bot_is_write_only(monkeypatch):
+    called = []
+    monkeypatch.setattr(notify.urllib.request, "urlopen", lambda req, timeout: called.append(req.full_url) or FakeResp({"ok": True}))
+    n = TelegramNotifier(TG)
+    for method in ("getUpdates", "getMe", "getChat", "forwardMessage", "setWebhook"):
+        with pytest.raises(PermissionError, match="write-only"):
+            n._call(method, {})
+    assert called == []  # nothing reached the network
+    assert TelegramNotifier.ALLOWED_METHODS == {"sendMessage"}
+
+
+def test_admin_helpers_are_not_on_the_alert_path():
+    import inspect
+
+    from ufo.treasury import notify as n
+
+    assert "getUpdates" not in inspect.getsource(n) and "telegram_admin" not in inspect.getsource(n)

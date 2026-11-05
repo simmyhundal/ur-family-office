@@ -34,10 +34,14 @@ class TwilioNotifier:
 
 
 class TelegramNotifier:
-    """Sends plain-text messages through a Telegram bot to each configured chat. Free, no carrier registration.
-    Note: Telegram bot chats are not end-to-end encrypted; alerts contain balances."""
+    """Write-only: sends plain-text messages through a Telegram bot to each configured chat. Free, no carrier registration.
+
+    It can only call sendMessage: it never polls for or reads incoming messages, so the bot cannot converse or reveal
+    anything. Telegram bot chats are not end-to-end encrypted, so callers must only pass the minimal public message.
+    """
 
     API = "https://api.telegram.org"
+    ALLOWED_METHODS = frozenset({"sendMessage"})
 
     def __init__(self, settings: Settings):
         if not settings.telegram_bot_token or not settings.telegram_chat_ids:
@@ -45,6 +49,8 @@ class TelegramNotifier:
         self._token, self._chats = settings.telegram_bot_token, settings.telegram_chat_ids
 
     def _call(self, method: str, payload: dict) -> dict:
+        if method not in self.ALLOWED_METHODS:
+            raise PermissionError(f"The alert bot is write-only; {method} is not allowed.")
         req = urllib.request.Request(f"{self.API}/bot{self._token}/{method}", data=json.dumps(payload).encode(),
                                      headers={"Content-Type": "application/json"})
         try:

@@ -3,7 +3,7 @@ from datetime import date
 import pytest
 
 from ufo.treasury.bills import AlertConfig, BillSpec, occurrences
-from ufo.treasury.detect import merge_bills, stream_to_bill, streams_to_bills
+from ufo.treasury.detect import classify, credit_card_bills, merge_bills, stream_to_bill, streams_to_bills
 from ufo.treasury.low_balance import check_balance
 
 TODAY = date(2026, 11, 3)
@@ -29,6 +29,8 @@ def test_stream_becomes_a_bill_using_the_larger_amount():
     ({"status": "EARLY_DETECTION"}, "early detection"),
     ({"personal_finance_category": {"primary": "TRANSFER_OUT", "detailed": "TRANSFER_OUT_ACCOUNT_TRANSFER"}}, "transfer"),
     ({"predicted_next_date": None}, "no predicted next date"),
+    ({"personal_finance_category": {"primary": "ENTERTAINMENT", "detailed": "ENTERTAINMENT_TV_AND_MOVIES"}}, "not rent"),
+    ({"personal_finance_category": {"primary": "LOAN_PAYMENTS", "detailed": "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT"}}, "statement balance"),
     ({"predicted_next_date": "2026-10-01"}, "long past"),
     ({"last_amount": {"amount": 0}, "average_amount": {"amount": 0}}, "no amount"),
 ])
@@ -47,15 +49,38 @@ def test_recently_passed_prediction_counts_as_due_today():
     assert b.due == TODAY
 
 
-def test_credit_card_payment_is_a_bill_not_a_transfer():
-    b, _ = stream_to_bill(stream(merchant_name="Chase Card", personal_finance_category={"primary": "LOAN_PAYMENTS", "detailed": "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT"}), TODAY)
-    assert b is not None
+def test_rent_paid_by_zelle_counts_when_you_name_the_landlord():
+    zelle = stream(personal_finance_category={"primary": "TRANSFER_OUT", "detailed": "TRANSFER_OUT_ACCOUNT_TRANSFER"})
+    assert stream_to_bill(zelle, TODAY)[0] is None  # looks like a transfer
+    b, _ = stream_to_bill(zelle, TODAY, rent_names=["landlord"])
+    assert b is not None and classify(zelle, "Landlord LLC", ["landlord"]) == "rent"
+
+
+def test_other_recurring_spend_is_a_later_stage_but_can_be_opted_in():
+    netflix = stream(merchant_name="Netflix", personal_finance_category={"primary": "ENTERTAINMENT", "detailed": "ENTERTAINMENT_TV_AND_MOVIES"})
+    assert stream_to_bill(netflix, TODAY)[0] is None
+    assert stream_to_bill(netflix, TODAY, include_other=True)[0] is not None
+
+
+def test_credit_card_bill_uses_statement_balance_and_due_date():
+    cards = [{"name": "Chase Sapphire", "mask": "9999", "next_payment_due_date": "2026-11-12", "minimum_payment_amount": 40.0, "last_statement_balance": 1234.56}]
+    bills, skipped = credit_card_bills(cards, TODAY)
+    assert skipped == [] and bills[0].amount == 1234.56 and bills[0].due == date(2026, 11, 12) and bills[0].name == "Chase Sapphire …9999 payment"
+    assert credit_card_bills(cards, TODAY, "minimum")[0][0].amount == 40.0
+
+
+def test_credit_card_edge_cases():
+    base = {"name": "Card", "mask": "1", "minimum_payment_amount": 0, "last_statement_balance": 0}
+    assert "nothing due" in credit_card_bills([{**base, "next_payment_due_date": "2026-11-12"}], TODAY)[1][0]
+    assert "no payment due date" in credit_card_bills([{**base, "last_statement_balance": 50, "next_payment_due_date": None}], TODAY)[1][0]
+    overdue = credit_card_bills([{**base, "last_statement_balance": 50, "next_payment_due_date": "2026-10-20"}], TODAY)[0][0]
+    assert overdue.due == TODAY  # past due: counts as due now
 
 
 def test_manual_bills_win_over_detected_duplicates():
     manual = [BillSpec(name="Rent", amount=1800, due=date(2026, 11, 7), repeat="monthly")]
     detected, _ = streams_to_bills([stream(), stream(merchant_name="Netflix", last_amount={"amount": 15.49}, average_amount={"amount": 15.49},
-                                                      predicted_next_date="2026-11-12", personal_finance_category={})], TODAY)
+                                                      predicted_next_date="2026-11-12", personal_finance_category={})], TODAY, include_other=True)
     merged, dropped = merge_bills(manual, detected)
     assert [b.name for b in merged] == ["Rent", "Netflix"]  # Landlord LLC dropped: same amount (+/-$1) and date (+/-3d) as Rent
     assert len(dropped) == 1 and "already covered by your manual bill 'Rent'" in dropped[0]
