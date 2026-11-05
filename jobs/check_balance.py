@@ -79,7 +79,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.joint is not None:
         joint, personal = args.joint, args.personal
     else:
-        b = get_balances(settings, load_items(), [cfg.joint_mask, cfg.personal_mask])
+        try:
+            b = get_balances(settings, load_items(), [cfg.joint_mask, cfg.personal_mask])
+        except RuntimeError as e:  # a person-readable problem (expired bank sign-in, wrong account digits...), not a traceback
+            print(f"Could not read your balances: {e}", file=sys.stderr)
+            return 2
         joint, personal = b[cfg.joint_mask][1], b[cfg.personal_mask][1]
     now = datetime.now()
     failures: list[str] = []
