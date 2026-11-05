@@ -11,31 +11,35 @@ def net(p):
     return abs(p["total_proceeds"] - p["total_buys"] - p["withdrawal"])
 
 
-# Brokerage ...7693 as of 2026-10-21 (cash derived from the account balance).
-P7693 = [
-    {"symbol": "CASH", "quantity": 9039.87, "price": 1, "value": 9039.87, "is_cash": True},
-    {"symbol": "IVV", "quantity": 22.458, "price": 770.01, "value": 17292.88},
-    {"symbol": "SCHM", "quantity": 500.338, "price": 34.16, "value": 17091.54},
-    {"symbol": "IWM", "quantity": 61.092, "price": 271.28, "value": 16573.03},
-    {"symbol": "VGT", "quantity": 57.965, "price": 120.33, "value": 6974.92},
-    {"symbol": "VXUS", "quantity": 75.223, "price": 83.29, "value": 6265.32},
-    {"symbol": "XBI", "quantity": 41.348, "price": 147.86, "value": 6113.71},
+def _pos(symbol, price, value):
+    return {"symbol": symbol, "quantity": round(value / price, 3), "price": price, "value": value}
+
+
+# An invented brokerage account: two positions over target, four a little under, and a cash balance.
+BROKERAGE = [
+    {"symbol": "CASH", "quantity": 9000.0, "price": 1, "value": 9000.0, "is_cash": True},
+    _pos("IVV", 770.0, 17000.0), _pos("SCHM", 34.0, 17000.0), _pos("IWM", 270.0, 16500.0),
+    _pos("VGT", 120.0, 6900.0), _pos("VXUS", 83.0, 6200.0), _pos("XBI", 147.0, 6100.0),
 ]
 W = {"IVV": 24, "IWM": 24, "SCHM": 24, "VGT": 10, "VXUS": 9, "XBI": 9}
 
 
-def test_reproduces_the_redistribution_sheet(sheet):
-    plan = plan_withdrawal(sheet["positions"], sheet["withdrawal"], targets=sheet["targets"])
-    # The sheet's displayed rows sum a penny above its header, so allow 1-2 cents.
-    assert abs(plan["starting_balance"] - 81692.31) <= 0.02
-    assert abs(plan["ending_balance"] - 72694.86) <= 0.02
+def test_reproduces_the_redistribution_sheet_formula(sheet):
+    """desired = target% x (balance - withdrawal); sell = current - desired; shares = sell / price. Expected values are
+    recomputed here independently of the engine, from an invented fixture."""
+    positions, W_, targets = sheet["positions"], sheet["withdrawal"], sheet["targets"]
+    start = sum(p["value"] for p in positions)
+    ending = start - W_
+    plan = plan_withdrawal(positions, W_, targets=targets)
+    assert abs(plan["starting_balance"] - start) <= 0.01 and abs(plan["ending_balance"] - ending) <= 0.01
     r = by(plan)
-    for s, v in sheet["expected_sell_value"].items():
-        assert abs(r[s]["proceeds"] - v) <= 0.01, s
-    for s, v in sheet["expected_sell_shares"].items():
-        assert abs(r[s]["shares_to_sell"] - v) < 1e-3, s
-    assert r["CASH"]["proceeds"] == 0.69
-    assert r["VTWO"]["proceeds"] == 0
+    for p in positions:
+        desired = targets.get(p["symbol"], 0) / 100 * ending
+        sell = max(0.0, p["value"] - desired)
+        assert abs(r[p["symbol"]]["proceeds"] - sell) <= 0.01, p["symbol"]
+        if not p.get("is_cash") and p["price"]:
+            assert abs(r[p["symbol"]]["shares_to_sell"] - sell / p["price"]) < 1e-3, p["symbol"]
+    assert r["CASH"]["proceeds"] == positions[0]["value"] and r["VTWO"]["proceeds"] == 0
     assert abs(plan["shortfall"]) <= 0.02
 
 
@@ -93,40 +97,40 @@ def test_aggregate_by_symbol_merges_accounts_and_cash():
 
 
 def test_auto_cash_covers_withdrawal_and_leftover_buys_under_target_etfs_nothing_sold():
-    plan = plan_rebalance(P7693, 8826.8, targets=W)
+    plan = plan_rebalance(BROKERAGE, 8800.0, targets=W)
     assert plan["mode"] == "buy_only"
     r = by(plan)
     for s in ("IVV", "SCHM"):  # over target: untouched
         assert r[s]["proceeds"] + r[s]["buy_amount"] == 0
     assert all(x["symbol"] == "CASH" or x["proceeds"] == 0 for x in plan["rows"]), "nothing sold"
     assert r["IWM"]["buy_amount"] > r["XBI"]["buy_amount"] > r["VXUS"]["buy_amount"] > r["VGT"]["buy_amount"]  # bigger gap, bigger buy
-    assert abs(plan["total_buys"] - 213.07) <= 0.02
+    assert abs(plan["total_buys"] - 200.0) <= 0.02
     assert net(plan) <= 0.03
     assert plan["cash_after"] <= 0.02
 
 
 def test_buy_only_with_whole_shares_buys_nothing_and_says_so():
-    plan = plan_rebalance(P7693, 8826.8, targets=W, whole_shares=True)
-    assert plan["total_buys"] == 0 and plan["cash_after"] == 213.07
+    plan = plan_rebalance(BROKERAGE, 8800.0, targets=W, whole_shares=True)
+    assert plan["total_buys"] == 0 and plan["cash_after"] == 200.0
     assert "not deployed" in " ".join(plan["warnings"])
 
 
 def test_buy_only_without_targets_deploys_leftover_pro_rata():
-    plan = plan_rebalance(P7693, 8000, mode="buy_only")
+    plan = plan_rebalance(BROKERAGE, 8000, mode="buy_only")
     assert net(plan) <= 0.03 and plan["total_buys"] > 0
 
 
 def test_buy_only_refuses_when_cash_is_short_and_auto_falls_back_to_cash_plus_sells():
     with pytest.raises(ValueError, match="does not cover"):
-        plan_rebalance(P7693, 12000, targets=W, mode="buy_only")
-    plan = plan_rebalance(P7693, 12000, targets=W)
+        plan_rebalance(BROKERAGE, 12000, targets=W, mode="buy_only")
+    plan = plan_rebalance(BROKERAGE, 12000, targets=W)
     assert plan["mode"] == "cash_then_sell"
-    assert by(plan)["CASH"]["proceeds"] == 9039.87
+    assert by(plan)["CASH"]["proceeds"] == 9000.0
     assert net(plan) <= 0.03 and plan["total_buys"] == 0
 
 
 def test_full_mode_hits_targets_sells_overweight_buys_underweight():
-    plan = plan_rebalance(P7693, 8826.8, targets={**W, "CASH": 0}, mode="full")
+    plan = plan_rebalance(BROKERAGE, 8800.0, targets={**W, "CASH": 0}, mode="full")
     r = by(plan)
     assert r["IVV"]["proceeds"] > 0 and r["XBI"]["buy_amount"] > 0
     assert net(plan) <= 0.03
@@ -134,10 +138,10 @@ def test_full_mode_hits_targets_sells_overweight_buys_underweight():
 
 
 def test_full_mode_whole_shares_never_sends_cash_negative():
-    plan = plan_rebalance(P7693, 8826.8, targets=W, mode="full", whole_shares=True)
+    plan = plan_rebalance(BROKERAGE, 8800.0, targets=W, mode="full", whole_shares=True)
     assert plan["cash_after"] >= -0.005
 
 
 def test_sell_only_mode_reports_zero_buys():
-    plan = plan_rebalance(P7693, 3000, targets=W, mode="sell_only")
+    plan = plan_rebalance(BROKERAGE, 3000, targets=W, mode="sell_only")
     assert plan["total_buys"] == 0 and abs(plan["total_proceeds"] - 3000) <= 0.02
