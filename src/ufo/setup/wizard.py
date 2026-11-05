@@ -42,7 +42,7 @@ class Deps:
     make_notifier: Callable[[Settings], object] = TelegramNotifier
     run_dry_run: Callable[[Path], None] | None = None
     poll_seconds: int = 120
-    install_schedule: Callable[[Path, int, int], list] | None = None  # sets up the daily run (macOS launchd)
+    install_schedule: Callable[[Path, int, int, int | None], list] | None = None  # sets up the scheduled run (macOS launchd)
     schedule_installed: Callable[[], bool] | None = None
     open_url: Callable[[str], None] | None = None  # opens a link in the browser / Telegram app (macOS: `open`)
     copy: Callable[[str], None] | None = None  # puts text on the clipboard (macOS: `pbcopy`)
@@ -269,8 +269,18 @@ def step_telegram(p: Prompter, d: Deps, s: Settings) -> None:
         ids = [ids[i] for i in keep]
     update_env(d.env_path, {"TELEGRAM_CHAT_IDS": ",".join(str(i) for i in ids)})
     p.say(f"Saved {len(ids)} recipient(s) to .env.")
+    p.say("\nWhat should each chat see? Telegram chats are not end-to-end encrypted, so exact balances and bill amounts are never sent.")
+    levels: dict[str, str] = {}
+    for cid in ids:
+        pick = p.choose(f"tg_level_{cid}", f"For {chats[cid]}:", [
+            "Minimal: just 'Joint may run short before <date>' or 'Joint is covered through <date>'. No numbers. (recommended)",
+            "Headroom: also says the lowest Joint will get (rounded down to $500) and your cushion, so someone can sanity-check it against the bank app."])
+        if pick == 1:
+            levels[str(cid)] = "headroom"
+    heartbeat = p.confirm("notify_ok", "Also send a 'Joint is covered' message on every check, so nobody has to ask?", True)
+    set_config(d, {"telegram_detail": levels, "notify_when_ok": heartbeat})
     warnings = admin.harden(uses_group=any(i < 0 for i in ids))
-    p.say("Bot set to send-only." if not warnings else "Bot set to send-only. Two things only BotFather can change:")
+    p.say("Bot set to send-only." if not warnings else "Bot set to send-only. One thing only BotFather can change:")
     for w in warnings:
         p.say(f"  - {w}")
     if p.confirm("tg_test", "Send a test message now?", True):
@@ -279,26 +289,39 @@ def step_telegram(p: Prompter, d: Deps, s: Settings) -> None:
 
 
 def step_schedule(p: Prompter, d: Deps) -> None:
-    p.say("\n== 5. Run it every day ==")
+    p.say("\n== 5. How often to check ==")
     if d.install_schedule is None:
-        p.say("Automatic daily runs are set up on macOS only. Schedule `python -m jobs.check_balance --send` with cron instead.")
+        p.say("Automatic runs are set up on macOS only. Schedule `python -m jobs.check_balance --send` with cron instead.")
         return
     if d.schedule_installed and d.schedule_installed():
-        p.say("A daily run is already scheduled.")
-        if not p.confirm("schedule_redo", "Change the time?", False):
+        p.say("A scheduled run is already set up.")
+        if not p.confirm("schedule_redo", "Change it?", False):
             return
-    if not p.confirm("schedule", "Check every morning and message you only when Joint is at risk?", True):
+    p.say("The big payment out of Joint is usually the monthly card bill, and it is known weeks ahead, so a weekly check is enough.")
+    if not p.confirm("schedule", "Run the check automatically (weekly by default)?", True):
         p.say("Skipped. Later: python scripts/schedule_daily.py")
         return
-    from .schedule import parse_time
+    from .schedule import parse_time, parse_weekday
     while True:
         try:
+            weekday = parse_weekday(p.ask("schedule_weekday", "Which day (mon..sun, or daily)", "mon"))
             hour, minute = parse_time(p.ask("schedule_time", "What time (24h)", "08:00"))
             break
         except ValueError:
-            p.say("Please use a time like 08:00 or 7:30.")
-    for line in d.install_schedule(d.root, hour, minute):
+            p.say("Please use a day like mon (or daily) and a time like 08:00 or 7:30.")
+    for line in d.install_schedule(d.root, hour, minute, weekday):
         p.say(line)
+
+
+def set_config(d: Deps, updates: dict) -> None:
+    """Merge keys into the saved alert.json (used for choices made after it was first written)."""
+    if not d.config_path.exists():
+        return
+    cfg = json.loads(d.config_path.read_text())
+    cfg.update(updates)
+    AlertConfig.model_validate(cfg)
+    d.config_path.write_text(json.dumps(cfg, indent=2) + "\n")
+    os.chmod(d.config_path, 0o600)
 
 
 def run(p: Prompter, d: Deps | None = None) -> None:

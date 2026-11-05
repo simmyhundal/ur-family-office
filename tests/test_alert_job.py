@@ -21,19 +21,23 @@ class FakeTwilio:
     def send(self, message):
         FakeTwilio.sent.append(message)
 
+    def send_tiered(self, messages, levels=None):
+        FakeTwilio.tiers = (messages, levels)
+        FakeTwilio.sent.append(messages["minimal"])
+
 
 @pytest.fixture(autouse=True)
 def isolate(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     FakeTwilio.sent = []
-    monkeypatch.setattr(job, "build_notifier", lambda settings, channel: FakeTwilio())
+    monkeypatch.setattr(job, "build_notifier", lambda settings, channel, levels=None: FakeTwilio())
 
 
 def test_dry_run_prints_and_does_not_send(tmp_path, capsys):
     bill = {"name": "Rent", "amount": 1800, "due": str(date.today() + timedelta(days=2))}
     path = write_cfg(tmp_path, [bill])
     assert job.main(["--config", path, "--joint", "1500", "--personal", "4200"]) == 0
-    assert "[dry run, not sent]" in capsys.readouterr().out
+    assert "[dry run, not sent" in capsys.readouterr().out
     assert FakeTwilio.sent == []
     assert not (tmp_path / ".data" / "alert_state.json").exists()
     log = (tmp_path / ".data" / "alerts_log.csv").read_text().splitlines()

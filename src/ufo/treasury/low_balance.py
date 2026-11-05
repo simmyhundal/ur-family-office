@@ -34,6 +34,7 @@ class CheckResult(BaseModel):
     first_bill_due: date | None = None
     message: str  # full detail: only ever printed/stored locally
     public_message: str  # safe to send over a non-end-to-end-encrypted channel: no balances, amounts or account info
+    headroom_message: str = ""  # opt-in for a chat: adds the cushion and a rounded-down lowest point; still no balances, bills or accounts
 
 
 def money(n: float) -> str:
@@ -42,6 +43,23 @@ def money(n: float) -> str:
 
 def round_up_to_10(n: float) -> float:
     return float(math.ceil(round(n, 2) / 10 - 1e-9) * 10)
+
+
+def about_floor(n: float, step: int = 500) -> str:
+    """A deliberately coarse figure: rounded DOWN to the nearest $500, so it is a checkable claim, not a balance."""
+    if n < 0:
+        return "below $0"
+    f = int(n // step) * step
+    return f"under {money(step)}" if f == 0 else money(f)
+
+
+def headroom_ok(end: date, lowest: float, cushion: float) -> str:
+    return (f"UFO: Joint is covered through {end:%b %d}, including upcoming bills. At its lowest it stays above "
+            f"{about_floor(lowest)} (your cushion is {money(cushion)}).")
+
+
+def headroom_low(by: date, lowest: float, cushion: float) -> str:
+    return f"UFO: Joint may dip below its {money(cushion)} cushion before {by:%b %d}. Its lowest point is about {about_floor(lowest)}."
 
 
 def public_low(by: date, personal_covers: bool) -> str:
@@ -70,7 +88,8 @@ def check_balance(joint: float, personal: float, cfg: AlertConfig, today: date) 
         return CheckResult(status="stale_config", bills_total=0, projected=joint, lowest_balance=joint, lowest_on=None, shortfall=0,
                            transfer_amount=0, personal_covers=True, uncovered=0, bills=[], **base,
                            message=f"UFO: your next_topup date ({cfg.next_topup:%b %d}) has passed; update or remove it so bills are counted.",
-                           public_message="UFO: alert settings need an update (the end date of the look-ahead window has passed). Bills are not being counted.")
+                           public_message="UFO: alert settings need an update (the end date of the look-ahead window has passed). Bills are not being counted.",
+                           headroom_message="UFO: alert settings need an update (the end date of the look-ahead window has passed). Bills are not being counted.")
 
     # Walk the balance day by day. On the same day bills go first (conservative): an overdraft happens in the dip, not at the end.
     events = sorted([(d, 0, -a) for _, a, d in due] + [(d, 1, a) for _, a, d in deps], key=lambda e: (e[0], e[1]))
@@ -89,7 +108,8 @@ def check_balance(joint: float, personal: float, cfg: AlertConfig, today: date) 
         extra = f" and {money(dep_total)} of deposits" if deps else ""
         msg = f"UFO: Joint {money(joint)}; after {money(total)} of bills{extra} by {end:%b %d} it never drops below {money(lowest)} (cushion {money(cfg.cushion)})."
         return CheckResult(status="ok", transfer_amount=0, personal_covers=True, uncovered=0, message=msg,
-                           public_message=f"UFO: Joint is covered through {end:%b %d}.", **common)
+                           public_message=f"UFO: Joint is covered through {end:%b %d}.",
+                           headroom_message=headroom_ok(end, lowest, cfg.cushion), **common)
 
     wanted = round_up_to_10(shortfall)
     transfer = wanted if sendable >= wanted else (shortfall if sendable >= shortfall else sendable)
@@ -115,7 +135,8 @@ def check_balance(joint: float, personal: float, cfg: AlertConfig, today: date) 
         msg += (f"Personal ({money(personal)}) has nothing above its {money(cfg.personal_floor)} minimum to send; "
                 f"{money(uncovered)} is uncovered{by}.")
     return CheckResult(status="low", transfer_amount=round(transfer, 2), personal_covers=covers, uncovered=uncovered, message=msg,
-                       public_message=public_low(lowest_on if deps else (first or end), covers), **common)
+                       public_message=public_low(lowest_on if deps else (first or end), covers),
+                       headroom_message=headroom_low(lowest_on if deps else (first or end), lowest, cfg.cushion), **common)
 
 
 def _deposit_specs(cfg: AlertConfig, today: date, end: date):
