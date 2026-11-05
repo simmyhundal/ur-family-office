@@ -108,3 +108,29 @@ def test_other_recurring_opt_in_still_excludes_rent_when_rent_is_not_from_joint(
     bills, _, _ = sources.collect_bills(None, [], cfg(detect_bills=True, include_other_recurring=True, rent_streams=["landlord"]), TODAY)
     names = [b.name for b in bills]
     assert "Netflix" in names and "Landlord LLC" not in names
+
+
+# ---- anticipate: a card payment due soon is looked at early
+def test_card_payment_beyond_the_lookahead_is_still_anticipated():
+    card = BillSpec(name="Card payment", amount=3000, due=date(2026, 11, 25), anticipate=True)  # 22 days out; look-ahead is 14
+    c = cfg(next_topup=None, lookahead_days=14, bills=[card])
+    r = check_balance(2500, 9000, c, TODAY)
+    assert r.window_end == date(2026, 11, 25) and r.status == "low" and r.bills_total == 3000 and r.shortfall == 1500
+
+
+def test_ordinary_bills_beyond_the_lookahead_are_still_ignored():
+    far = BillSpec(name="Far bill", amount=3000, due=date(2026, 11, 25))
+    r = check_balance(2500, 9000, cfg(next_topup=None, lookahead_days=14, bills=[far]), TODAY)
+    assert r.status == "ok" and r.bills_total == 0
+
+
+def test_a_card_payment_more_than_30_days_out_is_not_pulled_in():
+    card = BillSpec(name="Card payment", amount=3000, due=date(2026, 12, 20), anticipate=True)
+    assert check_balance(2500, 9000, cfg(next_topup=None, bills=[card]), TODAY).status == "ok"
+
+
+def test_deposits_between_now_and_the_card_due_date_are_counted_when_anticipating():
+    card = BillSpec(name="Card payment", amount=3000, due=date(2026, 11, 25), anticipate=True)
+    c = cfg(next_topup=None, bills=[card], scheduled_deposits=[dep(date(2026, 11, 20), 1800)])
+    r = check_balance(2500, 9000, c, TODAY)
+    assert r.status == "ok" and r.lowest_balance == 1300  # 2500 + 1800 - 3000 = 1300, above the $1,000 cushion

@@ -41,11 +41,11 @@ Read-only. Watches the **Joint** account and texts you before it would dip below
 
 **What counts as outflow (v1):**
 - **Rent: $0 by default.** Many households pay rent from elsewhere. Set `"rent_paid_from_joint": true` only if rent comes out of Joint (then it is detected from recurring transactions; put your landlord's name in `rent_streams` if it is paid by Zelle).
-- **Credit cards:** the statement balance and due date from Plaid Liabilities for the cards in `credit_card_masks` (the cards paid from Joint). `credit_card_amount: "minimum"` counts only the minimum payment.
+- **Credit cards:** the statement balance and due date from Plaid Liabilities for the cards in `credit_card_masks` (the cards paid from Joint). `credit_card_amount: "minimum"` counts only the minimum payment. This is the most important input for a first run: **without a linked card the alert cannot see the biggest bill and will say "all clear" right before the payment lands**, so the wizard strongly pushes you to link it. Card payments due within 30 days are always looked at, even past the look-ahead window, so a shortfall is flagged while there is still time.
 - **Manual bills** always work and win when they describe the same bill as a detected one.
 - Other recurring spend (subscriptions, utilities, ...) is a later stage; `include_other_recurring` opts in early.
 
-**What counts as inflow:** `scheduled_deposits`, for example a regular transfer from Personal that matches the rent your partner pays. If the amount varies, enter the low end.
+**What counts as inflow:** `scheduled_deposits` (as many as you need), for example a regular transfer from Personal that matches the rent your partner pays, plus a loan repayment between the two of you. If the amount varies, enter the low end.
 
 **What leaves your machine (Telegram / SMS).** Remote channels are not end-to-end encrypted, so they only ever get a minimal message with **no balances, amounts, bill names or account details**:
 
@@ -56,7 +56,7 @@ The full breakdown and the amount to move are printed when you run the job and s
 ### Setup
 The easy way: **`python -m ufo.setup`**. It walks through everything below in about five minutes: Plaid keys and linking, picking your Joint and Personal accounts and the cards paid from Joint, the rent question, a regular deposit into Joint, your minimums, and the Telegram channel (the token and chat ids are saved to `.env`, owner-only, never printed). It validates the config before saving and keeps a backup of any existing one.
 
-Telegram bots can only be created by chatting with @BotFather inside Telegram (there is no API for it), so that one step is yours: send `/newbot`, copy the token. The wizard does everything after it: verifies the token, waits for you (and your partner) to message the bot, finds the chat ids, makes the bot send-only, and sends a test message.
+Telegram bots can only be created by chatting with @BotFather inside Telegram (there is no API for it), so that one step is yours, but the wizard makes it easy: it opens BotFather, puts `/newbot` on your clipboard, and prints the three messages to paste (a name and a username). After you paste the token, it verifies it, opens your new bot so you only press START, finds the chat ids (a direct chat or a group the bot is in both work), makes the bot send-only, and sends a test message. A bot from an earlier run is reused.
 
 By hand, if you prefer:
 1. `cp .env.example .env`, fill `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` (real Chase data needs Plaid production access).

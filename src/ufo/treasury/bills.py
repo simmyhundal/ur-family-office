@@ -35,6 +35,7 @@ class BillSpec(BaseModel):
     due: date
     repeat: Repeat = "none"
     source: Literal["manual", "plaid"] = "manual"
+    anticipate: bool = False  # look at this bill even if it is due after the look-ahead window (credit cards: the big one)
 
 
 class DepositSpec(BaseModel):

@@ -38,6 +38,8 @@ class Script:
 
     def ask(self, key, text, default=None):
         v = self._get(key, default)
+        if isinstance(v, list):
+            return str(v.pop(0))
         return default if v is None else str(v)
 
     def secret(self, key, text):
@@ -70,12 +72,12 @@ class FakeAdmin:
     def me(self):
         return {"username": "ufo_alert_bot"}
 
-    def people_who_messaged(self):
+    def chats_that_messaged(self):
         return self.polls.pop(0) if len(self.polls) > 1 else self.polls[0]
 
-    def harden(self):
-        self.hardened = True
-        return ["Bot can be added to groups. In @BotFather: Bot Settings > Allow Groups? > Turn off."]
+    def harden(self, uses_group=False):
+        self.hardened, self.uses_group = True, uses_group
+        return [] if uses_group else ["Bot can be added to groups. In @BotFather: Bot Settings > Allow Groups? > Turn off."]
 
 
 class FakeNotifier:
@@ -248,14 +250,14 @@ def test_offers_to_link_the_card_when_none_is_linked_then_asks_which_cards(deps)
     deps.link_account = lambda s: state.update(linked=True)
     p = Script(**{**HAPPY, "telegram": False, "link_card": True})
     wizard.run(p, deps)
-    assert state["linked"] and "No credit card is linked" in p.output
+    assert state["linked"] and "the credit card" in p.output.lower() and "All clear" not in p.output
     assert json.loads((deps.root / ".data" / "alert.json").read_text())["credit_card_masks"] == ["9999"]
 
 
 def test_declining_the_card_link_still_finishes_with_no_cards(deps):
     no_card = [a for a in ACCOUNTS if a["type"] != "credit"]
     deps.list_accounts = lambda s, items: no_card
-    wizard.run(Script(**{**HAPPY, "telegram": False, "link_card": False}), deps)
+    wizard.run(Script(**{**HAPPY, "telegram": False, "link_card": False, "skip_card": True}), deps)
     cfg = json.loads((deps.root / ".data" / "alert.json").read_text())
     assert cfg["credit_card_masks"] == [] and cfg["detect_bills"] is False
 
@@ -268,3 +270,59 @@ def test_telegram_already_configured_is_kept_unless_you_say_otherwise(deps, monk
     p = Script(**{**HAPPY, "telegram_redo": False})
     wizard.run(p, deps)
     assert "already set up" in p.output and asked == []  # never touched Telegram
+
+
+def test_card_step_is_emphatic_and_needs_a_second_confirmation_to_skip(deps):
+    no_card = [a for a in ACCOUNTS if a["type"] != "credit"]
+    deps.list_accounts = lambda s, items: no_card
+    p = Script(**{**HAPPY, "telegram": False, "link_card": False, "skip_card": [False, True]})  # first "no" is not enough
+    wizard.run(p, deps)
+    assert "biggest bill" in p.output and "Strongly recommended" in p.output
+    assert p.asked.count("skip_card") == 2
+
+
+def test_the_card_loop_cannot_spin_forever(deps):
+    no_card = [a for a in ACCOUNTS if a["type"] != "credit"]
+    deps.list_accounts = lambda s, items: no_card
+    p = Script(**{**HAPPY, "telegram": False, "link_card": True})  # linking never produces a card
+    wizard.run(p, deps)
+    assert "Continuing without the card" in p.output
+
+
+def test_several_recurring_deposits_can_be_added(deps):
+    p = Script(**{**HAPPY, "telegram": False, "deposit_name": ["Rent match", "Loan repayment"], "deposit_amount": ["1800", "250"],
+                  "deposit_day": ["2", "15"], "deposit_from_personal": [True, True], "deposit_more": [True, False]})
+    wizard.run(p, deps)
+    raw = json.loads((deps.root / ".data" / "alert.json").read_text())
+    AlertConfig.model_validate(raw)
+    assert [(d["name"], d["amount"], d["due"]) for d in raw["scheduled_deposits"]] == [
+        ("Rent match", 1800.0, "2026-12-02"), ("Loan repayment", 250.0, "2026-12-15")]
+
+
+def test_a_telegram_group_counts_and_is_not_warned_about(deps):
+    made = []
+    deps.make_admin = lambda tok: made.append(FakeAdmin(tok, polls=[{-100123: "Household (group)"}])) or made[-1]
+    p = Script(**HAPPY)
+    wizard.run(p, deps)
+    assert "TELEGRAM_CHAT_IDS=-100123" in (deps.root / ".env").read_text()
+    assert made[-1].uses_group is True and "Allow Groups" not in p.output
+
+
+def test_botfather_help_is_concrete_and_links_are_opened(deps):
+    opened, copied = [], []
+    deps.open_url, deps.copy, deps.suffix = opened.append, copied.append, (lambda: "x7k2")
+    p = Script(**HAPPY)
+    wizard.run(p, deps)
+    assert "/newbot" in p.output and "UFO Alerts" in p.output and "ufo_alerts_x7k2_bot" in p.output
+    assert copied == ["/newbot"]
+    assert opened == ["https://t.me/BotFather", "https://t.me/ufo_alert_bot?start=ufo"]  # BotFather first, then the new bot's START link
+
+
+def test_an_existing_bot_from_an_earlier_run_is_reused_without_asking_for_a_token(deps, monkeypatch):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", TOKEN)  # token saved earlier, but no chat ids yet
+    opened = []
+    deps.open_url = opened.append
+    p = Script(**{**HAPPY, "tg_reuse": True})
+    wizard.run(p, deps)
+    assert "tg_token" not in p.asked and "/newbot" not in p.output
+    assert opened == ["https://t.me/ufo_alert_bot?start=ufo"] and "TELEGRAM_CHAT_IDS=111" in (deps.root / ".env").read_text()
