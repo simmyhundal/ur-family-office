@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Is the Joint Alert Bot Safe</title>
+<style>
+/* Layout: one flow diagram on top, two short can/cannot columns, one risk table. */
+:root{
+  --bg:#f6f7f4; --ink:#1d2421; --muted:#5b6660; --line:#d5dbd6; --card:#ffffff;
+  --accent:#1f6f5c; --warn:#b4531a; --good-bg:#e4f1ec; --bad-bg:#f8e9e0;
+  --display:"Fraunces",Georgia,serif; --body:"Source Sans 3",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#141a17; --ink:#e8ede9; --muted:#9aa7a0; --line:#2f3a35; --card:#1b231f;
+  --accent:#58c3a4; --warn:#e8935a; --good-bg:#1c332b; --bad-bg:#3a261b; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#141a17; --ink:#e8ede9; --muted:#9aa7a0; --line:#2f3a35; --card:#1b231f;
+  --accent:#58c3a4; --warn:#e8935a; --good-bg:#1c332b; --bad-bg:#3a261b; color-scheme:dark;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.5 var(--body)}
+main{max-width:760px;margin:0 auto;padding:28px 16px 48px;display:flex;flex-direction:column;gap:28px}
+h1{font:600 30px/1.15 var(--display);margin:0 0 8px;text-wrap:balance}
+h2{font:600 19px/1.2 var(--display);margin:0 0 10px}
+p{margin:0;max-width:65ch}
+.lead{color:var(--muted)}
+figure{margin:0;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+figcaption{color:var(--muted);font-size:15px;margin-top:8px}
+svg{width:100%;height:auto;display:block;color:var(--ink)}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:560px){.cols{grid-template-columns:1fr}}
+.box{border-radius:10px;padding:14px 16px}
+.yes{background:var(--good-bg)} .no{background:var(--bad-bg)}
+ul{margin:0;padding-left:20px} li{margin:3px 0}
+table{width:100%;border-collapse:collapse;font-size:16px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:14px}
+.scroll{overflow-x:auto}
+small{color:var(--muted);font-size:14px}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+<main>
+<header>
+<h1>Is the Joint alert bot safe?</h1>
+<p class="lead">A small program on Simmy's Mac checks the Joint account every Monday and posts one line in our private Telegram group, so nobody has to ask "do we have enough for the card?"</p>
+</header>
+
+<figure>
+<svg viewBox="0 0 720 150" role="img" aria-label="Chase sends read-only data through Plaid to Simmy's Mac. The Mac sends only a short status line to our private Telegram group. Nothing flows back toward the bank.">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+<g fill="none" stroke="currentColor" stroke-width="1.5">
+<rect x="6" y="40" width="120" height="60" rx="8"/>
+<rect x="196" y="40" width="120" height="60" rx="8"/>
+<rect x="386" y="40" width="130" height="60" rx="8" stroke="#1f6f5c" stroke-width="2.5"/>
+<rect x="586" y="40" width="128" height="60" rx="8"/>
+<line x1="126" y1="70" x2="194" y2="70" marker-end="url(#a)"/>
+<line x1="316" y1="70" x2="384" y2="70" marker-end="url(#a)"/>
+<line x1="516" y1="70" x2="584" y2="70" marker-end="url(#a)"/>
+</g>
+<g fill="currentColor" font-size="14" text-anchor="middle" font-family="system-ui,sans-serif">
+<text x="66" y="75">Chase</text>
+<text x="256" y="75">Plaid</text>
+<text x="451" y="68">Simmy's Mac</text><text x="451" y="86" font-size="12">runs the check</text>
+<text x="650" y="68">Telegram</text><text x="650" y="86" font-size="12">private group</text>
+<text x="160" y="32" font-size="12">read-only</text>
+<text x="350" y="32" font-size="12">balances</text>
+<text x="550" y="32" font-size="12">status only</text>
+<text x="360" y="128" font-size="12">No arrow points back: nothing here can move money.</text>
+</g>
+</svg>
+<figcaption>Only the Mac talks to the bank. Telegram only receives a short note.</figcaption>
+</figure>
+
+<section class="cols">
+<div class="box yes"><h2>It can</h2>
+<ul><li>Post a status line in our group</li><li>Read balances and card statements, read-only</li></ul></div>
+<div class="box no"><h2>It cannot</h2>
+<ul><li>Move money or touch the bank</li><li>Read our chat or answer anyone</li><li>Post anywhere except our group</li></ul></div>
+</section>
+
+<section>
+<h2>What the messages say</h2>
+<p>Telegram groups are not end-to-end encrypted, so messages stay thin. <b>Minimal</b> gives a status and a date. <b>Headroom</b> adds our cushion and the lowest balance, rounded down to $500. Exact balances never go in the chat.</p>
+</section>
+
+<section>
+<h2>If something went wrong</h2>
+<div class="scroll"><table>
+<tr><th>Event</th><th>Worst case</th><th>Fix</th></tr>
+<tr><td>Bot token stolen</td><td>Fake alerts</td><td>Revoke in @BotFather</td></tr>
+<tr><td>Telegram account taken over</td><td>Old alerts, no amounts</td><td>Two-Step Verification</td></tr>
+<tr><td>Mac compromised</td><td>Read-only bank link</td><td>Remove link, revoke token</td></tr>
+</table></div>
+</section>
+
+<p><small>Keep the group private and the invite link off. The bank app is always the source of truth. This is information, not financial advice.</small></p>
+</main>
+</body>
+</html>
