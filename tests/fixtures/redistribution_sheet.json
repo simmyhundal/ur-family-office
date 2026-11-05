@@ -1,0 +1,17 @@
+{
+  "_comment": "Snapshot of the Redistribution tab in the Simmys Assets sheet (golden case). Withdrawal $8,997.45.",
+  "withdrawal": 8997.45,
+  "targets": {"CASH": 0, "IVV": 24, "IWM": 24, "SCHM": 24, "VGT": 10, "VXUS": 9, "XBI": 9, "VTWO": 0},
+  "positions": [
+    {"symbol": "CASH", "quantity": 0.69, "price": 1, "value": 0.69, "is_cash": true},
+    {"symbol": "IVV", "quantity": 25.363, "price": 776.86, "value": 19703.5},
+    {"symbol": "IWM", "quantity": 66.367, "price": 285.58, "value": 18953.09},
+    {"symbol": "SCHM", "quantity": 545.434, "price": 35, "value": 19090.19},
+    {"symbol": "VGT", "quantity": 65.993, "price": 125.56, "value": 8286.08},
+    {"symbol": "VXUS", "quantity": 83.921, "price": 87.15, "value": 7313.72},
+    {"symbol": "XBI", "quantity": 52.74, "price": 158.23, "value": 8345.05},
+    {"symbol": "VTWO", "quantity": 0, "price": 93.43, "value": 0}
+  ],
+  "expected_sell_value": {"IVV": 2256.73, "IWM": 1506.32, "SCHM": 1643.42, "VGT": 1016.6, "VXUS": 771.18, "XBI": 1802.51},
+  "expected_sell_shares": {"IVV": 2.904942692, "IWM": 5.274604174, "SCHM": 46.95496, "VGT": 8.096488372, "VXUS": 8.848855422, "XBI": 11.39172597}
+}
