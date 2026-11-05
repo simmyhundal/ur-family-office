@@ -67,7 +67,7 @@ By hand, if you prefer:
 Then:
 - Review: `python scripts/show_detected_bills.py` shows exactly which bills and deposits the alert would count, and what each detector skipped and why.
 - Try it: `python -m jobs.check_balance --joint 1500 --personal 4200` (no Plaid, dry run), then `python -m jobs.check_balance` (live balances, still dry run), then `--send` (`--channel telegram|twilio|all`).
-- Schedule `--send` daily (cron / launchd). It alerts at most once per day per situation, says so when a detector fails instead of silently under-warning, and logs every check to `.data/alerts_log.csv`.
+- Schedule it: the wizard offers a daily run (macOS launch agent), or run `python scripts/schedule_daily.py [--time 7:30]` (`--status`, `--run-now`, `--uninstall`). Output goes to `.data/daily.log`; if the Mac is asleep at that time it runs on wake. By hand, run `python -m jobs.check_balance --send` from cron. It alerts at most once per day per situation, says so when a detector fails instead of silently under-warning, and logs every check to `.data/alerts_log.csv`.
 
 ### Measuring the trial: how often your partner has to ask
 `python scripts/partner_asks.py --launch YYYY-MM-DD --review` counts how often your partner had to ask whether Joint can cover things, from your Messages history (macOS; needs Full Disk Access for the terminal), and compares the baseline before launch with the trial. Two signals count: her asks, and your own "I paid / transferred to the joint account" messages (assumed to answer an ask; at most one per day). Only per-day counts are saved (`.data/partner_asks.csv`); message text is never stored. `--fill-log` fills the log's `partner_asked` column.
