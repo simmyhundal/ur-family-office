@@ -1,5 +1,6 @@
 """Settings loaded from environment variables (never from the repo)."""
 import os
+from pathlib import Path
 from pydantic import BaseModel
 
 
@@ -15,7 +16,21 @@ class Settings(BaseModel):
     cushion_usd: float = 1000.0
 
 
+def _load_dotenv(path: str = ".env") -> None:
+    """Minimal .env reader (KEY=VALUE lines); real environment variables win."""
+    p = Path(path)
+    if not p.exists():
+        return
+    for line in p.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        os.environ.setdefault(k.strip(), v.split(" #")[0].strip().strip("\"'"))
+
+
 def load_settings() -> Settings:
+    _load_dotenv()
     e = os.environ
     return Settings(
         environment=e.get("ENVIRONMENT", "development"),

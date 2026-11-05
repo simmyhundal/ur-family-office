@@ -6,6 +6,7 @@ import time
 import plaid
 from plaid.api import plaid_api
 from plaid.model.accounts_balance_get_request import AccountsBalanceGetRequest
+from plaid.model.accounts_get_request import AccountsGetRequest
 from plaid.model.country_code import CountryCode
 from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
 from plaid.model.link_token_create_hosted_link import LinkTokenCreateHostedLink
@@ -13,6 +14,7 @@ from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUser
 from plaid.model.link_token_get_request import LinkTokenGetRequest
 from plaid.model.products import Products
+from plaid.model.transactions_recurring_get_request import TransactionsRecurringGetRequest
 
 from ..config import Settings
 from .token_store import save_item
@@ -73,3 +75,22 @@ def get_balances(s: Settings, items: list[dict], masks: list[str]) -> dict[str, 
         resp = client.accounts_balance_get(AccountsBalanceGetRequest(access_token=item["access_token"]))
         accounts += [a.to_dict() for a in resp["accounts"]]
     return {m: pick_account_balance(accounts, m) for m in masks}
+
+
+def get_recurring_outflows(s: Settings, items: list[dict], mask: str) -> list[dict]:
+    """Plaid's detected recurring outflow streams for the account with this mask (read-only).
+    Raises RuntimeError with a plain message when detection is unavailable, so the caller can fall back to manual bills."""
+    client = make_client(s)
+    for item in items:
+        accounts = [a.to_dict() for a in client.accounts_get(AccountsGetRequest(access_token=item["access_token"]))["accounts"]]
+        found = [a for a in accounts if a.get("mask") == mask]
+        if not found:
+            continue
+        try:
+            resp = client.transactions_recurring_get(TransactionsRecurringGetRequest(
+                access_token=item["access_token"], account_ids=[found[0]["account_id"]]))
+        except plaid.ApiException as e:
+            raise RuntimeError(f"Plaid could not return recurring transactions ({getattr(e, 'reason', e)}). "
+                               "The item may not have the transactions product yet or history is still loading.") from e
+        return [st.to_dict() for st in resp["outflow_streams"]]
+    raise RuntimeError(f"No linked account with mask {mask}.")

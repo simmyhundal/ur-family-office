@@ -58,6 +58,24 @@ def test_ok_balance_sends_nothing(tmp_path):
     assert FakeTwilio.sent == []
 
 
+def test_detection_failure_falls_back_to_manual_bills_and_says_so(tmp_path, monkeypatch, capsys):
+    path = write_cfg(tmp_path, [{"name": "Rent", "amount": 1800, "due": str(date.today() + timedelta(days=2))}])
+    cfg = json.loads(open(path).read())
+    cfg["detect_bills"] = True
+    open(path, "w").write(json.dumps(cfg))
+    monkeypatch.setattr(job, "get_balances", lambda s, items, masks: {"1234": ("Joint", 1500.0), "5678": ("Personal", 4200.0)})
+
+    def boom(*a, **k):
+        raise RuntimeError("Plaid could not return recurring transactions (PRODUCT_NOT_READY).")
+
+    monkeypatch.setattr(job, "get_recurring_outflows", boom)
+    monkeypatch.setattr(job, "load_items", lambda: [])
+    job.main(["--config", path, "--send"])
+    out = capsys.readouterr()
+    assert "Bill detection unavailable" in out.err
+    assert "only your manual bills are counted" in FakeTwilio.sent[0]
+
+
 def test_joint_and_personal_must_be_given_together(tmp_path):
     path = write_cfg(tmp_path, [])
     with pytest.raises(SystemExit):
