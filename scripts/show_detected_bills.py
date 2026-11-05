@@ -22,6 +22,10 @@ for line in info or ["(nothing to report)"]:
     print("  -", line)
 for f in failures:
     print("  PROBLEM:", f)
-print(f"\nBills the alert would count before {cfg.next_topup}:")
-for n, a, d in bills_due(bills, today, cfg.next_topup):
+end = cfg.window_end(today)
+print(f"\nBills the alert would count through {end}:")
+for n, a, d in bills_due(bills, today, end):
+    print(f"  {d}  {n:<36} ${a:>10,.2f}")
+print("\nScheduled deposits it would count:")
+for n, a, d in bills_due(cfg.scheduled_deposits, today, end) or [("(none)", 0, "")]:
     print(f"  {d}  {n:<36} ${a:>10,.2f}")

@@ -17,7 +17,8 @@ APPLE_EPOCH = datetime(2001, 1, 1)
 
 class PartnerConfig(BaseModel):
     chat_ids: list[int]  # Messages chat ROWIDs: the 1:1 thread(s) and the group chat
-    sender_number_suffixes: list[str]  # last digits of the partner's phone number(s)
+    sender_number_suffixes: list[str] = []  # last digits of the partner's phone number(s)
+    sender_emails: list[str] = []  # her iMessage email address(es): group chats often show a different handle than the 1:1
     db_path: str = str(Path.home() / "Library/Messages/chat.db")
 
 
@@ -38,10 +39,37 @@ def decode_body(text: str | None, blob: bytes | None) -> str:
         return ""
 
 
+def matching_handles(con: sqlite3.Connection, cfg: PartnerConfig) -> list[int]:
+    """Every handle (phone number or email) that belongs to the partner. One person often appears under several."""
+    digits = lambda s: re.sub(r"\D", "", s or "")  # noqa: E731
+    nums = {x[-4:] for x in cfg.sender_number_suffixes}
+    emails = {e.casefold() for e in cfg.sender_emails}
+    return [r for r, i in con.execute("select ROWID, id from handle")
+            if (len(digits(i)) >= 7 and digits(i)[-4:] in nums) or (i or "").casefold() in emails]
+
+
+def describe_senders(cfg: PartnerConfig, since: datetime) -> list[tuple[str, int]]:
+    """Setup aid: who sends incoming messages in the configured chats (masked), so no handle is missed."""
+    con = sqlite3.connect(f"file:{cfg.db_path}?mode=ro", uri=True)
+    q = f"""select h.id, count(*) from message msg join chat_message_join m on m.message_id = msg.ROWID
+            left join handle h on h.ROWID = msg.handle_id
+            where m.chat_id in ({",".join("?" * len(cfg.chat_ids))}) and msg.is_from_me = 0 and msg.date >= ?
+            group by h.id order by 2 desc"""
+    return [(mask_identifier(i), n) for i, n in con.execute(q, [*cfg.chat_ids, int((since - APPLE_EPOCH).total_seconds() * 1e9)])]
+
+
+def mask_identifier(i: str | None) -> str:
+    i = i or "(unknown)"
+    if "@" in i:
+        return i[0] + "…" + i[i.find("@"):]
+    d = re.sub(r"\D", "", i)
+    return "…" + d[-4:] if len(d) >= 7 else i
+
+
 def read_partner_messages(cfg: PartnerConfig, since: datetime, until: datetime | None = None) -> list[tuple[datetime, str]]:
     con = sqlite3.connect(f"file:{cfg.db_path}?mode=ro", uri=True)
     digits = lambda s: re.sub(r"\D", "", s or "")  # noqa: E731
-    handles = [r for r, i in con.execute("select ROWID, id from handle") if digits(i)[-4:] in {x[-4:] for x in cfg.sender_number_suffixes}]
+    handles = matching_handles(con, cfg)
     if not handles or not cfg.chat_ids:
         return []
     ns = lambda d: int((d - APPLE_EPOCH).total_seconds() * 1e9)  # noqa: E731

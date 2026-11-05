@@ -88,3 +88,45 @@ def test_reader_opens_the_database_read_only(tmp_path):
     before = (tmp_path / "chat.db").read_bytes()
     read_partner_messages(PartnerConfig(chat_ids=[10], sender_number_suffixes=["1111"], db_path=db), datetime(2026, 1, 1))
     assert (tmp_path / "chat.db").read_bytes() == before
+
+
+def test_merge_counts_adds_manual_asks_to_automatic_ones():
+    from datetime import date
+
+    from ufo.partner.asks import merge_counts
+
+    out = merge_counts({date(2026, 3, 10): 2}, {date(2026, 3, 10): 1, date(2026, 5, 1): 1})
+    assert {d.isoformat(): n for d, n in out.items()} == {"2026-03-10": 3, "2026-05-01": 1}
+
+
+def test_one_person_under_several_handles_is_found_by_number_or_email(tmp_path):
+    import sqlite3
+
+    db = str(tmp_path / "chat.db")
+    make_db(db)
+    c = sqlite3.connect(db)
+    c.execute("insert into handle values(3, 'Partner@Example.com')")
+    c.execute("insert into message values(6, ?, 'Is rent covered this month?', null, 0, 3)", (int((datetime(2026, 3, 11) - APPLE_EPOCH).total_seconds() * 1e9),))
+    c.execute("insert into chat_message_join values(10, 6)")
+    c.commit(); c.close()
+    only_number = PartnerConfig(chat_ids=[10], sender_number_suffixes=["1111"], db_path=db)
+    both = PartnerConfig(chat_ids=[10], sender_number_suffixes=["1111"], sender_emails=["partner@example.com"], db_path=db)
+    assert len(read_partner_messages(only_number, datetime(2026, 1, 1), datetime(2026, 12, 31))) == 1  # the email handle was invisible
+    assert len(read_partner_messages(both, datetime(2026, 1, 1), datetime(2026, 12, 31))) == 2
+
+
+def test_discover_lists_senders_masked(tmp_path):
+    import sqlite3
+
+    from ufo.partner.imessage import describe_senders
+
+    db = str(tmp_path / "chat.db")
+    make_db(db)
+    c = sqlite3.connect(db)
+    c.execute("insert into handle values(3, 'partner@example.com')")
+    c.execute("insert into message values(6, ?, 'hi', null, 0, 3)", (int((datetime(2026, 3, 11) - APPLE_EPOCH).total_seconds() * 1e9),))
+    c.execute("insert into chat_message_join values(10, 6)")
+    c.commit(); c.close()
+    out = dict(describe_senders(PartnerConfig(chat_ids=[10], sender_number_suffixes=[], db_path=db), datetime(2026, 1, 1)))
+    assert "p…@example.com" in out and "…1111" in out and "…2222" in out  # masked: never the full number or email
+    assert not any("partner@" in k or "5550001111" in k for k in out)

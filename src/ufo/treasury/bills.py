@@ -3,10 +3,12 @@
 Example .data/alert.json:
 {
   "cushion": 1000,                      # what Joint should still hold at the next top-up
-  "next_topup": "2026-11-15",           # next paycheck or planned transfer in
+  "lookahead_days": 14,                 # how far ahead to look (or set "next_topup": "2026-11-15" for a fixed end date)
   "joint_mask": "1234",                 # last digits of the Joint account (monitored)
   "personal_mask": "5678",              # last digits of the Personal account (funds the transfer)
   "personal_floor": 1500,               # Personal never drops below this
+  "rent_paid_from_joint": false,        # true only if rent is withdrawn from Joint
+  "scheduled_deposits": [{"name": "Rent match from Personal", "amount": 1800, "due": "2026-11-02", "repeat": "monthly"}],
   "bills": [
     {"name": "Rent", "amount": 1800, "due": "2026-11-01", "repeat": "monthly"},
     {"name": "Car insurance", "amount": 142.5, "due": "2026-11-09"}
@@ -35,13 +37,26 @@ class BillSpec(BaseModel):
     source: Literal["manual", "plaid"] = "manual"
 
 
+class DepositSpec(BaseModel):
+    """Money you expect to arrive in Joint, e.g. a regular transfer from Personal that matches the rent your partner pays.
+    Enter a conservative amount: if the real one varies (say with an exchange rate), use the low end."""
+    name: str
+    amount: float
+    due: date
+    repeat: Repeat = "none"
+    from_personal: bool = True  # funded by Personal, so Personal has that much less to send for a top-up
+
+
 class AlertConfig(BaseModel):
     cushion: float = 1000.0
-    next_topup: date
+    next_topup: date | None = None  # end of the look-ahead window; default is today + lookahead_days
+    lookahead_days: int = 14
     joint_mask: str
     personal_mask: str
     personal_floor: float = 1500.0
     bills: list[BillSpec] = []
+    scheduled_deposits: list[DepositSpec] = []
+    rent_paid_from_joint: bool = False  # most setups: rent is paid elsewhere, so Joint counts $0 of rent
     # Bill detection (v1 covers the two big sources: rent and credit cards). Manual bills always win on overlap.
     detect_bills: bool = False
     rent_streams: list[str] = []  # names (substrings) that identify your rent payment, e.g. a landlord paid by Zelle
@@ -50,6 +65,9 @@ class AlertConfig(BaseModel):
     include_other_recurring: bool = False  # later stage: subscriptions, utilities, etc. (off for now)
     include_early_detection: bool = False  # also count streams Plaid is not yet sure about
     ignore_streams: list[str] = []  # names (case-insensitive substrings) of detected streams to skip
+
+    def window_end(self, today: date) -> date:
+        return self.next_topup or today + timedelta(days=self.lookahead_days)
 
 
 def load_config(path: str | Path) -> AlertConfig:
@@ -90,7 +108,7 @@ def occurrences(bill: BillSpec, start: date, end: date) -> list[date]:
     return out
 
 
-def bills_due(bills: list[BillSpec], start: date, end: date) -> list[tuple[str, float, date]]:
-    """(name, amount, due) for every occurrence in the window, earliest first; same-day bills keep input order."""
+def bills_due(bills: list, start: date, end: date) -> list[tuple[str, float, date]]:
+    """(name, amount, due) for every occurrence (works for bills and scheduled deposits alike) in the window, earliest first; same-day bills keep input order."""
     rows = [(b.name, b.amount, d) for b in bills for d in occurrences(b, start, end)]
     return sorted(rows, key=lambda r: r[2])

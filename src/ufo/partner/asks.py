@@ -27,10 +27,26 @@ _PATTERNS = [
 _RE = re.compile("|".join(f"(?:{p})" for p in _PATTERNS), re.I)
 
 
+# Looser "money-ish" words, used only to surface messages the matcher did NOT flag so it can be tuned by eye.
+_MONEYISH = re.compile(r"joint|account|money|transfer|deposit|\brent\b|bills?\b|card|chase|bank|\$|overdraft|balance|cover|zelle|venmo|funds|payment|reminder", re.I)
+
+
+def is_near_miss(text: str) -> bool:
+    return bool(text) and not _TAPBACK.match(text) and not is_cash_ask(text) and bool(_MONEYISH.search(text))
+
+
 def is_cash_ask(text: str) -> bool:
     if not text or _TAPBACK.match(text):
         return False
     return bool(_RE.search(text))
+
+
+def merge_counts(auto: dict[date, int], manual: dict[date, int]) -> dict[date, int]:
+    """Asks found in Messages plus asks you logged by hand (in person, calls, other apps)."""
+    out = dict(auto)
+    for d, n in manual.items():
+        out[d] = out.get(d, 0) + n
+    return dict(sorted(out.items()))
 
 
 def count_by_day(messages: list[tuple[datetime, str]]) -> dict[date, int]:

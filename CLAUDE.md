@@ -8,4 +8,7 @@
 - The alert covers a Joint account (monitored) and a Personal account (funds the transfer, keeps a $1,500 minimum by default). Suggested transfers are the shortfall rounded up to the next $10. It only tells the user what to move; it never moves money.
 - Alerts go through the `Notifier` interface; Telegram is the default channel (decision 0003), Twilio is optional. Never put the bot token in an error message or log.
 - Plaid history length (`days_requested`) is fixed when an Item is created; keep requesting the maximum at link time.
+- Remote alert channels (Telegram, SMS) are not end-to-end encrypted: send only `CheckResult.public_message` (no balances, amounts, bill names or account details). Full detail stays local. Keep the alert bot write-only (it only calls `sendMessage`; setup helpers live in `providers/telegram_admin.py`).
+- Messages access (`partner/imessage.py`) is read-only on the user's own chat.db, limited to one person's messages in configured chats. Never write message text to disk, logs, tests, issues, PRs or commits; tests use invented messages. `.data/partner.json` is local only.
+- The check walks the running Joint balance through the window (bills out, scheduled deposits in; same-day bills first) and compares the lowest point to the cushion. Rent counts as $0 unless `rent_paid_from_joint`. Bills in v1: credit cards (statement balance via Plaid Liabilities) and manual bills; other categories are a later stage.
 - Prefer small pure functions with tests; add infrastructure (db, api, queues) only when a feature needs it.

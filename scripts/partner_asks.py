@@ -13,26 +13,55 @@ import json
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from ufo.partner.asks import count_by_day, is_cash_ask
-from ufo.partner.imessage import PartnerConfig, read_partner_messages
+from ufo.partner.asks import count_by_day, is_cash_ask, is_near_miss, merge_counts
+from ufo.partner.imessage import PartnerConfig, describe_senders, read_partner_messages
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--config", default=".data/partner.json")
 ap.add_argument("--launch", help="date the alert went live (YYYY-MM-DD); default: today, so everything is baseline")
 ap.add_argument("--baseline-days", type=int, default=180)
 ap.add_argument("--review", action="store_true")
+ap.add_argument("--near-misses", action="store_true", help="also print money-related messages the matcher did NOT flag, to tune it by eye (terminal only)")
+ap.add_argument("--add", metavar="YYYY-MM-DD", help="log an ask that happened outside Messages (in person, a call, another app)")
+ap.add_argument("--channel", default="in-person", help="with --add: where it happened (in-person, call, whatsapp, ...)")
+ap.add_argument("--discover", action="store_true", help="list who sends messages in the configured chats (masked), to make sure every handle is configured")
 ap.add_argument("--fill-log", action="store_true")
 args = ap.parse_args()
 
 cfg = PartnerConfig.model_validate(json.loads(Path(args.config).read_text()))
+if args.discover:
+    print("Senders of incoming messages in the configured chats (last 400 days):")
+    for who, n in describe_senders(cfg, datetime.now() - timedelta(days=400)):
+        print(f"  {who}: {n}")
+    print("Every handle that is the partner must be covered by sender_number_suffixes or sender_emails.")
+    raise SystemExit
+MANUAL = Path(".data/partner_asks_manual.csv")
+if args.add:
+    d = date.fromisoformat(args.add)  # validates the date
+    MANUAL.parent.mkdir(exist_ok=True)
+    new = not MANUAL.exists()
+    with MANUAL.open("a", newline="") as f:
+        w = csv.writer(f)
+        if new:
+            w.writerow(["date", "channel"])
+        w.writerow([d.isoformat(), args.channel])
+    print(f"Logged an ask on {d} ({args.channel}).")
+    raise SystemExit
+
 launch = date.fromisoformat(args.launch) if args.launch else date.today()
 since = datetime.combine(launch - timedelta(days=args.baseline_days), datetime.min.time())
 msgs = read_partner_messages(cfg, since)
-per_day = count_by_day(msgs)
+auto_per_day = count_by_day(msgs)
+manual_per_day: dict[date, int] = {}
+if MANUAL.exists():
+    for row in csv.DictReader(MANUAL.open()):
+        d = date.fromisoformat(row["date"])
+        manual_per_day[d] = manual_per_day.get(d, 0) + 1
+per_day = merge_counts(auto_per_day, manual_per_day)
 
 before = {d: n for d, n in per_day.items() if d < launch}
 after = {d: n for d, n in per_day.items() if d >= launch}
-print(f"Messages from your partner scanned: {len(msgs)} (since {since:%Y-%m-%d})")
+print(f"Messages from your partner scanned: {len(msgs)} (since {since:%Y-%m-%d}); asks found automatically: {sum(auto_per_day.values())}, logged by hand: {sum(manual_per_day.values())}")
 print(f"Baseline ({args.baseline_days} days before {launch}): {sum(before.values())} asks on {len(before)} day(s)")
 print(f"Since launch ({launch}): {sum(after.values())} asks on {len(after)} day(s)")
 if args.review:
@@ -40,6 +69,12 @@ if args.review:
     for when, text in msgs:
         if is_cash_ask(text):
             print(f"  {when:%Y-%m-%d} {text[:160]!r}")
+
+if args.near_misses:
+    print("\nNear misses (money-related, not flagged; shown here only, not stored):")
+    for when, text in msgs:
+        if is_near_miss(text):
+            print(f"  {when:%Y-%m-%d} {text[:150]!r}")
 
 out = Path(".data/partner_asks.csv")
 out.parent.mkdir(exist_ok=True)
