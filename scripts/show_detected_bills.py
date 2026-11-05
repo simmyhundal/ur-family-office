@@ -9,6 +9,7 @@ from datetime import date
 from ufo.config import load_settings
 from ufo.providers.token_store import load_items
 from ufo.treasury.bills import bills_due, load_config
+from ufo.treasury.low_balance import effective_window_end
 from ufo.treasury.sources import collect_bills
 
 ap = argparse.ArgumentParser()
@@ -22,7 +23,9 @@ for line in info or ["(nothing to report)"]:
     print("  -", line)
 for f in failures:
     print("  PROBLEM:", f)
-end = cfg.window_end(today)
+# apply the same look-ahead the alert uses, including the early look at card payments, so this matches what it will count
+cfg.bills = bills
+end = effective_window_end(cfg, today)
 print(f"\nBills the alert would count through {end}:")
 for n, a, d in bills_due(bills, today, end):
     print(f"  {d}  {n:<36} ${a:>10,.2f}")

@@ -42,4 +42,5 @@ def collect_bills(settings: Settings, items: list[dict], cfg: AlertConfig, today
     else:
         info.append("credit_card_masks is empty, so no credit-card payments are counted")
     bills, dropped = merge_bills(cfg.bills, detected)
-    return bills, info + [f"dropped: {d}" for d in dropped], failures
+    found = [f"found: {b.name}, ${b.amount:,.2f}, due {b.due}" + (" (looked at early)" if b.anticipate else "") for b in detected]
+    return bills, found + info + [f"dropped: {d}" for d in dropped], failures

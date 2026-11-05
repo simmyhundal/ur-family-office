@@ -53,11 +53,14 @@ def public_low(by: date, personal_covers: bool) -> str:
 ANTICIPATE_DAYS = 30  # card payments due within this many days are always counted, even past the look-ahead window
 
 
+def effective_window_end(cfg: AlertConfig, today: date) -> date:
+    """The look-ahead end date, extended so an upcoming credit-card payment is looked at early (with the deposits in between).
+    A shortfall is then flagged while there is still time, not only in the last 14 days. Shared by the alert and the review script."""
+    return max([cfg.window_end(today), *[b.due for b in cfg.bills if b.anticipate and today <= b.due <= today + timedelta(days=ANTICIPATE_DAYS)]])
+
+
 def check_balance(joint: float, personal: float, cfg: AlertConfig, today: date) -> CheckResult:
-    end = cfg.window_end(today)
-    # Anticipate: an upcoming credit-card payment is looked at early (with the deposits in between), so a shortfall is
-    # flagged while there is still time, not only in the last 14 days.
-    end = max([end, *[b.due for b in cfg.bills if b.anticipate and today <= b.due <= today + timedelta(days=ANTICIPATE_DAYS)]])
+    end = effective_window_end(cfg, today)
     due = bills_due(cfg.bills, today, end)
     deps = bills_due(cfg.scheduled_deposits, today, end)
     from_personal = round(sum(a for (n, a, d), spec in _deposit_specs(cfg, today, end) if spec.from_personal), 2)

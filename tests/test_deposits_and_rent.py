@@ -134,3 +134,17 @@ def test_deposits_between_now_and_the_card_due_date_are_counted_when_anticipatin
     c = cfg(next_topup=None, bills=[card], scheduled_deposits=[dep(date(2026, 11, 20), 1800)])
     r = check_balance(2500, 9000, c, TODAY)
     assert r.status == "ok" and r.lowest_balance == 1300  # 2500 + 1800 - 3000 = 1300, above the $1,000 cushion
+
+
+def test_effective_window_matches_what_the_alert_uses():
+    from ufo.treasury.low_balance import effective_window_end
+
+    card = BillSpec(name="Card payment", amount=3000, due=date(2026, 11, 25), anticipate=True)
+    c = cfg(next_topup=None, lookahead_days=14, bills=[card])
+    assert effective_window_end(c, TODAY) == date(2026, 11, 25) == check_balance(2500, 9000, c, TODAY).window_end
+    assert effective_window_end(cfg(next_topup=None, lookahead_days=14, bills=[]), TODAY) == date(2026, 11, 17)
+
+
+def test_collect_bills_reports_what_it_found(fake_plaid):
+    bills, info, _ = sources.collect_bills(None, [], cfg(detect_bills=True, credit_card_masks=["9999"]), TODAY)
+    assert any(i.startswith("found: Joint Card …9999 payment, $2,100.50, due 2026-11-12") and "looked at early" in i for i in info)
