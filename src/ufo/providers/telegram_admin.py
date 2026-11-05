@@ -27,25 +27,31 @@ class TelegramAdmin:
     def me(self) -> dict:
         return self._call("getMe")
 
-    def people_who_messaged(self) -> dict[int, str]:
+    def chats_that_messaged(self) -> dict[int, str]:
+        """Chats that have sent the bot a message: a person (direct chat) or a group the bot is in. id -> label."""
         out: dict[int, str] = {}
         for u in self._call("getUpdates"):
-            chat = (u.get("message") or {}).get("chat") or {}
+            msg = u.get("message") or u.get("my_chat_member") or {}
+            chat = msg.get("chat") or {}
             if chat.get("type") == "private":
                 out[chat["id"]] = " ".join(filter(None, [chat.get("first_name"), chat.get("last_name")])) or chat.get("username", "?")
+            elif chat.get("type") in ("group", "supergroup"):
+                out[chat["id"]] = f"{chat.get('title', 'group')} (group)"
         return out
+
+    people_who_messaged = chats_that_messaged  # older name
 
     def webhook_url(self) -> str:
         return self._call("getWebhookInfo").get("url") or ""
 
-    def harden(self) -> list[str]:
+    def harden(self, uses_group: bool = False) -> list[str]:
         """Make the bot look and act send-only. Returns warnings about things only BotFather can change."""
         self._call("setMyDescription", {"description": "Send-only household alerts. This bot does not read or answer messages."})
         self._call("setMyShortDescription", {"short_description": "Send-only alerts. It does not reply."})
         self._call("setMyCommands", {"commands": []})
         warnings = []
         me = self.me()
-        if me.get("can_join_groups"):
+        if me.get("can_join_groups") and not uses_group:  # a group is fine if you chose one as the alert chat
             warnings.append("Bot can be added to groups. In @BotFather: /mybots > your bot > Bot Settings > Allow Groups? > Turn off.")
         if self.webhook_url():
             warnings.append("A webhook is set on this bot; remove it so nothing can receive messages through it.")

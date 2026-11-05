@@ -11,6 +11,7 @@ ASKS = [
     "Worried we'll overdraft before payday",
     "Is there enough money in there for the card?",
     "Could you move some money into the joint account?",
+    "Reminder to move money into joint",
     "I think we might overdraft if rent goes out first",
     "Is rent covered this month?",
     "Can the joint cover the credit card payment?",
@@ -24,6 +25,8 @@ NOT_ASKS = [
     "Can you grab the dry cleaning on your way home?",
     "Paid the electrician in cash yesterday",
     "Dinner at 7?",
+    "I transferred the money to the joint account",
+    "just added 500 to the joint account",
     "Joint pain is back, ugh",
     "",
 ]
@@ -130,3 +133,73 @@ def test_discover_lists_senders_masked(tmp_path):
     out = dict(describe_senders(PartnerConfig(chat_ids=[10], sender_number_suffixes=[], db_path=db), datetime(2026, 1, 1)))
     assert "p…@example.com" in out and "…1111" in out and "…2222" in out  # masked: never the full number or email
     assert not any("partner@" in k or "5550001111" in k for k in out)
+
+
+# ---- your own "I paid the joint account" messages (assumed to answer an ask); invented examples
+NOTICES = [
+    "transferred the money to the joint account",
+    "just paid the joint account",
+    "sent the money to the join account",  # common typo
+    "added 500 to joint checking",
+    "moved funds into the joint chase account",
+    "Transferring the rent to our joint account now",
+]
+NOT_NOTICES = [
+    "paid with the joint card",
+    "put it on the joint credit card",
+    "do you want to join us for dinner?",
+    "Loved “sent the money to the joint account”",
+    "A ajouté un «J’adore» à «sent money to joint»",
+    "paying the electrician tomorrow",
+    "",
+]
+
+
+@pytest.mark.parametrize("text", NOTICES)
+def test_detects_payment_notices(text):
+    from ufo.partner.asks import is_payment_notice
+
+    assert is_payment_notice(text), text
+
+
+@pytest.mark.parametrize("text", NOT_NOTICES)
+def test_ignores_non_notices_and_tapbacks(text):
+    from ufo.partner.asks import is_payment_notice
+
+    assert not is_payment_notice(text), text
+
+
+def test_notices_count_once_per_day_and_only_from_me():
+    from ufo.partner.asks import count_by_day, count_notices_by_day
+    from ufo.partner.imessage import ChatMessage
+
+    msgs = [
+        ChatMessage(datetime(2026, 5, 3, 9), "transferred the money to the joint account", True),
+        ChatMessage(datetime(2026, 5, 3, 9, 5), "also sent the rest to the joint account", True),  # same payment: still one
+        ChatMessage(datetime(2026, 5, 3, 10), "thank you! is rent covered?", False),
+        ChatMessage(datetime(2026, 6, 3, 9), "transferred the money to the joint account", False),  # the partner's message: not a notice
+        ChatMessage(datetime(2026, 7, 1, 9), "dinner?", True),
+    ]
+    assert {d.isoformat(): n for d, n in count_notices_by_day(msgs).items()} == {"2026-05-03": 1}
+    assert {d.isoformat(): n for d, n in count_by_day(msgs).items()} == {"2026-05-03": 1}  # asks: her message only
+
+
+def test_reader_returns_both_sides_of_the_configured_chats_only(tmp_path):
+    import sqlite3
+
+    from ufo.partner.imessage import read_chat_messages
+
+    db = str(tmp_path / "chat.db")
+    make_db(db)
+    c = sqlite3.connect(db)
+    c.execute("insert into message values(7, ?, 'sent the money to the joint account', null, 1, 0)", (int((datetime(2026, 3, 12) - APPLE_EPOCH).total_seconds() * 1e9),))
+    c.execute("insert into chat_message_join values(10, 7)")
+    c.execute("insert into message values(8, ?, 'my message in another chat', null, 1, 0)", (int((datetime(2026, 3, 12) - APPLE_EPOCH).total_seconds() * 1e9),))
+    c.execute("insert into chat_message_join values(99, 8)")
+    c.commit(); c.close()
+    got = read_chat_messages(PartnerConfig(chat_ids=[10], sender_number_suffixes=["1111"], db_path=db), datetime(2026, 1, 1), datetime(2026, 12, 31))
+    assert [(m.from_me, m.text) for m in got] == [
+        (False, "Worried we'll overdraft before payday"),  # the partner
+        (True, "Worried we'll overdraft before payday"),   # you (the fixture reuses the text)
+        (True, "sent the money to the joint account"),
+    ]  # not: someone else's message, the partner's message in another chat, your message in another chat, or anything before the window

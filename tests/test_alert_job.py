@@ -97,3 +97,16 @@ def test_pick_account_balance():
         pick_account_balance(accts, "9999")
     with pytest.raises(ValueError, match="Several"):
         pick_account_balance(accts + [{**accts[0]}], "1234")
+
+
+def test_a_dead_bank_connection_prints_a_plain_message_and_exits_nonzero(tmp_path, capsys, monkeypatch):
+    path = write_cfg(tmp_path, [])
+
+    def dead(settings, items, masks):
+        raise RuntimeError("Your bank connection needs to be refreshed (Chase asked you to sign in again). Run `python -m ufo.setup`.")
+
+    monkeypatch.setattr(job, "get_balances", dead)
+    monkeypatch.setattr(job, "load_items", lambda: [])
+    assert job.main(["--config", path]) == 2
+    err = capsys.readouterr().err
+    assert "Could not read your balances" in err and "sign in again" in err and "Traceback" not in err

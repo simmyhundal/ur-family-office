@@ -125,5 +125,5 @@ def credit_card_bills(liabilities: list[dict], today: date, mode: str = "stateme
         elif due is None:
             skipped.append(f"{label}: no payment due date from Plaid")
         else:
-            bills.append(BillSpec(name=f"{label} payment", amount=amount, due=max(due, today), repeat="none", source="plaid"))
+            bills.append(BillSpec(name=f"{label} payment", amount=amount, due=max(due, today), repeat="none", source="plaid", anticipate=True))
     return bills, skipped

@@ -1,6 +1,8 @@
 """Read-only Plaid access: link an account (Hosted Link) and read live balances. Never moves money."""
 from __future__ import annotations
 
+import functools
+import json
 import time
 
 import plaid
@@ -11,6 +13,8 @@ from plaid.model.country_code import CountryCode
 from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
 from plaid.model.liabilities_get_request import LiabilitiesGetRequest
 from plaid.model.liabilities_get_request_options import LiabilitiesGetRequestOptions
+from plaid.model.item_get_request import ItemGetRequest
+from plaid.model.item_remove_request import ItemRemoveRequest
 from plaid.model.link_token_create_hosted_link import LinkTokenCreateHostedLink
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUser
@@ -20,10 +24,44 @@ from plaid.model.products import Products
 from plaid.model.transactions_recurring_get_request import TransactionsRecurringGetRequest
 
 from ..config import Settings
-from .token_store import save_item
+from .token_store import load_items, save_item, save_items
 
 HISTORY_DAYS = 730  # Plaid's maximum
 _HOSTS = {"sandbox": plaid.Environment.Sandbox, "production": plaid.Environment.Production}
+
+
+RELINK = "Run `python -m ufo.setup` (or `python scripts/link_account.py`) to reconnect your bank."
+
+
+def plaid_error(e: "plaid.ApiException") -> tuple[str, str]:
+    """(error_code, plain-English message) from a Plaid API error."""
+    try:
+        body = json.loads(e.body)
+    except Exception:
+        return "UNKNOWN", f"Plaid returned an error (HTTP {getattr(e, 'status', '?')})."
+    code = body.get("error_code", "UNKNOWN")
+    if code == "ITEM_LOGIN_REQUIRED":
+        return code, f"Your bank connection needs to be refreshed (Chase asked you to sign in again). {RELINK}"
+    return code, f"Plaid error {code}: {body.get('display_message') or body.get('error_message') or 'see the Plaid docs'}"
+
+
+def _friendly(fn):
+    """Turn raw Plaid exceptions into RuntimeErrors with a message a person can act on."""
+    @functools.wraps(fn)
+    def wrapper(*a, **k):
+        try:
+            return fn(*a, **k)
+        except plaid.ApiException as e:
+            raise RuntimeError(plaid_error(e)[1]) from None
+    return wrapper
+
+
+def dedupe_accounts(accounts: list[dict]) -> list[dict]:
+    """The same account can appear under more than one linked item; keep one (the latest) per name and mask."""
+    seen: dict[tuple, dict] = {}
+    for a in accounts:
+        seen[(a.get("name"), a.get("mask"))] = a
+    return list(seen.values())
 
 
 def make_client(s: Settings) -> plaid_api.PlaidApi:
@@ -60,8 +98,15 @@ def link_account(s: Settings, timeout_s: int = 900) -> None:
             save_item({"item_id": ex["item_id"], "access_token": ex["access_token"]})
             print(f"Linked item {ex['item_id']}. Token saved to .data/items.json")
         if added:
+            for line in prune_superseded_items(s):
+                print(line)
             return
     raise TimeoutError("Timed out waiting for the link to complete.")
+
+
+def _val(x):
+    """Plaid enum models expose .value; plain strings pass through."""
+    return getattr(x, "value", x) or ""
 
 
 def pick_account_balance(accounts: list[dict], mask: str) -> tuple[str, float]:
@@ -80,15 +125,25 @@ def pick_account_balance(accounts: list[dict], mask: str) -> tuple[str, float]:
 
 
 def get_balances(s: Settings, items: list[dict], masks: list[str]) -> dict[str, tuple[str, float]]:
-    """Live balances for the given account masks across all linked items: {mask: (label, available)}."""
+    """Live balances for the given account masks across all linked items: {mask: (label, available)}.
+    A broken item (the bank asked for a new sign-in) is skipped so the others still work; the error is raised only if needed."""
     client = make_client(s)
     accounts: list[dict] = []
+    problems: list[str] = []
     for item in items:
-        resp = client.accounts_balance_get(AccountsBalanceGetRequest(access_token=item["access_token"]))
-        accounts += [a.to_dict() for a in resp["accounts"]]
-    return {m: pick_account_balance(accounts, m) for m in masks}
+        try:
+            resp = client.accounts_balance_get(AccountsBalanceGetRequest(access_token=item["access_token"]))
+            accounts += [a.to_dict() for a in resp["accounts"]]
+        except plaid.ApiException as e:
+            problems.append(plaid_error(e)[1])
+    accounts = dedupe_accounts(accounts)
+    try:
+        return {m: pick_account_balance(accounts, m) for m in masks}
+    except ValueError as e:
+        raise RuntimeError(" ".join([str(e), *dict.fromkeys(problems)])) from None
 
 
+@_friendly
 def get_recurring_outflows(s: Settings, items: list[dict], mask: str) -> list[dict]:
     """Plaid's detected recurring outflow streams for the account with this mask (read-only).
     Raises RuntimeError with a plain message when detection is unavailable, so the caller can fall back to manual bills."""
@@ -108,6 +163,7 @@ def get_recurring_outflows(s: Settings, items: list[dict], mask: str) -> list[di
     raise RuntimeError(f"No linked account with mask {mask}.")
 
 
+@_friendly
 def get_credit_card_liabilities(s: Settings, items: list[dict], masks: list[str]) -> list[dict]:
     """Statement balance, minimum payment and due date for the credit cards with these masks (read-only)."""
     client = make_client(s)
@@ -132,3 +188,73 @@ def get_credit_card_liabilities(s: Settings, items: list[dict], masks: list[str]
     if missing:
         raise RuntimeError("No credit card found for mask(s): " + ", ".join(sorted(missing)) + ". Link the card, or fix credit_card_masks.")
     return out
+
+
+@_friendly
+def list_accounts(s: Settings, items: list[dict]) -> list[dict]:
+    """Linked accounts (name, mask, type, subtype) without balances, for the setup wizard's pickers."""
+    client = make_client(s)
+    out: list[dict] = []
+    for item in items:
+        for a in client.accounts_get(AccountsGetRequest(access_token=item["access_token"]))["accounts"]:
+            d = a.to_dict()
+            out.append({"name": d["name"], "mask": d.get("mask"), "type": _val(d.get("type")), "subtype": _val(d.get("subtype"))})
+    return dedupe_accounts(out)
+
+
+def item_status(client, access_token: str) -> dict:
+    """{institution_id, error_code}: error_code is set when the bank connection is broken (for example ITEM_LOGIN_REQUIRED)."""
+    d = client.item_get(ItemGetRequest(access_token=access_token))["item"].to_dict()
+    err = d.get("error") or {}
+    return {"institution_id": d.get("institution_id"), "error_code": err.get("error_code") if err else None}
+
+
+def plan_prune(statuses: list[dict]) -> list[int]:
+    """Indexes (oldest first in the file) of connections safe to remove. Rules, per bank:
+    - keep the newest healthy connection;
+    - remove other healthy connections to the same bank (duplicates);
+    - remove a broken connection only when a healthy one to the same bank exists (it was replaced).
+    A broken connection with no replacement, or one whose bank is unknown, is kept so you are told to reconnect."""
+    newest: dict = {}
+    for i, st in enumerate(statuses):
+        if st["error_code"] is None and st["institution_id"]:
+            newest[st["institution_id"]] = i
+    remove = []
+    for i, st in enumerate(statuses):
+        bank = st["institution_id"]
+        if not bank or bank not in newest:
+            continue
+        if i != newest[bank]:
+            remove.append(i)
+    return remove
+
+
+def prune_superseded_items(s: Settings, path=None) -> list[str]:
+    """Linking the same bank again makes a second connection, and Chase then breaks the first. Keep the newest healthy
+    connection per bank and remove the rest, so accounts are not listed twice and nothing points at a dead token.
+    Returns what it did, as lines to print."""
+    client = make_client(s)
+    items = load_items(path) if path else load_items()
+    statuses = []
+    for it in items:
+        try:
+            statuses.append(item_status(client, it["access_token"]))
+        except plaid.ApiException as e:
+            statuses.append({"institution_id": None, "error_code": plaid_error(e)[0]})
+    drop = set(plan_prune(statuses))
+    lines: list[str] = []
+    keep: list[dict] = []
+    for i, it in enumerate(items):
+        if i not in drop:
+            keep.append(it)
+            continue
+        kind = "broken" if statuses[i]["error_code"] else "duplicate"
+        try:
+            client.item_remove(ItemRemoveRequest(access_token=it["access_token"]))
+            lines.append(f"Removed an older bank connection ({kind}); the newest one is kept.")
+        except plaid.ApiException:
+            keep.append(it)
+            lines.append(f"An older bank connection ({kind}) could not be removed automatically; it is kept for now.")
+    if len(keep) != len(items):
+        (save_items(keep, path) if path else save_items(keep))
+    return lines

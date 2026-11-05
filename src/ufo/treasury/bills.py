@@ -35,11 +35,12 @@ class BillSpec(BaseModel):
     due: date
     repeat: Repeat = "none"
     source: Literal["manual", "plaid"] = "manual"
+    anticipate: bool = False  # look at this bill even if it is due after the look-ahead window (credit cards: the big one)
 
 
 class DepositSpec(BaseModel):
     """Money you expect to arrive in Joint, e.g. a regular transfer from Personal that matches the rent your partner pays.
-    Enter a conservative amount: if the real one varies (say with an exchange rate), use the low end."""
+    If the amount varies, enter the low end."""
     name: str
     amount: float
     due: date

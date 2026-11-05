@@ -41,11 +41,11 @@ Read-only. Watches the **Joint** account and texts you before it would dip below
 
 **What counts as outflow (v1):**
 - **Rent: $0 by default.** Many households pay rent from elsewhere. Set `"rent_paid_from_joint": true` only if rent comes out of Joint (then it is detected from recurring transactions; put your landlord's name in `rent_streams` if it is paid by Zelle).
-- **Credit cards:** the statement balance and due date from Plaid Liabilities for the cards in `credit_card_masks` (the cards paid from Joint). `credit_card_amount: "minimum"` counts only the minimum payment.
+- **Credit cards:** the statement balance and due date from Plaid Liabilities for the cards in `credit_card_masks` (the cards paid from Joint). `credit_card_amount: "minimum"` counts only the minimum payment. This is the most important input for a first run: **without a linked card the alert cannot see the biggest bill and will say "all clear" right before the payment lands**, so the wizard strongly pushes you to link it. Card payments due within 30 days are always looked at, even past the look-ahead window, so a shortfall is flagged while there is still time.
 - **Manual bills** always work and win when they describe the same bill as a detected one.
 - Other recurring spend (subscriptions, utilities, ...) is a later stage; `include_other_recurring` opts in early.
 
-**What counts as inflow:** `scheduled_deposits`, for example a regular transfer from Personal that matches the rent your partner pays. Enter a conservative amount if the real one varies (say with an exchange rate).
+**What counts as inflow:** `scheduled_deposits` (as many as you need), for example a regular transfer from Personal that matches the rent your partner pays, plus a loan repayment between the two of you. If the amount varies, enter the low end.
 
 **What leaves your machine (Telegram / SMS).** Remote channels are not end-to-end encrypted, so they only ever get a minimal message with **no balances, amounts, bill names or account details**:
 
@@ -54,16 +54,23 @@ Read-only. Watches the **Joint** account and texts you before it would dip below
 The full breakdown and the amount to move are printed when you run the job and saved to `.data/last_alert.txt` (owner-only). The Telegram bot is **write-only**: the alert code can only call `sendMessage`, never reads incoming messages and cannot answer questions. Run `python scripts/telegram_setup.py --harden` once to give the bot a send-only description, remove its commands and check it cannot join groups or have a webhook. (Telegram cannot stop people messaging a bot; nothing happens when they do, because nothing listens.)
 
 ### Setup
+The easy way: **`python -m ufo.setup`**. It walks through everything below in about five minutes: Plaid keys and linking, picking your Joint and Personal accounts and the cards paid from Joint, the rent question, a regular deposit into Joint, your minimums, and the Telegram channel (the token and chat ids are saved to `.env`, owner-only, never printed). It validates the config before saving and keeps a backup of any existing one.
+
+Telegram bots can only be created by chatting with @BotFather inside Telegram (there is no API for it), so that one step is yours, but the wizard makes it easy: it opens BotFather, puts `/newbot` on your clipboard, and prints the three messages to paste (a name and a username). After you paste the token, it verifies it, opens your new bot so you only press START, finds the chat ids (a direct chat or a group the bot is in both work), makes the bot send-only, and sends a test message. A bot from an earlier run is reused.
+
+By hand, if you prefer:
 1. `cp .env.example .env`, fill `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` (real Chase data needs Plaid production access).
 2. `python scripts/link_account.py` and connect your Chase accounts. This asks for the maximum 730 days of history (Plaid fixes the window when an account is first linked; the default is 90 days and re-linking is the only way to get more) and the optional `liabilities` product for card statement balances.
-3. Telegram (free): create a bot with @BotFather, put its token in `TELEGRAM_BOT_TOKEN`, have you and your partner message the bot, then `python scripts/telegram_setup.py` prints the `TELEGRAM_CHAT_IDS` line to add; `--test` sends a test message. Twilio is optional.
+3. Telegram: create a bot with @BotFather, put its token in `TELEGRAM_BOT_TOKEN`, have everyone message the bot, then `python scripts/telegram_setup.py` prints the `TELEGRAM_CHAT_IDS` line to add; `--harden` makes the bot send-only; `--test` sends a test message. Twilio is optional.
 4. Copy `docs/alert.example.json` to `.data/alert.json` and fill in `joint_mask`, `personal_mask` (last digits), `cushion`, `personal_floor`, `rent_paid_from_joint`, `credit_card_masks`, and `scheduled_deposits`.
-5. Review: `python scripts/show_detected_bills.py` shows exactly which bills and deposits the alert would count, and what each detector skipped and why.
-6. Try it: `python -m jobs.check_balance --joint 1500 --personal 4200` (no Plaid, dry run), then `python -m jobs.check_balance` (live balances, still dry run), then `--send` (`--channel telegram|twilio|all`).
-7. Schedule `--send` daily (cron / launchd). It alerts at most once per day per situation, says so when a detector fails instead of silently under-warning, and logs every check to `.data/alerts_log.csv`.
+
+Then:
+- Review: `python scripts/show_detected_bills.py` shows exactly which bills and deposits the alert would count, and what each detector skipped and why.
+- Try it: `python -m jobs.check_balance --joint 1500 --personal 4200` (no Plaid, dry run), then `python -m jobs.check_balance` (live balances, still dry run), then `--send` (`--channel telegram|twilio|all`).
+- Schedule `--send` daily (cron / launchd). It alerts at most once per day per situation, says so when a detector fails instead of silently under-warning, and logs every check to `.data/alerts_log.csv`.
 
 ### Measuring the trial: how often your partner has to ask
-`python scripts/partner_asks.py --launch YYYY-MM-DD --review` counts the messages in which your partner asks whether Joint can cover things, from your Messages history (macOS; needs Full Disk Access for the terminal), and compares the baseline before launch with the trial. Only per-day counts are saved (`.data/partner_asks.csv`); message text is never stored. `--fill-log` fills the log's `partner_asked` column.
+`python scripts/partner_asks.py --launch YYYY-MM-DD --review` counts how often your partner had to ask whether Joint can cover things, from your Messages history (macOS; needs Full Disk Access for the terminal), and compares the baseline before launch with the trial. Two signals count: her asks, and your own "I paid / transferred to the joint account" messages (assumed to answer an ask; at most one per day). Only per-day counts are saved (`.data/partner_asks.csv`); message text is never stored. `--fill-log` fills the log's `partner_asked` column.
 - Copy `docs/partner.example.json` to `.data/partner.json`: the chats, plus **every** number and email the partner messages from (one person often appears under several handles; `--discover` lists who sends in the configured chats, masked).
 - The matcher is a keyword heuristic. `--near-misses` shows money-related messages it did not flag, so it can be tuned by eye.
 - Asks that happen outside Messages (in person, calls, other apps) can be logged with `--add YYYY-MM-DD --channel in-person` and are counted too.
