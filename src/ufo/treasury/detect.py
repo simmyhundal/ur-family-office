@@ -22,8 +22,29 @@ def _amount(a) -> float:
     return abs(float((a or {}).get("amount") or 0))
 
 
-def stream_to_bill(stream: dict, today: date, include_early: bool = False, ignore: list[str] | None = None) -> tuple[BillSpec | None, str | None]:
-    """Returns (bill, None) or (None, reason it was skipped)."""
+RENT_DETAILED = {"RENT_AND_UTILITIES_RENT"}
+CARD_DETAILED = {"LOAN_PAYMENTS_CREDIT_CARD_PAYMENT"}
+
+
+def classify(stream: dict, name: str, rent_names: list[str]) -> str:
+    """rent | credit_card | transfer | other. A name you list as rent always counts as rent (rent paid by Zelle often looks like a transfer)."""
+    if any(r.casefold() in name.casefold() for r in rent_names):
+        return "rent"
+    pfc = stream.get("personal_finance_category") or {}
+    detailed = _val(pfc.get("detailed")) or ""
+    if detailed in RENT_DETAILED:
+        return "rent"
+    if detailed in CARD_DETAILED:
+        return "credit_card"
+    if detailed.startswith("TRANSFER_OUT") or _val(pfc.get("primary")) == "TRANSFER_OUT":
+        return "transfer"
+    return "other"
+
+
+def stream_to_bill(stream: dict, today: date, include_early: bool = False, ignore: list[str] | None = None,
+                   rent_names: list[str] | None = None, include_other: bool = False) -> tuple[BillSpec | None, str | None]:
+    """Returns (bill, None) or (None, reason it was skipped). v1 counts rent; other recurring spend is opt-in (later stage)
+    and credit cards come from Plaid Liabilities (see credit_card_bills), not from past payments."""
     name = (stream.get("merchant_name") or stream.get("description") or "Unknown").strip()
     if any(i.casefold() in name.casefold() for i in (ignore or [])):
         return None, f"{name}: in your ignore list"
@@ -34,10 +55,13 @@ def stream_to_bill(stream: dict, today: date, include_early: bool = False, ignor
         return None, f"{name}: stopped recurring"
     if status == "EARLY_DETECTION" and not include_early:
         return None, f"{name}: still early detection (set include_early_detection to count it)"
-    pfc = stream.get("personal_finance_category") or {}
-    detailed = _val(pfc.get("detailed")) or ""
-    if detailed.startswith("TRANSFER_OUT") or _val(pfc.get("primary")) == "TRANSFER_OUT":
+    kind = classify(stream, name, rent_names or [])
+    if kind == "transfer":
         return None, f"{name}: a transfer, not a bill"
+    if kind == "credit_card":
+        return None, f"{name}: credit cards are counted from the card's statement balance, not past payments"
+    if kind == "other" and not include_other:
+        return None, f"{name}: not rent (other recurring spend is a later stage; set include_other_recurring to count it)"
     nxt = stream.get("predicted_next_date")
     if isinstance(nxt, str):
         nxt = date.fromisoformat(nxt)
@@ -53,11 +77,11 @@ def stream_to_bill(stream: dict, today: date, include_early: bool = False, ignor
     return BillSpec(name=name, amount=amount, due=nxt, repeat=FREQ.get(_val(stream.get("frequency")) or "UNKNOWN", "none"), source="plaid"), None
 
 
-def streams_to_bills(streams: list[dict], today: date, include_early: bool = False,
-                     ignore: list[str] | None = None) -> tuple[list[BillSpec], list[str]]:
+def streams_to_bills(streams: list[dict], today: date, include_early: bool = False, ignore: list[str] | None = None,
+                     rent_names: list[str] | None = None, include_other: bool = False) -> tuple[list[BillSpec], list[str]]:
     bills, skipped = [], []
     for st in streams:
-        b, why = stream_to_bill(st, today, include_early, ignore)
+        b, why = stream_to_bill(st, today, include_early, ignore, rent_names, include_other)
         if b:
             bills.append(b)
         else:
@@ -82,3 +106,24 @@ def merge_bills(manual: list[BillSpec], detected: list[BillSpec]) -> tuple[list[
         else:
             kept.append(d)
     return [*manual, *kept], dropped
+
+
+def credit_card_bills(liabilities: list[dict], today: date, mode: str = "statement_balance") -> tuple[list[BillSpec], list[str]]:
+    """Plaid Liabilities credit-card entries -> one bill each: the statement balance (or minimum) due on next_payment_due_date.
+    Entries: {name, mask, next_payment_due_date, minimum_payment_amount, last_statement_balance}."""
+    bills, skipped = [], []
+    for c in liabilities:
+        label = f"{c.get('name') or 'Card'} …{c.get('mask') or '?'}"
+        minimum = float(c.get("minimum_payment_amount") or 0)
+        statement = float(c.get("last_statement_balance") or 0)
+        amount = round(max(minimum, statement) if mode == "statement_balance" else minimum, 2)
+        due = c.get("next_payment_due_date")
+        if isinstance(due, str):
+            due = date.fromisoformat(due)
+        if amount <= 0:
+            skipped.append(f"{label}: nothing due")
+        elif due is None:
+            skipped.append(f"{label}: no payment due date from Plaid")
+        else:
+            bills.append(BillSpec(name=f"{label} payment", amount=amount, due=max(due, today), repeat="none", source="plaid"))
+    return bills, skipped

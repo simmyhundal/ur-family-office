@@ -44,7 +44,10 @@ def test_send_texts_once_per_day_per_situation(tmp_path, capsys):
     path = write_cfg(tmp_path, [{"name": "Rent", "amount": 1800, "due": str(date.today() + timedelta(days=2))}])
     job.main(["--config", path, "--joint", "1500", "--personal", "4200", "--send"])
     job.main(["--config", path, "--joint", "1500", "--personal", "4200", "--send"])
-    assert len(FakeTwilio.sent) == 1 and "UFO: Joint is $1,500.00" in FakeTwilio.sent[0] and "Move $1,300.00 from Personal to Joint" in FakeTwilio.sent[0]
+    assert len(FakeTwilio.sent) == 1 and FakeTwilio.sent[0].startswith("UFO: Joint may run short before")
+    assert "$" not in FakeTwilio.sent[0] and "1,500" not in FakeTwilio.sent[0] and "1,300" not in FakeTwilio.sent[0]  # nothing sensitive leaves
+    full = (tmp_path / ".data" / "last_alert.txt").read_text()
+    assert "Move $1,300.00 from Personal to Joint" in full  # the detail stays local
     assert "Already alerted" in capsys.readouterr().out
     job.main(["--config", path, "--joint", "1400", "--personal", "4200", "--send"])  # worse: different shortfall, so alert again
     assert len(FakeTwilio.sent) == 2
@@ -63,15 +66,18 @@ def test_detection_failure_falls_back_to_manual_bills_and_says_so(tmp_path, monk
     open(path, "w").write(json.dumps(cfg))
     monkeypatch.setattr(job, "get_balances", lambda s, items, masks: {"1234": ("Joint", 1500.0), "5678": ("Personal", 4200.0)})
 
-    def boom(*a, **k):
-        raise RuntimeError("Plaid could not return recurring transactions (PRODUCT_NOT_READY).")
+    from ufo.treasury.bills import load_config
 
-    monkeypatch.setattr(job, "get_recurring_outflows", boom)
+    def fake_collect(settings, items, cfg, today):
+        return load_config(path).bills, [], ["rent detection: Plaid could not return recurring transactions (PRODUCT_NOT_READY)."]
+
+    monkeypatch.setattr(job, "collect_bills", fake_collect)
     monkeypatch.setattr(job, "load_items", lambda: [])
     job.main(["--config", path, "--send"])
     out = capsys.readouterr()
-    assert "Bill detection unavailable" in out.err
-    assert "only your manual bills are counted" in FakeTwilio.sent[0]
+    assert "Bill detection problem" in out.err
+    assert "Some bills could not be checked" in FakeTwilio.sent[0]  # said in the minimal message too
+    assert "Some bills could not be detected" in (tmp_path / ".data" / "last_alert.txt").read_text()
 
 
 def test_joint_and_personal_must_be_given_together(tmp_path):

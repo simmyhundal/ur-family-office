@@ -42,8 +42,12 @@ class AlertConfig(BaseModel):
     personal_mask: str
     personal_floor: float = 1500.0
     bills: list[BillSpec] = []
-    # Bill detection from Plaid recurring transactions (on the Joint account). Manual bills always win on overlap.
+    # Bill detection (v1 covers the two big sources: rent and credit cards). Manual bills always win on overlap.
     detect_bills: bool = False
+    rent_streams: list[str] = []  # names (substrings) that identify your rent payment, e.g. a landlord paid by Zelle
+    credit_card_masks: list[str] = []  # last digits of the cards paid from Joint; their statement balance is counted
+    credit_card_amount: Literal["statement_balance", "minimum"] = "statement_balance"
+    include_other_recurring: bool = False  # later stage: subscriptions, utilities, etc. (off for now)
     include_early_detection: bool = False  # also count streams Plaid is not yet sure about
     ignore_streams: list[str] = []  # names (case-insensitive substrings) of detected streams to skip
 

@@ -9,6 +9,8 @@ from plaid.model.accounts_balance_get_request import AccountsBalanceGetRequest
 from plaid.model.accounts_get_request import AccountsGetRequest
 from plaid.model.country_code import CountryCode
 from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
+from plaid.model.liabilities_get_request import LiabilitiesGetRequest
+from plaid.model.liabilities_get_request_options import LiabilitiesGetRequestOptions
 from plaid.model.link_token_create_hosted_link import LinkTokenCreateHostedLink
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUser
@@ -35,6 +37,7 @@ def build_link_request() -> LinkTokenCreateRequest:
     return LinkTokenCreateRequest(
         client_name="UFO", language="en", country_codes=[CountryCode("US")],
         user=LinkTokenCreateRequestUser(client_user_id="me"), products=[Products("transactions")],
+        optional_products=[Products("liabilities")],  # credit-card statement balances and due dates
         hosted_link=LinkTokenCreateHostedLink(),
         # History is chosen once, when the Item is created (default 90 days; cannot be raised later without re-linking).
         # Recurring-bill detection works best with 180+ days, so ask for the maximum.
@@ -103,3 +106,29 @@ def get_recurring_outflows(s: Settings, items: list[dict], mask: str) -> list[di
                                "The item may not have the transactions product yet or history is still loading.") from e
         return [st.to_dict() for st in resp["outflow_streams"]]
     raise RuntimeError(f"No linked account with mask {mask}.")
+
+
+def get_credit_card_liabilities(s: Settings, items: list[dict], masks: list[str]) -> list[dict]:
+    """Statement balance, minimum payment and due date for the credit cards with these masks (read-only)."""
+    client = make_client(s)
+    out: list[dict] = []
+    for item in items:
+        accounts = [a.to_dict() for a in client.accounts_get(AccountsGetRequest(access_token=item["access_token"]))["accounts"]]
+        ids = {a["account_id"]: a for a in accounts if a.get("mask") in masks}
+        if not ids:
+            continue
+        try:
+            resp = client.liabilities_get(LiabilitiesGetRequest(
+                access_token=item["access_token"], options=LiabilitiesGetRequestOptions(account_ids=list(ids))))
+        except plaid.ApiException as e:
+            raise RuntimeError(f"Plaid could not return credit-card liabilities ({getattr(e, 'reason', e)}). "
+                               "Re-link with the liabilities product, or check that the card is included in the link.") from e
+        for c in (resp["liabilities"].to_dict().get("credit") or []):
+            a = ids.get(c["account_id"])
+            if a:
+                out.append({"name": a["name"], "mask": a["mask"], **{k: c.get(k) for k in (
+                    "next_payment_due_date", "minimum_payment_amount", "last_statement_balance", "is_overdue")}})
+    missing = set(masks) - {c["mask"] for c in out}
+    if missing:
+        raise RuntimeError("No credit card found for mask(s): " + ", ".join(sorted(missing)) + ". Link the card, or fix credit_card_masks.")
+    return out
