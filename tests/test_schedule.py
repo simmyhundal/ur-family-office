@@ -73,19 +73,19 @@ from ufo.setup import wizard  # noqa: E402
 
 def test_the_wizard_offers_to_schedule_and_installs_at_the_chosen_time(deps):  # noqa: F811
     got = []
-    deps.install_schedule = lambda root, h, m: got.append((root, h, m)) or [f"Scheduled {h:02d}:{m:02d}"]
+    deps.install_schedule = lambda root, h, m, wd: got.append((root, h, m, wd)) or [f"Scheduled {h:02d}:{m:02d}"]
     deps.schedule_installed = lambda: False
-    p = Script(**{**HAPPY, "telegram": False, "schedule": True, "schedule_time": "7:30"})
+    p = Script(**{**HAPPY, "telegram": False, "schedule": True, "schedule_time": "7:30", "schedule_weekday": "fri"})
     wizard.run(p, deps)
-    assert got == [(deps.root, 7, 30)] and "Scheduled 07:30" in p.output
+    assert got == [(deps.root, 7, 30, 5)] and "Scheduled 07:30" in p.output
 
 
 def test_a_bad_time_is_asked_again_and_declining_installs_nothing(deps):  # noqa: F811
     got = []
-    deps.install_schedule = lambda root, h, m: got.append((h, m)) or []
+    deps.install_schedule = lambda root, h, m, wd: got.append((h, m, wd)) or []
     deps.schedule_installed = lambda: False
     wizard.run(Script(**{**HAPPY, "telegram": False, "schedule": True, "schedule_time": ["25:99", "6:00"]}), deps)
-    assert got == [(6, 0)]
+    assert got == [(6, 0, 1)]  # a bad time is asked again; the weekday defaults to Monday
     got.clear()
     wizard.run(Script(**{**HAPPY, "telegram": False, "schedule": False}), deps)
     assert got == []
@@ -93,11 +93,11 @@ def test_a_bad_time_is_asked_again_and_declining_installs_nothing(deps):  # noqa
 
 def test_an_existing_schedule_is_left_alone_unless_you_ask_to_change_it(deps):  # noqa: F811
     got = []
-    deps.install_schedule = lambda root, h, m: got.append((h, m)) or []
+    deps.install_schedule = lambda root, h, m, wd: got.append((h, m, wd)) or []
     deps.schedule_installed = lambda: True
     p = Script(**{**HAPPY, "telegram": False, "schedule_redo": False})
     wizard.run(p, deps)
-    assert got == [] and "already scheduled" in p.output
+    assert got == [] and "already set up" in p.output
 
 
 def test_non_mac_systems_get_a_pointer_to_cron(deps):  # noqa: F811
@@ -105,3 +105,35 @@ def test_non_mac_systems_get_a_pointer_to_cron(deps):  # noqa: F811
     p = Script(**{**HAPPY, "telegram": False})
     wizard.run(p, deps)
     assert "cron" in p.output
+
+
+# ---- weekly by default
+def test_weekly_launch_agent_has_a_weekday_and_daily_does_not(tmp_path):
+    import plistlib
+
+    from ufo.setup.schedule import render_plist
+
+    weekly = plistlib.loads(render_plist(tmp_path, "/p/python", 8, 0, weekday=1))
+    daily = plistlib.loads(render_plist(tmp_path, "/p/python", 8, 0))
+    assert weekly["StartCalendarInterval"] == {"Hour": 8, "Minute": 0, "Weekday": 1}
+    assert daily["StartCalendarInterval"] == {"Hour": 8, "Minute": 0}
+
+
+@pytest.mark.parametrize("text,expected", [("mon", 1), ("Monday", 1), ("SUN", 0), ("friday", 5), ("daily", None), ("", None), ("every day", None)])
+def test_parse_weekday(text, expected):
+    from ufo.setup.schedule import parse_weekday
+
+    assert parse_weekday(text) == expected
+
+
+def test_parse_weekday_rejects_nonsense_and_describe_reads_naturally():
+    from ufo.setup.schedule import describe, parse_weekday
+
+    with pytest.raises(ValueError):
+        parse_weekday("someday")
+    assert describe(1, 8, 0) == "every Monday at 08:00" and describe(None, 7, 30) == "every day at 07:30"
+
+
+def test_install_reports_a_weekly_schedule(tmp_path):
+    lines = install(tmp_path, 8, 0, weekday=1, python="/p/python", home=tmp_path / "h", uid=1, run=FakeRun())
+    assert "every Monday at 08:00" in lines[0]

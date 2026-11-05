@@ -1,0 +1,4 @@
+# 6. Per-chat detail levels; exact numbers never over Telegram
+**Decision:** each Telegram chat gets one of two levels. **Minimal** (default): no figures. **Headroom** (opt-in, per chat): the cushion and the lowest balance *rounded down to $500*, a checkable claim that is not a balance. Exact balances, bill amounts, account digits and the transfer amount are never sent over a chat; a config value of `full` is rejected. A "covered" heartbeat (`notify_when_ok`) and a "Checked <time>" stamp make a quiet week reassuring instead of ambiguous.
+**Why:** the aim is for the partner to stop having to ask, which needs her to trust the message, which a bare "all clear" may not earn. Headroom gives her something she can verify in the bank app without putting a balance in a non-end-to-end-encrypted chat.
+**Next:** exact numbers belong in a private, authenticated view (the dashboard issue), not a chat.

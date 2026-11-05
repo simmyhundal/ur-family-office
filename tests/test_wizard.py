@@ -53,7 +53,7 @@ class Script:
         return default if v is None else (v.pop(0) if isinstance(v, list) else v)
 
     def choose(self, key, text, options):
-        return self.a[key]
+        return self.a.get(key, 0)  # unanswered picks take the first (safest) option
 
     def choose_many(self, key, text, options):
         return self.a.get(key, [])
@@ -77,7 +77,7 @@ class FakeAdmin:
 
     def harden(self, uses_group=False):
         self.hardened, self.uses_group = True, uses_group
-        return [] if uses_group else ["Bot can be added to groups. In @BotFather: Bot Settings > Allow Groups? > Turn off."]
+        return ["Bot can be added to groups. In @BotFather: Bot Settings > Allow Groups? > Turn off."]
 
 
 class FakeNotifier:
@@ -305,7 +305,7 @@ def test_a_telegram_group_counts_and_is_not_warned_about(deps):
     p = Script(**HAPPY)
     wizard.run(p, deps)
     assert "TELEGRAM_CHAT_IDS=-100123" in (deps.root / ".env").read_text()
-    assert made[-1].uses_group is True and "Allow Groups" not in p.output
+    assert made[-1].uses_group is True
 
 
 def test_botfather_help_is_concrete_and_links_are_opened(deps):
@@ -326,3 +326,18 @@ def test_an_existing_bot_from_an_earlier_run_is_reused_without_asking_for_a_toke
     wizard.run(p, deps)
     assert "tg_token" not in p.asked and "/newbot" not in p.output
     assert opened == ["https://t.me/ufo_alert_bot?start=ufo"] and "TELEGRAM_CHAT_IDS=111" in (deps.root / ".env").read_text()
+
+
+def test_the_chat_detail_level_and_heartbeat_choices_are_saved_to_the_config(deps):
+    p = Script(**{**HAPPY, "tg_level_111": 1, "notify_ok": True})  # the recipient picks "headroom"
+    wizard.run(p, deps)
+    cfg = json.loads((deps.root / ".data" / "alert.json").read_text())
+    AlertConfig.model_validate(cfg)
+    assert cfg["telegram_detail"] == {"111": "headroom"} and cfg["notify_when_ok"] is True
+    assert "exact balances and bill amounts are never sent" in p.output
+
+
+def test_minimal_is_the_default_level_and_the_heartbeat_can_be_declined(deps):
+    wizard.run(Script(**{**HAPPY, "notify_ok": False}), deps)
+    cfg = json.loads((deps.root / ".data" / "alert.json").read_text())
+    assert cfg["telegram_detail"] == {} and cfg["notify_when_ok"] is False

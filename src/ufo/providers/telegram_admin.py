@@ -51,8 +51,9 @@ class TelegramAdmin:
         self._call("setMyCommands", {"commands": []})
         warnings = []
         me = self.me()
-        if me.get("can_join_groups") and not uses_group:  # a group is fine if you chose one as the alert chat
-            warnings.append("Bot can be added to groups. In @BotFather: /mybots > your bot > Bot Settings > Allow Groups? > Turn off.")
+        if me.get("can_join_groups"):
+            why = "Your group already has the bot, so turn this off now to stop anyone adding it elsewhere. " if uses_group else ""
+            warnings.append(f"Bot can be added to groups. {why}In @BotFather: /mybots > your bot > Bot Settings > Allow Groups? > Turn off.")
         if self.webhook_url():
             warnings.append("A webhook is set on this bot; remove it so nothing can receive messages through it.")
         return warnings

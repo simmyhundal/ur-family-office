@@ -97,16 +97,20 @@ def main(argv: list[str] | None = None) -> int:
     if failures:
         res.message += " (Some bills could not be detected, so only the rest are counted.)"
         res.public_message += " Some bills could not be checked."
+        res.headroom_message += " Some bills could not be checked."
     print(res.message)  # full detail stays on this machine
     _save_local(res)
 
     sent = False
-    if res.status != "ok":
+    if res.status != "ok" or cfg.notify_when_ok:  # a "covered" heartbeat is optional: it is what saves your partner from asking
         if _already_sent(res, now.date()):
             print("Already alerted for this situation today; not sending again.")
         else:
-            notifier = build_notifier(settings, args.channel) if args.send else ConsoleNotifier()
-            notifier.send(res.public_message)  # remote channels are not end-to-end encrypted: minimal text only
+            notifier = build_notifier(settings, args.channel, cfg.telegram_detail) if args.send else ConsoleNotifier()
+            # Remote channels are not end-to-end encrypted: only the minimal text, or the coarse "headroom" text for chats you opted in.
+            stamp = f" Checked {now:%a %b} {now.day}, {now.strftime('%I:%M %p').lstrip('0')}."
+            tiers = {"minimal": res.public_message + stamp, "headroom": (res.headroom_message or res.public_message) + stamp}
+            notifier.send_tiered(tiers, cfg.telegram_detail)
             sent = args.send
             if sent:
                 DATA.mkdir(exist_ok=True)

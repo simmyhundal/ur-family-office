@@ -57,6 +57,10 @@ class AlertConfig(BaseModel):
     personal_floor: float = 1500.0
     bills: list[BillSpec] = []
     scheduled_deposits: list[DepositSpec] = []
+    notify_when_ok: bool = False  # also send a "Joint is covered" message on every run (a weekly heartbeat, so nobody has to ask)
+    # What each Telegram chat sees. Default "minimal" (no amounts). "headroom" adds the cushion and a rounded lowest point.
+    # Exact balances never go over Telegram; they belong in a private view (see the dashboard issue).
+    telegram_detail: dict[str, Literal["minimal", "headroom"]] = {}
     rent_paid_from_joint: bool = False  # most setups: rent is paid elsewhere, so Joint counts $0 of rent
     # Bill detection (v1 covers the two big sources: rent and credit cards). Manual bills always win on overlap.
     detect_bills: bool = False

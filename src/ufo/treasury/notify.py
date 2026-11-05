@@ -13,9 +13,18 @@ class Notifier(Protocol):
     def send(self, message: str) -> None: ...
 
 
+LEVELS = ("minimal", "headroom")
+
+
 class ConsoleNotifier:
     def send(self, message: str) -> None:
         print(f"[dry run, not sent] {message}")
+
+    def send_tiered(self, messages: dict[str, str], levels: dict[str, str] | None = None) -> None:
+        shown = {"minimal"} | set((levels or {}).values())
+        for lvl in LEVELS:
+            if lvl in shown and messages.get(lvl):
+                print(f"[dry run, not sent, {lvl}] {messages[lvl]}")
 
 
 class TwilioNotifier:
@@ -43,10 +52,11 @@ class TelegramNotifier:
     API = "https://api.telegram.org"
     ALLOWED_METHODS = frozenset({"sendMessage"})
 
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, levels: dict[str, str] | None = None):
         if not settings.telegram_bot_token or not settings.telegram_chat_ids:
             raise ValueError("Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_IDS (run scripts/telegram_setup.py).")
         self._token, self._chats = settings.telegram_bot_token, settings.telegram_chat_ids
+        self._levels = {c: lvl for c, lvl in (levels or {}).items() if lvl in LEVELS}
 
     def _call(self, method: str, payload: dict) -> dict:
         if method not in self.ALLOWED_METHODS:
@@ -66,10 +76,15 @@ class TelegramNotifier:
             raise RuntimeError(f"Telegram {method} failed: {e.reason}") from None
 
     def send(self, message: str) -> None:
+        self.send_tiered({"minimal": message})
+
+    def send_tiered(self, messages: dict[str, str], levels: dict[str, str] | None = None) -> None:
+        """Each chat gets the message for its detail level (default minimal)."""
         errors = []
         for chat in self._chats:
+            text = messages.get(self._levels.get(chat, "minimal")) or messages["minimal"]
             try:
-                self._call("sendMessage", {"chat_id": chat, "text": message, "disable_web_page_preview": True})
+                self._call("sendMessage", {"chat_id": chat, "text": text, "disable_web_page_preview": True})
             except RuntimeError as e:
                 errors.append(f"chat {chat}: {e}")
         if errors:
@@ -81,26 +96,32 @@ class MultiNotifier:
         self._notifiers = notifiers
 
     def send(self, message: str) -> None:
+        self.send_tiered({"minimal": message})
+
+    def send_tiered(self, messages: dict[str, str], levels: dict[str, str] | None = None) -> None:
         errors = []
         for n in self._notifiers:
             try:
-                n.send(message)
+                if hasattr(n, "send_tiered"):
+                    n.send_tiered(messages, levels)
+                else:
+                    n.send(messages["minimal"])
             except Exception as e:  # keep going so one broken channel does not silence the alert
                 errors.append(f"{type(n).__name__}: {e}")
         if errors:
             raise RuntimeError("; ".join(errors))
 
 
-def build_notifier(settings: Settings, channel: str = "auto") -> Notifier:
+def build_notifier(settings: Settings, channel: str = "auto", levels: dict[str, str] | None = None) -> Notifier:
     """auto: Telegram if configured, else Twilio. telegram / twilio: that one. all: every configured channel."""
     has_tg = bool(settings.telegram_bot_token and settings.telegram_chat_ids)
     has_sms = all(getattr(settings, k) for k in ("twilio_account_sid", "twilio_auth_token", "twilio_from_number", "alert_phone_number"))
     if channel == "telegram" or (channel == "auto" and has_tg):
-        return TelegramNotifier(settings)
+        return TelegramNotifier(settings, levels)
     if channel == "twilio" or (channel == "auto" and has_sms):
         return TwilioNotifier(settings)
     if channel == "all":
-        chosen = ([TelegramNotifier(settings)] if has_tg else []) + ([TwilioNotifier(settings)] if has_sms else [])
+        chosen = ([TelegramNotifier(settings, levels)] if has_tg else []) + ([TwilioNotifier(settings)] if has_sms else [])
         if chosen:
             return MultiNotifier(chosen)
     raise ValueError("No alert channel is configured. Set up Telegram (scripts/telegram_setup.py) or Twilio in .env.")

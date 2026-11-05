@@ -21,8 +21,11 @@ def test_direct_chats_and_groups_both_count_and_other_updates_are_ignored():
     assert Admin(ups).chats_that_messaged() == {1: "Pat Example", -5: "Household (group)", -6: "Other (group)"}
 
 
-def test_hardening_warns_about_groups_only_when_no_group_is_used():
+def test_hardening_always_recommends_turning_off_group_adds_and_explains_why_once_a_group_exists():
     a = Admin([])
     a._call = lambda m, p=None: {"getMe": {"username": "b", "can_join_groups": True}, "getWebhookInfo": {"url": ""}}.get(m, {})
     assert any("Allow Groups" in w for w in a.harden())
-    assert a.harden(uses_group=True) == []
+    with_group = a.harden(uses_group=True)
+    assert any("Allow Groups" in w and "already has the bot" in w for w in with_group)
+    a._call = lambda m, p=None: {"getMe": {"username": "b", "can_join_groups": False}, "getWebhookInfo": {"url": ""}}.get(m, {})
+    assert a.harden(uses_group=True) == []  # already off: nothing to say
