@@ -11,6 +11,7 @@ Config: .data/alert.json (see src/ufo/treasury/bills.py). Everything it writes l
 from __future__ import annotations
 
 import argparse
+import calendar
 import csv
 import hashlib
 import json
@@ -55,6 +56,16 @@ def _log(now: datetime, res, sent: bool) -> None:
                     res.cushion, res.status, res.transfer_amount, res.personal_covers, sent, ""])
 
 
+def parse_through(text: str, today: date) -> date:
+    """--through accepts an ISO date or 'eom' (the last day of this month)."""
+    if text.strip().lower() == "eom":
+        return today.replace(day=calendar.monthrange(today.year, today.month)[1])
+    d = date.fromisoformat(text)
+    if d < today:
+        raise ValueError(f"--through {d} is in the past.")
+    return d
+
+
 def _save_local(res) -> None:
     """The full message (amounts, balances) is kept only in a private local file."""
     DATA.mkdir(exist_ok=True)
@@ -68,6 +79,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--config", default=str(DATA / "alert.json"))
     ap.add_argument("--send", action="store_true", help="actually send the alert (default: dry run)")
     ap.add_argument("--channel", choices=["auto", "telegram", "twilio", "all"], default="auto", help="auto = Telegram if configured, else Twilio")
+    ap.add_argument("--through", metavar="DATE|eom", help="look ahead until this date (YYYY-MM-DD) or 'eom' for the end of this month, instead of the configured window")
+    ap.add_argument("--report", action="store_true", help="send the status message now even if everything is fine (a manual 'covered' confirmation); ignores the once-a-day limit")
     ap.add_argument("--joint", type=float, help="use this Joint balance instead of asking Plaid (needs --personal)")
     ap.add_argument("--personal", type=float, help="use this Personal balance instead of asking Plaid (needs --joint)")
     args = ap.parse_args(argv)
@@ -86,6 +99,11 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         joint, personal = b[cfg.joint_mask][1], b[cfg.personal_mask][1]
     now = datetime.now()
+    if args.through:
+        try:
+            cfg.next_topup = parse_through(args.through, now.date())
+        except ValueError as e:
+            ap.error(str(e))
     failures: list[str] = []
     if cfg.detect_bills and args.joint is None:
         cfg.bills, info, failures = collect_bills(settings, load_items(), cfg, now.date())
@@ -102,8 +120,8 @@ def main(argv: list[str] | None = None) -> int:
     _save_local(res)
 
     sent = False
-    if res.status != "ok" or cfg.notify_when_ok:  # a "covered" heartbeat is optional: it is what saves your partner from asking
-        if _already_sent(res, now.date()):
+    if res.status != "ok" or cfg.notify_when_ok or args.report:  # a "covered" heartbeat is optional: it is what saves your partner from asking
+        if not args.report and _already_sent(res, now.date()):
             print("Already alerted for this situation today; not sending again.")
         else:
             notifier = build_notifier(settings, args.channel, cfg.telegram_detail) if args.send else ConsoleNotifier()
@@ -112,7 +130,7 @@ def main(argv: list[str] | None = None) -> int:
             tiers = {"minimal": res.public_message + stamp, "headroom": (res.headroom_message or res.public_message) + stamp}
             notifier.send_tiered(tiers, cfg.telegram_detail)
             sent = args.send
-            if sent:
+            if sent and not args.report:  # an on-demand report must not suppress the regular scheduled message
                 DATA.mkdir(exist_ok=True)
                 STATE.write_text(json.dumps({"date": str(now.date()), "fingerprint": _fingerprint(res)}))
     _log(now, res, sent)

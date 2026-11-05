@@ -6,13 +6,14 @@ It is being built for one household first (two people, a Joint and a Personal ac
 ## Status
 | Area | State |
 |---|---|
-| Low-balance alert (v1): Joint balance minus bills due soon vs a cushion; text with the exact amount to move from Personal | built; needs a Chase link and the one-week trial |
-| Notify your partner, a "Joint is covered" dashboard, one-tap approval of the transfer | planned, after the manual alert proves useful |
-| Withdrawal rebalancer: proposed trades (sell/buy/full/auto modes), per-account withdrawals, Fidelity CSV input | ported from the `fin-advisor` prototype; output matches it exactly (22 tests) |
-| Order tickets | planned (issue #3) |
-| Bill detection from Plaid recurring transactions | built; review with `scripts/show_detected_bills.py` before trusting it |
-| Tax-lot optimization (HIFO, TLH) | planned; needs per-lot data Plaid does not provide |
+| Low-balance alert: Joint balance walked through upcoming card payments, bills and scheduled deposits vs a cushion; local detail plus a minimal Telegram message | **live** (weekly, Monday 8 AM); first status message sent 2026-11-05 |
+| Setup wizard (Plaid, accounts, rent/deposits, Telegram, schedule) | built and used |
+| Partner in the Telegram group, minimal or "headroom" detail, weekly "covered" message | built; partner not added yet ([milestone M1](https://github.com/simmyhundal/ur-family-office/milestone/1)) |
+| Private dashboard with exact numbers, other-outflow modeling, deposit detection | planned ([milestone M2](https://github.com/simmyhundal/ur-family-office/milestone/2)) |
+| Withdrawal rebalancer, Fidelity CSV input, order tickets, tax-aware sells, live prices | ported from the `fin-advisor` prototype; the rest planned ([milestone M3](https://github.com/simmyhundal/ur-family-office/milestone/3)) |
 | Multi-generational access (roles, delegation) | planned |
+
+Working on this repo? Read `CLAUDE.md` first: current state, commands, safety rules, backlog and pitfalls.
 
 v1 is read-only: it cannot move money. UFO gives information and alerts, not financial, tax or legal advice.
 
@@ -67,6 +68,7 @@ By hand, if you prefer:
 Then:
 - Review: `python scripts/show_detected_bills.py` shows exactly which bills and deposits the alert would count, and what each detector skipped and why.
 - Try it: `python -m jobs.check_balance --joint 1500 --personal 4200` (no Plaid, dry run), then `python -m jobs.check_balance` (live balances, still dry run), then `--send` (`--channel telegram|twilio|all`).
+- Confirm a whole month on demand: `python -m jobs.check_balance --through eom --report --send` looks ahead to the end of the month and sends a status message even when everything is fine (`--through` also takes a date).
 - Schedule it: the wizard offers a scheduled run (macOS launch agent, weekly by default since the big monthly card payment is known weeks ahead), or run `python scripts/schedule_daily.py [--weekday mon|...|daily] [--time 7:30]` (`--status`, `--run-now`, `--uninstall`). Output goes to `.data/daily.log`; if the Mac is asleep at that time it runs on wake. By hand, run `python -m jobs.check_balance --send` from cron. It alerts at most once per day per situation, says so when a detector fails instead of silently under-warning, and logs every check to `.data/alerts_log.csv`.
 
 ### Telling your partner (and getting her on board)
