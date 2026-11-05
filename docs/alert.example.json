@@ -1,0 +1,11 @@
+{
+  "cushion": 1000,
+  "next_topup": "2026-11-15",
+  "joint_mask": "1234",
+  "personal_mask": "5678",
+  "personal_floor": 1500,
+  "bills": [
+    {"name": "Rent", "amount": 1800, "due": "2026-11-01", "repeat": "monthly"},
+    {"name": "Car insurance", "amount": 142.5, "due": "2026-11-09"}
+  ]
+}
