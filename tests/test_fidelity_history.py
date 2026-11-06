@@ -89,3 +89,12 @@ def test_merge_warns_on_overlap_and_keeps_every_row():
 def test_merge_empty_and_none_dated_parts():
     m = merge_histories([ParsedHistory(events=[], warnings=[]), parse_fidelity_history(_csv(IN))])
     assert len(m.events) == 1 and m.first == date(2020, 2, 1)
+
+
+def test_newest_first_export_is_put_in_true_order_within_a_day_and_keeps_cash_balance():
+    later = '03/05/2020,YOU SOLD ACME FUND (ACMEX) (Cash),ACMEX,ACME FUND,Cash,-4,USD,USD,55,-4,0,,,,220.00,1220,03/07/2020'
+    earlier = '03/05/2020,YOU BOUGHT ACME FUND (ACMEX) (Cash),ACMEX,ACME FUND,Cash,4,USD,USD,50,4,0,,,,-200.00,1000,03/07/2020'
+    older = '03/01/2020,Electronic Funds Transfer Received (Cash),,No Description,Cash,1200,USD,USD,,1200,0,,,,1200.00,1200,'
+    p = parse_fidelity_history(_csv(later, earlier, older))  # Fidelity lists the newest row first
+    assert [e.kind for e in p.events] == [Kind.CONTRIBUTION, Kind.BUY, Kind.SELL]
+    assert [e.cash_balance for e in p.events] == [1200.0, 1000.0, 1220.0]

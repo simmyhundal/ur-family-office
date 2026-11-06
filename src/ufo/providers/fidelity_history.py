@@ -47,6 +47,8 @@ class Event(BaseModel):
     fees: float = 0.0
     in_kind: bool = False  # securities moved rather than cash
     description: str = ""
+    cash_balance: float | None = None  # Fidelity's running cash (core money-market) balance after this row
+    seq: int = 0  # position within a day, oldest first (the export is newest-first, so it is reversed)
 
     @property
     def external_flow(self) -> float:
@@ -108,6 +110,8 @@ def parse_fidelity_history(text: str) -> ParsedHistory:
     header = [h.strip() for h in rows[header_at]]
     events: list[Event] = []
     warnings: list[str] = []
+    dated_rows = [r for r in rows[header_at + 1:] if r and _parse_date(r[0]) is not None]
+    newest_first = len(dated_rows) > 1 and _parse_date(dated_rows[0][0]) > _parse_date(dated_rows[-1][0])
     for n, row in enumerate(rows[header_at + 1:], start=header_at + 2):
         if not row or not any(c.strip() for c in row):
             continue
@@ -128,8 +132,10 @@ def parse_fidelity_history(text: str) -> ParsedHistory:
             when=when, kind=kind, symbol=symbol,
             quantity=parse_number(d.get("Quantity")), price=parse_number(d.get("Price")),
             amount=parse_number(d.get("Amount")) or 0.0, fees=fees, in_kind=in_kind,
-            description=d.get("Description", "").strip()))
-    events.sort(key=lambda e: e.when)
+            description=d.get("Description", "").strip(),
+            cash_balance=parse_number(d.get("Cash Balance")),
+            seq=-n if newest_first else n))
+    events.sort(key=lambda e: (e.when, e.seq))
     for e in events:
         if e.in_kind and e.amount == 0.0 and e.quantity and e.price:
             e.amount = abs(e.quantity * e.price) * (1 if e.kind == Kind.CONTRIBUTION else -1)  # value at market on the date
@@ -147,6 +153,6 @@ def merge_histories(parts: list[ParsedHistory]) -> ParsedHistory:
     for a, b in zip(dated, dated[1:]):
         if b.first <= a.last:
             warnings.append(f"Exports overlap ({b.first} to {min(a.last, b.last)}): rows may be counted twice.")
-    events = sorted((e for p in parts for e in p.events), key=lambda e: e.when)
+    events = sorted((e for p in parts for e in p.events), key=lambda e: (e.when, e.seq))
     return ParsedHistory(events=events, warnings=warnings,
                          first=events[0].when if events else None, last=events[-1].when if events else None)

@@ -13,11 +13,14 @@ Update the "Current state" section at the end of every session.
 
 **Partner docs:** `docs/safety-for-partner.md` (opens with what UFO is, a screenshot, the message levels, then safety) and `docs/partner-explainer.html` (one-page visual; a private artifact is published from it). Keep both accurate when behavior changes.
 
+**Performance report (M4):** built end to end for the owner's main Fidelity account (parser, price loader, ledger, metrics, terminal and HTML reports). IRR and excess IRR rest on exact dated flows plus the statement's ending value and are trustworthy; time-weighted return and Sharpe rest on estimated month-end values (the history export omits reinvestments, so share counts are anchored to positions snapshots) and are labeled as estimates. Better inputs would be Fidelity monthly statements. Not yet built: the wizard ([issue 35](https://github.com/simmyhundal/ur-family-office/issues/35)), the local-only guard and decision 0008 ([issue 37](https://github.com/simmyhundal/ur-family-office/issues/37)), the before/after-UFO view ([issue 38](https://github.com/simmyhundal/ur-family-office/issues/38)).
+
 **Not modeled:** any outflow other than cards and manual bills (see the M2 milestone).
 
-Tests: `.venv/bin/python -m pytest -q` (247). Lint for undefined names: `.venv/bin/ruff check --select F src jobs scripts tests`.
+Tests: `.venv/bin/python -m pytest -q` (299). Lint for undefined names: `.venv/bin/ruff check --select F src jobs scripts tests`.
 
 ## Run it
+- Fidelity performance report (excess IRR, Sharpe, charts; local only): `python -m jobs.performance_report --account <last digits> --end YYYY-MM-DD --end-value <statement value> [--checkpoint DATE=VALUE:label ...]`. Reads `exports/*/History*.csv` (activity history) and `exports/snapshots/*.csv` (positions, names end in Mon-DD-YYYY); writes `exports/performance-report.html` (0600). Needs network only for ticker prices (Yahoo) and the T-bill rate (FRED).
 - Setup wizard (Plaid, accounts, rent/deposits, Telegram, schedule): `python -m ufo.setup`
 - Check now (dry run, prints the full local message and what would be sent): `python -m jobs.check_balance`
 - Look ahead to a date, or send a status message on demand even when all is well: `--through eom|YYYY-MM-DD`, `--report`, `--send`
