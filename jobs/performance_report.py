@@ -36,17 +36,23 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--end-value", type=float, required=True, help="the account's value on that date (from the statement)")
     ap.add_argument("--benchmark", default="VTI")
     ap.add_argument("--checkpoint", action="append", default=[], help="DATE=VALUE[:label] from a statement; repeatable")
+    ap.add_argument("--mix", help='a target mix to compare, e.g. "IVV=24,IWM=24,SCHM=24,VGT=10,VXUS=9,XBI=9" (weights are normalized)')
     ap.add_argument("--out", default="exports/performance-report.html")
     ap.add_argument("--cache", default=".data/prices")
     a = ap.parse_args(argv)
     con = Console()
     hist, snaps = find(a.history), find(a.snapshots)
+    try:
+        mix = {k.strip().upper(): float(v) for k, v in (p.split("=") for p in a.mix.split(","))} if a.mix else None
+    except ValueError:
+        con.print('[red]--mix looks like "IVV=24,IWM=24" (symbol=weight, comma separated).[/red]')
+        return 2
     if not hist:
         con.print(f"[red]No history files match {a.history}.[/red] Export the account's activity history from Fidelity into exports/.")
         return 2
     try:
         res = run(hist, snaps, a.account, date.fromisoformat(a.end), a.end_value, PriceStore(Path(a.cache), WebClient()),
-                  a.benchmark, [_checkpoint(c) for c in a.checkpoint])
+                  a.benchmark, [_checkpoint(c) for c in a.checkpoint], mix)
     except (PriceError, ValueError) as e:
         con.print(f"[red]{e}[/red]")
         return 2

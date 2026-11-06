@@ -102,3 +102,21 @@ def test_index_path_values_the_same_flows_in_the_index():
     assert path == pytest.approx([1000.0, 600.0])
     up = _series("UP", date(2020, 1, 1), 0.001, 400)
     assert M.index_path([(date(2020, 1, 1), 1000.0)], up, [date(2020, 1, 31)])[0] == pytest.approx(1000.0 * 1.001 ** 30)
+
+
+def test_basket_splits_flows_by_weight_and_takes_withdrawals_pro_rata():
+    a = _series("A", date(2020, 1, 1), 0.0, 400)       # flat at 100
+    b = _series("B", date(2020, 1, 1), 0.0, 400, base=50.0)
+    steps = M.basket_units([(date(2020, 1, 10), 1000.0), (date(2020, 3, 1), -400.0)], {"A": 3, "B": 1}, {"A": a, "B": b})
+    assert steps[0][1] == pytest.approx({"A": 7.5, "B": 5.0})   # 750 into A at 100, 250 into B at 50
+    assert M.basket_value(steps, {"A": a, "B": b}, date(2020, 3, 31)) == pytest.approx(600.0)
+    assert M.basket_value(steps, {"A": a, "B": b}, date(2020, 1, 5)) == 0.0
+
+
+def test_basket_that_tracks_one_fund_matches_that_funds_index_result():
+    idx = _series("IDX", date(2020, 1, 1), 0.0004, 700)
+    ext = [(date(2020, 1, 10), 1000.0), (date(2020, 8, 1), -200.0)]
+    end = date(2021, 6, 30)
+    sc = M.basket_scenario("one", {"IDX": 1.0}, {"IDX": idx}, ext, [date(2020, 1, 31), date(2020, 2, 29)], [0, 1], [0.0, 0.0], end)
+    ref = M.index_counterfactual(ext, idx, end)
+    assert sc.end_value == pytest.approx(ref.terminal_value) and sc.irr == pytest.approx(ref.irr, abs=1e-6)
