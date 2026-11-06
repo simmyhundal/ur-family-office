@@ -1,0 +1,11 @@
+# 7. KPIs: excess IRR for the portfolio tools, partner asks for the overdraft protector
+**Decision:** two products, two KPIs, not merged.
+- **Overdraft protector (cash safety):** *partner asks per month* ("do we have enough for the card?"), before vs after go-live (2026-11-05). Baseline comes from the owner's Messages history via `scripts/partner_asks.py`. Secondary checks: Joint dips below the cushion that were *not* warned in time (the model's accuracy, see issue 22) and false alarms per month (trust).
+- **Portfolio tools (is capital allocated well):** *excess IRR*, in percentage points: the family's IRR minus the IRR of the same cash flows put into a total-market index (a public market equivalent). It works for liquid funds and for illiquid holdings (farm, brokerage, angel deals) because it needs only dated cash flows plus a current value.
+
+**Why not Sharpe or plain IRR:** Sharpe needs a price history, which illiquid assets lack (appraisals understate volatility). Plain IRR moves with the market, so a good year would look like a win. The index comparison removes the market; IRR makes illiquid and liquid assets comparable. Sharpe stays as a secondary number for holdings that have a price series, so extra risk is not counted as a win.
+
+**How to compare with and without UFO:** compare excess IRR in the years before UFO's portfolio tools were used against the years after, using multi-year windows (e.g. trailing 3 years), not single months. The "without UFO" side is the family's own pre-adoption history; it is not observable afterwards. Early on there is little post-adoption data: report the number with how many years it rests on, and make no claim of effect until at least two full post-adoption years. Pooling families later reduces noise further.
+
+**Known limits:** IRR is money-weighted (contribution timing moves it; also report time-weighted return for liquid funds); unrealized assets need a manual valuation, the weakest input; short windows annualize into noise; excess IRR says nothing about risk taken.
+**Next:** the partner-ask counter's recall (issue 15) must be trusted before its baseline is; a portfolio cash-flow history (Fidelity CSV, manual entries for illiquid holdings) is needed before excess IRR can be computed. Domestic, USD only.
