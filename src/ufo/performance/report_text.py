@@ -35,6 +35,7 @@ def print_report(res: Result, console: Console | None = None) -> None:
     t.add_column(res.benchmark, justify="right")
     t.add_row("IRR (money-weighted)", pct(r.irr), pct(r.index_irr))
     t.add_row("Excess IRR", spct(ex), "")
+    t.add_row("Worth today (same deposits/withdrawals)", money(r.end_value), money(r.index_end_value))
     t.add_row("PME (Kaplan-Schoar), >1 beats index", num(r.pme, 3), "")
     t.add_row("Time-weighted return / yr (est.)", pct(r.twr_annual), pct(r.index_twr_annual))
     t.add_row("Sharpe ratio (est.)", num(r.sharpe), num(r.index_sharpe))

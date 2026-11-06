@@ -78,6 +78,16 @@ def index_counterfactual(external: list[tuple[date, float]], index: Series, end:
     return IndexResult(irr=xirr(investor_flows(external, end, terminal)), terminal_value=terminal)
 
 
+def index_path(external: list[tuple[date, float]], index: Series, days: list[date]) -> list[float]:
+    """Dollar value, on each date, of the same deposits and withdrawals put into the index (units x price)."""
+    out = []
+    for d in days:
+        units = sum(a / index.on_or_before(f) for f, a in sorted(external) if f <= d and index.on_or_before(f))
+        px = index.on_or_before(d)
+        out.append(units * px if px else 0.0)
+    return out
+
+
 def ks_pme(external: list[tuple[date, float]], index: Series, end: date, end_value: float) -> float | None:
     """Kaplan-Schoar PME: (withdrawals and ending value grown by the index) / (contributions grown by the index).
     Above 1.0 means the family did better than the index with the same cash flows."""
@@ -202,6 +212,8 @@ class Report(BaseModel):
     index_max_drawdown: float
     beta: float | None
     alpha: float | None
+    index_end_value: float  # what the same cash flows would be worth at `end` if held in the index
+    index_values: list[float]  # the same, at each month end in `months`
     months: list[date]
     port_growth: list[float]
     index_growth: list[float]
@@ -247,5 +259,6 @@ def analyze(external: list[tuple[date, float]], month_ends: list[date], values: 
         volatility=volatility(p_r), index_volatility=volatility(b_r),
         max_drawdown=max_drawdown(p_g), index_max_drawdown=max_drawdown(b_g),
         beta=ba[0] if ba else None, alpha=ba[1] if ba else None,
+        index_end_value=idx.terminal_value, index_values=index_path(ext, index, [month_ends[i] for i in keep]),
         months=[month_ends[i] for i in keep], port_growth=p_g, index_growth=b_g, port_returns=p_r, index_returns=b_r,
         flows_by_month=[port[i].flow for i in keep], values=[port[i].value for i in keep])
