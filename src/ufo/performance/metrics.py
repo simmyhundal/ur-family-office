@@ -88,6 +88,59 @@ def index_path(external: list[tuple[date, float]], index: Series, days: list[dat
     return out
 
 
+class Scenario(BaseModel):
+    """What the same deposits and withdrawals would have become in a fixed mix of funds."""
+    name: str
+    weights: dict[str, float]
+    irr: float | None
+    end_value: float
+    values: list[float]
+    twr_annual: float | None
+    sharpe: float | None
+    max_drawdown: float
+    note: str = ""
+
+
+def basket_units(external: list[tuple[date, float]], weights: dict[str, float], series: dict[str, Series]):
+    """(date, {symbol: units}) after each flow: every deposit is split by the target weights on its day and every
+    withdrawal is taken out in the same proportions. There is no rebalancing in between: the mix drifts with prices."""
+    total = sum(weights.values())
+    units: dict[str, float] = {s: 0.0 for s in weights}
+    steps = []
+    for d, a in sorted(external):
+        for sym, w in weights.items():
+            px = series[sym].on_or_before(d)
+            if px:
+                units[sym] += a * (w / total) / px
+        steps.append((d, dict(units)))
+    return steps
+
+
+def basket_value(steps, series: dict[str, Series], day: date) -> float:
+    held: dict[str, float] = {}
+    for d, u in steps:
+        if d > day:
+            break
+        held = u
+    return sum(q * (series[s].on_or_before(day) or 0.0) for s, q in held.items())
+
+
+def basket_scenario(name: str, weights: dict[str, float], series: dict[str, Series], external: list[tuple[date, float]],
+                    month_ends: list[date], keep: list[int], rf_monthly: list[float], end: date) -> Scenario:
+    steps = basket_units(external, weights, series)
+    end_value = basket_value(steps, series, end)
+    all_vals = [basket_value(steps, series, d) for d in month_ends]
+    mr = monthly_returns(month_ends, all_vals, sorted(external))
+    rets = [mr[i].ret or 0.0 for i in keep]
+    growth = growth_index(rets)
+    ex = [r - f for r, f in zip(rets, rf_monthly)]
+    note = "" if end_value > 0 else "The withdrawals were larger than this mix could have supported."
+    return Scenario(name=name, weights=weights, irr=xirr(investor_flows(sorted(external), end, end_value)) if end_value > 0 else None,
+                    end_value=end_value, values=[all_vals[i] for i in keep],
+                    twr_annual=annualize(growth[-1], len(keep)) if growth else None, sharpe=sharpe(ex),
+                    max_drawdown=max_drawdown(growth), note=note)
+
+
 def ks_pme(external: list[tuple[date, float]], index: Series, end: date, end_value: float) -> float | None:
     """Kaplan-Schoar PME: (withdrawals and ending value grown by the index) / (contributions grown by the index).
     Above 1.0 means the family did better than the index with the same cash flows."""
@@ -212,6 +265,7 @@ class Report(BaseModel):
     index_max_drawdown: float
     beta: float | None
     alpha: float | None
+    mix: Scenario | None = None
     index_end_value: float  # what the same cash flows would be worth at `end` if held in the index
     index_values: list[float]  # the same, at each month end in `months`
     months: list[date]
@@ -224,7 +278,8 @@ class Report(BaseModel):
 
 
 def analyze(external: list[tuple[date, float]], month_ends: list[date], values: list[float], index: Series,
-            rf: Series, end: date, end_value: float, returns: list[float | None] | None = None) -> Report:
+            rf: Series, end: date, end_value: float, returns: list[float | None] | None = None,
+            mix: tuple[str, dict[str, float], dict[str, Series]] | None = None) -> Report:
     """`returns` are optional month-by-month portfolio returns (e.g. holdings-based); otherwise modified Dietz."""
     ext = sorted(external)
     port = monthly_returns(month_ends, values, ext)
@@ -248,8 +303,9 @@ def analyze(external: list[tuple[date, float]], month_ends: list[date], values: 
     irr = xirr(investor_flows(ext, end, end_value))
     idx = index_counterfactual(ext, index, end)
     ba = beta_alpha(p_r, b_r, r_f)
+    scenario = basket_scenario(mix[0], mix[1], mix[2], ext, month_ends, keep, r_f, end) if mix else None
     return Report(
-        start=ext[0][0] if ext else month_ends[0], end=end, end_value=end_value,
+        mix=scenario, start=ext[0][0] if ext else month_ends[0], end=end, end_value=end_value,
         contributed=sum(a for _, a in ext if a > 0), withdrawn=-sum(a for _, a in ext if a < 0),
         irr=irr, index_irr=idx.irr, index_note=idx.note,
         excess_irr=(irr - idx.irr) if irr is not None and idx.irr is not None else None,
