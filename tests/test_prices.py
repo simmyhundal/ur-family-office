@@ -153,3 +153,29 @@ def test_each_host_gets_the_user_agent_it_accepts(monkeypatch):
     assert c.fetch("ACMEX", date(2020, 1, 1), date(2020, 1, 31))[0].value == 9.5
     assert seen["fred.stlouisfed.org"] == ("ur-family-office-price-loader/0.1", "*/*")
     assert seen["query1.finance.yahoo.com"] == ("Mozilla/5.0", "*/*")
+
+
+def test_raw_close_is_kept_next_to_the_adjusted_one(tmp_path):
+    payload = {"chart": {"result": [{"timestamp": [_ts(2020, 1, 2), _ts(2020, 1, 3)],
+                                      "indicators": {"quote": [{"close": [100.0, None]}], "adjclose": [{"adjclose": [90.0, 91.0]}]}}]}}
+    pts = parse_yahoo_chart(payload, "ACMEX")
+    assert (pts[0].value, pts[0].close, pts[1].close) == (90.0, 100.0, None)
+    store = PriceStore(tmp_path, FakeClient({"ACMEX": pts}), today=date(2020, 1, 4))
+    s = store.series("ACMEX", date(2020, 1, 2), date(2020, 1, 3))
+    again = PriceStore(tmp_path, None, today=date(2020, 1, 4)).series("ACMEX", date(2020, 1, 2), date(2020, 1, 3))
+    assert again.points == s.points
+    assert s.close_on_or_before(date(2020, 1, 2)) == 100.0
+    assert s.close_on_or_before(date(2020, 1, 3)) == 91.0  # no raw close stored: falls back to adjusted
+    assert s.close_on_or_before(date(2019, 12, 1)) is None
+
+
+def test_split_is_read_stored_and_cached(tmp_path):
+    day = _ts(2020, 1, 3)
+    payload = {"chart": {"result": [{"timestamp": [_ts(2020, 1, 2), day],
+                                      "events": {"splits": {str(day): {"date": day, "numerator": 3, "denominator": 1, "splitRatio": "3:1"}}},
+                                      "indicators": {"quote": [{"close": [30.0, 31.0]}], "adjclose": [{"adjclose": [30.0, 31.0]}]}}]}}
+    pts = parse_yahoo_chart(payload, "ACMEX")
+    assert [p.split for p in pts] == [None, 3.0]
+    PriceStore(tmp_path, FakeClient({"ACMEX": pts}), today=date(2020, 1, 4)).series("ACMEX", date(2020, 1, 2), date(2020, 1, 3))
+    again = PriceStore(tmp_path, None, today=date(2020, 1, 4)).series("ACMEX", date(2020, 1, 2), date(2020, 1, 3))
+    assert again.splits() == [(date(2020, 1, 3), 3.0)]

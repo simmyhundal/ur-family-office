@@ -8,7 +8,7 @@ Layers:
   PriceStore              -> local cache in `.data/prices/` plus a CSV fallback so it works offline
   Series                  -> sorted points with gap reporting and "value on or before a date"
 
-Offline fallback: drop `SYMBOL.csv` (columns `date,adj_close`, ISO dates) into the cache folder and it is used as is.
+Offline fallback: drop `SYMBOL.csv` (columns `date,adj_close[,close]`, ISO dates) into the cache folder and it is used as is.
 """
 from __future__ import annotations
 
@@ -35,6 +35,8 @@ class PriceError(Exception):
 class Point(BaseModel):
     day: date
     value: float  # adjusted close (dividends and splits reinvested), or an annualized % for the risk-free series
+    close: float | None = None  # actual close (split-adjusted only): what a share was worth that day; used to value holdings
+    split: float | None = None  # shares after / shares before, on the day a split took effect (3:1 -> 3.0)
 
 
 class Series(BaseModel):
@@ -42,10 +44,22 @@ class Series(BaseModel):
     points: list[Point]
 
     def on_or_before(self, day: date) -> float | None:
-        """Last known value on or before `day` (month-end valuation uses this), or None before the first point."""
+        """Last known adjusted value on or before `day` (total-return index), or None before the first point."""
         days = [p.day for p in self.points]
         i = bisect_right(days, day)
         return self.points[i - 1].value if i else None
+
+    def splits(self) -> list[tuple[date, float]]:
+        return [(p.day, p.split) for p in self.points if p.split]
+
+    def close_on_or_before(self, day: date) -> float | None:
+        """Last known actual close on or before `day` (falls back to the adjusted value if none was stored)."""
+        days = [p.day for p in self.points]
+        i = bisect_right(days, day)
+        if not i:
+            return None
+        p = self.points[i - 1]
+        return p.close if p.close is not None else p.value
 
     def gaps(self, start: date, end: date) -> list[str]:
         """Human-readable holes: late start, early end, and any run longer than GAP_DAYS."""
@@ -75,11 +89,16 @@ def parse_yahoo_chart(payload: dict, symbol: str) -> list[Point]:
         r = payload["chart"]["result"][0]
         stamps = r.get("timestamp") or []
         adj = r["indicators"]["adjclose"][0]["adjclose"]
+        raw = (r["indicators"].get("quote") or [{}])[0].get("close") or []
+        splits = {datetime.fromtimestamp(v["date"], tz=timezone.utc).date(): float(v["numerator"]) / float(v["denominator"])
+                  for v in ((r.get("events") or {}).get("splits") or {}).values()}
     except (KeyError, IndexError, TypeError):
         err = (payload.get("chart") or {}).get("error") if isinstance(payload, dict) else None
         raise PriceError(f"No price data for {symbol}" + (f" ({err.get('description')})" if isinstance(err, dict) else "") + ".")
-    pts = [Point(day=datetime.fromtimestamp(t, tz=timezone.utc).date(), value=float(v))
-           for t, v in zip(stamps, adj) if v is not None]
+    pts = [Point(day=datetime.fromtimestamp(t, tz=timezone.utc).date(), value=float(v),
+                 close=float(raw[i]) if i < len(raw) and raw[i] is not None else None,
+                 split=splits.get(datetime.fromtimestamp(t, tz=timezone.utc).date()))
+           for i, (t, v) in enumerate(zip(stamps, adj)) if v is not None]
     return sorted(pts, key=lambda p: p.day)
 
 
@@ -136,7 +155,9 @@ def _read_csv(path: Path) -> list[Point]:
     with path.open(newline="", encoding="utf-8-sig") as f:
         for row in csv.DictReader(f):
             try:
-                pts.append(Point(day=date.fromisoformat(row["date"].strip()), value=float(row["adj_close"])))
+                c, sp = (row.get("close") or "").strip(), (row.get("split") or "").strip()
+                pts.append(Point(day=date.fromisoformat(row["date"].strip()), value=float(row["adj_close"]),
+                                 close=float(c) if c else None, split=float(sp) if sp else None))
             except (KeyError, ValueError):
                 raise PriceError(f"{path.name}: expected columns date,adj_close with ISO dates.") from None
     return sorted(pts, key=lambda p: p.day)
@@ -146,8 +167,9 @@ def _write_csv(path: Path, pts: list[Point]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["date", "adj_close"])
-        w.writerows((p.day.isoformat(), repr(p.value)) for p in pts)
+        w.writerow(["date", "adj_close", "close", "split"])
+        w.writerows((p.day.isoformat(), repr(p.value), "" if p.close is None else repr(p.close),
+                     "" if p.split is None else repr(p.split)) for p in pts)
 
 
 class PriceStore:
