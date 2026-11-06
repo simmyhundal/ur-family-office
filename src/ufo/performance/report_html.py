@@ -17,6 +17,23 @@ def pct(x: float | None, d: int = 1) -> str:
     return "n/a" if x is None else f"{x * 100:.{d}f}%"
 
 
+TIPS = {
+    "irr": "IRR (money-weighted): the yearly rate your money earned, counting when you added and took out cash. Bigger balances count more, so it reflects your timing as well as your picks.",
+    "twr": "Return per year (time-weighted): how fast the investments themselves grew, as if $1 had stayed invested the whole time. Ignores when money went in or out, so it reflects the picks, not the timing.",
+    "excess": "Excess IRR: your IRR minus the IRR of the same deposits and withdrawals put into the index. Negative means the index would have done better.",
+    "pme": "PME (Kaplan-Schoar): what your cash flows would have grown to in the index, compared with what you got. Above 1.0 means you beat the index.",
+    "sharpe": "Sharpe ratio: return above the T-bill rate for each unit of ups and downs. Higher is better. Estimated here.",
+    "vol": "Volatility: how much monthly returns swing, as a yearly figure. Higher means a bumpier ride.",
+    "beta": "Beta: how much you move when the index moves (1.0 moves with it). Alpha: the yearly return left over after that.",
+    "worth": "Worth today: what the same dated deposits and withdrawals would be worth now in each choice, before taxes.",
+    "fall": "Worst fall: the largest drop from a previous peak in the month-end balance.",
+}
+
+
+def tip(label: str, key: str) -> str:
+    return f'<span class="tip" tabindex="0" data-tip="{html.escape(TIPS[key], quote=True)}">{label}</span>'
+
+
 def spct(x: float | None, d: int = 1) -> str:
     return "n/a" if x is None else f"{x * 100:+.{d}f}%"
 
@@ -192,6 +209,9 @@ svg .axis{fill:var(--muted);font-size:11px}svg .val{fill:var(--ink);font-size:10
 .key{display:flex;gap:16px;font-size:14px;flex-wrap:wrap}.key i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
 table{width:100%;border-collapse:collapse;font-size:15px;font-variant-numeric:tabular-nums}th,td{text-align:right;padding:6px 8px;border-bottom:1px solid var(--line)}
 th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}th{font-size:13px;color:var(--muted);font-weight:600}.scroll{overflow-x:auto}
+.tip{border-bottom:1px dotted var(--muted);cursor:help;position:relative}
+.tip:hover::after,.tip:focus::after{content:attr(data-tip);position:absolute;left:0;top:130%;z-index:5;width:min(300px,80vw);background:var(--ink);color:var(--bg);padding:8px 10px;border-radius:8px;font:400 13px/1.4 var(--body);text-align:left;white-space:normal;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+th:nth-last-child(-n+3) .tip:hover::after,th:nth-last-child(-n+3) .tip:focus::after{left:auto;right:0}
 .ok{color:var(--good)}.chk{color:var(--warn)}.badge{font-size:12px;border:1px solid var(--warn);color:var(--warn);border-radius:99px;padding:1px 8px;margin-left:6px;vertical-align:2px}
 ul{margin:4px 0 0;padding-left:20px}
 """
@@ -235,17 +255,17 @@ def render(res: Result, title: str = "Fidelity performance report") -> str:
     ]
     figs = "".join(f"<figure><h2>{t}</h2>{bal_key if t.startswith('Your balance') else key}{svg}<figcaption>{cap}</figcaption></figure>" for t, svg, cap in charts if svg)
     tiles = "".join(f'<div class="tile"><span>{a}</span><b>{b}</b><span>{c}</span></div>' for a, b, c in [
-        ("Your IRR (money-weighted)", pct(r.irr), f"index {pct(r.index_irr)}"),
-        ("PME (Kaplan-Schoar)", num(r.pme, 3), "above 1.0 beats the index"),
-        ("Time-weighted / yr", pct(r.twr_annual), f"index {pct(r.index_twr_annual)}"),
-        ("Sharpe ratio", num(r.sharpe), f"index {num(r.index_sharpe)}"),
-        ("Volatility / yr", pct(r.volatility), f"index {pct(r.index_volatility)}"),
-        ("Beta and alpha", f"{num(r.beta)} / {spct(r.alpha)}", "vs the index, yearly alpha"),
+        (tip("Your IRR (money-weighted)", "irr"), pct(r.irr), f"index {pct(r.index_irr)}"),
+        (tip("PME (Kaplan-Schoar)", "pme"), num(r.pme, 3), "above 1.0 beats the index"),
+        (tip("Time-weighted / yr", "twr"), pct(r.twr_annual), f"index {pct(r.index_twr_annual)}"),
+        (tip("Sharpe ratio", "sharpe"), num(r.sharpe), f"index {num(r.index_sharpe)}"),
+        (tip("Volatility / yr", "vol"), pct(r.volatility), f"index {pct(r.index_volatility)}"),
+        (tip("Beta and alpha", "beta"), f"{num(r.beta)} / {spct(r.alpha)}", "vs the index, yearly alpha"),
     ])
     scen = ""
     if mx:
         def row(n, v, irr, twr, sh, dd): return f"<tr><td>{n}</td><td>{money(v)}</td><td>{pct(irr)}</td><td>{pct(twr)}</td><td>{num(sh)}</td><td>{pct(dd)}</td></tr>"
-        scen = ('<section><h2>Same deposits and withdrawals, three ways</h2><div class="scroll"><table><tr><th>Scenario</th><th>Worth today</th><th>IRR</th><th>Return/yr</th><th>Sharpe</th><th>Worst fall</th></tr>'
+        scen = (f'<section><h2>Same deposits and withdrawals, three ways</h2><div><table><tr><th>Scenario</th><th>{tip("Worth today", "worth")}</th><th>{tip("IRR", "irr")}</th><th>{tip("Return/yr", "twr")}</th><th>{tip("Sharpe", "sharpe")}</th><th>{tip("Worst fall", "fall")}</th></tr>'
                 + row("Your account", r.end_value, r.irr, r.twr_annual, r.sharpe, r.max_drawdown)
                 + row(res.benchmark, r.index_end_value, r.index_irr, r.index_twr_annual, r.index_sharpe, r.index_max_drawdown)
                 + row(html.escape(mx.name), mx.end_value, mx.irr, mx.twr_annual, mx.sharpe, mx.max_drawdown) + "</table></div>"
@@ -261,7 +281,7 @@ def render(res: Result, title: str = "Fidelity performance report") -> str:
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
 <style>{CSS}</style></head><body><main>
 <header><h1>{html.escape(title)}</h1><p class="muted">{r.start} to {r.end} · one taxable account · vs {html.escape(res.benchmark)} · local only, never sent anywhere</p></header>
-<section class="hero"><div><span class="small">Excess IRR (your IRR minus the index IRR for the same cash flows)</span>
+<section class="hero"><div><span class="small">{tip("Excess IRR", "excess")} (your IRR minus the index IRR for the same cash flows)</span>
 <div class="big {'good' if (ex or 0) >= 0 else 'bad'}">{spct(ex)}</div></div><p>{sentence}</p>
 <div class="tiles">{tiles}</div>
 <p><b>If the same deposits and withdrawals had gone into {html.escape(res.benchmark)}, you would have {money(r.index_end_value)} today instead of {money(r.end_value)}</b> ({'+' if r.end_value - r.index_end_value >= 0 else '-'}{money(abs(r.end_value - r.index_end_value))}), before taxes.</p>
