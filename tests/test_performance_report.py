@@ -63,7 +63,8 @@ def test_run_renders_both_reports_without_network(tmp_path):
     buf = io.StringIO()
     print_report(res, Console(file=buf, width=100, force_terminal=False))
     out = buf.getvalue()
-    assert "Excess IRR" in out and "Calendar years" in out and "Data checks" in out
+    assert "Excess IRR" in out and "Calendar years" in out and "Data checks" in out and "Worth today" in out
+    assert "Your balance vs the same money in IDX" in page
 
 
 def test_nice_range_rounds_to_friendly_ticks():

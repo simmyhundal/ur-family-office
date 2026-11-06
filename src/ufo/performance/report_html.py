@@ -210,7 +210,13 @@ def render(res: Result, title: str = "Fidelity performance report") -> str:
     dd = lambda g: [v / max(g[: i + 1]) - 1 for i, v in enumerate(g)]
     roll = rolling12(r.port_returns, r.index_returns)
     key = f'<div class="key"><span><i style="background:{PORT}"></i>Your account</span><span><i style="background:{IDX}"></i>{html.escape(res.benchmark)} (total-market index)</span></div>'
+    gap = r.end_value - r.index_end_value
     charts = [
+        ("Your balance vs the same money in " + res.benchmark,
+         line_chart(r.months + [r.end], [("You", PORT, r.values + [r.end_value]), (res.benchmark, IDX, r.index_values + [r.index_end_value])],
+                    lambda v: f"${v / 1000:.0f}k", "Account balance versus the same deposits and withdrawals held in the index"),
+         f"Same dates, same deposits and withdrawals. Today: you {money(r.end_value)}, in {html.escape(res.benchmark)} {money(r.index_end_value)}, "
+         f"a difference of {'+' if gap >= 0 else '-'}{money(abs(gap))}. Before taxes. The month-end path is estimated; the endpoints are exact."),
         ("Growth of $1 (time-weighted)", line_chart(r.months, [("You", PORT, r.port_growth), (res.benchmark, IDX, r.index_growth)], lambda v: f"${v:.2f}", "Growth of one dollar, account versus index"),
          "Month-end values with deposits and withdrawals removed, so this shows investing skill, not how much you put in. Estimated: see data checks."),
         ("Drawdown from the previous peak", area_chart(r.months, [("You", PORT, dd(r.port_growth)), (res.benchmark, IDX, dd(r.index_growth))], lambda v: f"{v * 100:.0f}%", "Drawdown, account versus index"),
@@ -244,6 +250,7 @@ def render(res: Result, title: str = "Fidelity performance report") -> str:
 <section class="hero"><div><span class="small">Excess IRR (your IRR minus the index IRR for the same cash flows)</span>
 <div class="big {'good' if (ex or 0) >= 0 else 'bad'}">{spct(ex)}</div></div><p>{sentence}</p>
 <div class="tiles">{tiles}</div>
+<p><b>If the same deposits and withdrawals had gone into {html.escape(res.benchmark)}, you would have {money(r.index_end_value)} today instead of {money(r.end_value)}</b> ({'+' if r.end_value - r.index_end_value >= 0 else '-'}{money(abs(r.end_value - r.index_end_value))}), before taxes.</p>
 <p class="small">Ending value {money(r.end_value)} (from the statement). IRR uses the exact dated deposits and withdrawals plus that ending value, so it does not depend on the estimated month-end values below.</p></section>
 {figs}
 <section><h2>Data checks<span class="badge">TWR and Sharpe are estimates</span></h2>

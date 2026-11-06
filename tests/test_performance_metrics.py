@@ -94,3 +94,11 @@ def test_beta_of_a_double_levered_index_is_two():
 def test_risk_free_monthly_rate():
     rf = Series(symbol="DTB3", points=[Point(day=date(2020, 1, 2), value=12.0)])
     assert M.monthly_rf(rf, date(2020, 1, 31)) == pytest.approx(1.12 ** (1 / 12) - 1 if False else (1.12) ** (1 / 12) - 1)
+
+
+def test_index_path_values_the_same_flows_in_the_index():
+    idx = _series("IDX", date(2020, 1, 1), 0.0, 400)  # flat: units stay worth what was put in
+    path = M.index_path([(date(2020, 1, 10), 1000.0), (date(2020, 3, 1), -400.0)], idx, [date(2020, 1, 31), date(2020, 3, 31)])
+    assert path == pytest.approx([1000.0, 600.0])
+    up = _series("UP", date(2020, 1, 1), 0.001, 400)
+    assert M.index_path([(date(2020, 1, 1), 1000.0)], up, [date(2020, 1, 31)])[0] == pytest.approx(1000.0 * 1.001 ** 30)
