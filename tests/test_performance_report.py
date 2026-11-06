@@ -66,6 +66,7 @@ def test_run_renders_both_reports_without_network(tmp_path):
     assert "Excess IRR" in out and "Calendar years" in out and "Data checks" in out and "Worth today" in out
     assert "Your balance vs the same money in IDX" in page and "three ways" in page and "Plan mix" in page and res.report.mix.end_value > 0
     assert "Plan mix" in out
+    assert page.count('class="tip"') >= 9 and "time-weighted" in page.lower() and "{tip(" not in page
 
 
 def test_nice_range_rounds_to_friendly_ticks():
