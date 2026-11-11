@@ -52,7 +52,8 @@ def test_run_renders_both_reports_without_network(tmp_path):
     store = PriceStore(tmp_path / "cache", Fake(), today=date(2022, 9, 1))
     end = date(2021, 12, 31)
     acme_end = Series(symbol="ACME", points=_daily(date(2020, 1, 1), 1000, 0.0004)).close_on_or_before(end)
-    res = run(hist, snaps, "0042", end, 90 * acme_end + 10000 - 90 * 100.5, store, benchmark="IDX", mix={"ACME": 70.0, "IDX": 30.0}, mix_name="Plan mix")
+    res = run(hist, snaps, "0042", end, 90 * acme_end + 10000 - 90 * 100.5, store, benchmark="IDX", mix={"ACME": 70.0, "IDX": 30.0}, mix_name="Plan mix",
+               also=[("Fund A", {"ACME": 1.0}, "A managed fund, not an index."), ("Fund B", {"IDX": 1.0}, "")])
     r = res.report
     assert r.contributed == 10000.0 and r.irr is not None and r.index_irr is not None and r.excess_irr is not None
     assert len(r.months) >= 20 and res.reconciliation and res.events == 2
@@ -64,8 +65,8 @@ def test_run_renders_both_reports_without_network(tmp_path):
     print_report(res, Console(file=buf, width=100, force_terminal=False))
     out = buf.getvalue()
     assert "Excess IRR" in out and "Calendar years" in out and "Data checks" in out and "Worth today" in out
-    assert "Your balance vs the same money in IDX" in page and "three ways" in page and "Plan mix" in page and res.report.mix.end_value > 0
-    assert "Plan mix" in out
+    assert "Your balance vs the same money in IDX" in page and "five ways" in page and "Plan mix" in page and "Fund A" in page and "not an index" in page and res.report.scenarios[0].end_value > 0
+    assert "Plan mix" in out and "Fund B" in out and len(res.report.scenarios) == 3
     assert page.count('class="tip"') >= 9 and "time-weighted" in page.lower() and "{tip(" not in page
 
 
