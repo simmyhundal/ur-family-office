@@ -36,7 +36,9 @@ def _snapshot_date(path: str) -> date | None:
 
 def run(history_files: list[str], snapshot_files: list[str], account_mask: str, end: date, end_value: float,
         store: PriceStore, benchmark: str = "VTI", statement_values: list[tuple[date, float, str]] | None = None,
-        mix: dict[str, float] | None = None, mix_name: str = "Target mix") -> Result:
+        mix: dict[str, float] | None = None, mix_name: str = "Target mix",
+        also: list[tuple[str, dict[str, float], str]] | None = None) -> Result:
+    """`mix` is the owner's own plan; `also` are extra comparisons as (name, weights, one-line description)."""
     parts = [parse_fidelity_history(Path(f).read_text(encoding="utf-8-sig")) for f in sorted(history_files)]
     hist = merge_histories(parts)
     if not hist.events:
@@ -44,7 +46,9 @@ def run(history_files: list[str], snapshot_files: list[str], account_mask: str, 
     warnings = list(hist.warnings)
     symbols = sorted({e.symbol for e in hist.events if e.symbol and not is_fixed_income(e.symbol)})
     start = hist.first - timedelta(days=5)
-    prices, price_warnings = store.report(symbols + [benchmark] + list(mix or {}), start, end)
+    scen = ([(mix_name, mix, "plan", "")] if mix else []) + [(n, w, "benchmark", d) for n, w, d in (also or [])]
+    wanted = sorted({sym for _, w, _, _ in scen for sym in w})
+    prices, price_warnings = store.report(symbols + [benchmark] + wanted, start, end)
     warnings += price_warnings
     if benchmark not in prices:
         raise ValueError(f"Could not load the benchmark {benchmark}: {price_warnings}")
@@ -78,11 +82,11 @@ def run(history_files: list[str], snapshot_files: list[str], account_mask: str, 
     first_start = date(months[0].year, months[0].month, 1) - timedelta(days=1)
     rets = [ledger.holdings_return(prev, cur, M.monthly_rf(rf, prev))
             for prev, cur in zip([first_start] + months[:-1], months)]
-    missing = [s for s in (mix or {}) if s not in prices]
+    missing = [s for s in wanted if s not in prices]
     if missing:
-        raise ValueError(f"Could not load prices for the target mix: {', '.join(missing)}")
+        raise ValueError(f"Could not load prices for: {', '.join(missing)}")
     report = M.analyze(ledger.flows(), months, values, prices[benchmark], rf, end, end_value, returns=rets,
-                       mix=(mix_name, mix, prices) if mix else None)
+                       scenarios=scen, scenario_series=prices)
     notes = list(ledger.anchor_notes)
     notes.append("Monthly returns use what was held at the start of each month (price moves, cash at the T-bill rate), "
                  "so share counts that are slightly off change the weights, not the return.")
