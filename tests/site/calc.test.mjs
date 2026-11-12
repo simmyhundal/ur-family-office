@@ -156,3 +156,13 @@ test("sliceFor: the period limit wins when the data is longer, and only chosen s
   assert.equal(w.limitedBy, null);
   assert.throws(() => sliceFor({ dates: ["a"], series: { X: [null] } }, ["X"], 1), /No prices for X/);
 });
+
+test("sliceFor: a large period (Max) returns everything the funds share", () => {
+  const dates = Array.from({ length: 130 }, (_, i) => `d${i}`);
+  const data = { dates, series: { A: dates.map((_, i) => i + 1), B: dates.map((_, i) => (i < 40 ? null : 1)) } };
+  assert.equal(sliceFor(data, ["A"], 99).dates.length, 130);
+  const w = sliceFor(data, ["A", "B"], 99);
+  assert.equal(w.dates.length, 90);
+  assert.equal(w.limitedBy, "B");
+  assert.equal(sliceFor(data, ["A"], 10).dates.length, 121);
+});

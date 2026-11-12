@@ -53,7 +53,7 @@ def build(universe: list[list[str]], store: PriceStore, start: date, end: date, 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--years", type=int, default=6)
+    ap.add_argument("--years", type=int, default=11)  # the page offers up to 10 years
     ap.add_argument("--out", default=str(ROOT / "site" / "data" / "prices.json"))
     a = ap.parse_args()
     universe = json.loads((ROOT / "site" / "data" / "universe.json").read_text())
