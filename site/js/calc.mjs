@@ -68,16 +68,18 @@ export function maxDrawdown(growth) {
 }
 export const monthlyRf = (annualPercent) => (1 + annualPercent / 100) ** (1 / 12) - 1;
 
-/** Headline numbers for one simulated path. rfAnnualPercent is a flat T-bill yield in percent (default 0). */
-export function metrics(sim, rfAnnualPercent = 0) {
+/** Headline numbers for one simulated path. `rf` is the cash rate in percent a year: a flat number, or an array with
+ *  one value per date (the rate at the start of each month's return), or null when unknown (Sharpe is then null). */
+export function metrics(sim, rf = null) {
   const months = sim.returns.length;
   const growth = growthIndex(sim.returns);
   const g = growth[growth.length - 1];
-  const rf = monthlyRf(rfAnnualPercent);
-  const excess = sim.returns.map((r) => r - rf);
+  const rfAt = (k) => (Array.isArray(rf) ? rf[k] : rf);
+  const known = rf != null && Array.from({ length: months }, (_, k) => rfAt(k)).every((x) => x != null);
+  const excess = known ? sim.returns.map((r, k) => r - monthlyRf(rfAt(k))) : [];
   const enough = months >= 12;
   const sd = months > 1 ? stdev(sim.returns) : NaN;
-  const exSd = months > 1 ? stdev(excess) : NaN;
+  const exSd = known && months > 1 ? stdev(excess) : NaN;
   return {
     endValue: sim.values[sim.values.length - 1],
     putIn: sim.putIn,
@@ -85,17 +87,17 @@ export function metrics(sim, rfAnnualPercent = 0) {
     totalReturn: g - 1, // time-weighted: ignores when money went in
     annualReturn: enough && g > 0 ? g ** (12 / months) - 1 : null,
     volatility: enough ? sd * Math.sqrt(12) : null,
-    sharpe: enough && exSd > 1e-12 ? (mean(excess) / exSd) * Math.sqrt(12) : null,
+    sharpe: known && enough && exSd > 1e-12 ? (mean(excess) / exSd) * Math.sqrt(12) : null,
     maxDrawdown: maxDrawdown(growth),
     months,
   };
 }
 
 /** Compare a mix against one benchmark symbol (100% in it, same strategy and same deposits). */
-export function compare({ prices, mix, benchmark, initial = 10000, monthly = 0, strategy = "hold", rfAnnualPercent = 0 }) {
+export function compare({ prices, mix, benchmark, initial = 10000, monthly = 0, strategy = "hold", rf = null }) {
   const a = simulate({ prices, weights: mix, initial, monthly, strategy });
   const b = simulate({ prices, weights: { [benchmark]: 1 }, initial, monthly, strategy });
-  return { mix: { sim: a, m: metrics(a, rfAnnualPercent) }, bench: { sim: b, m: metrics(b, rfAnnualPercent) } };
+  return { mix: { sim: a, m: metrics(a, rf) }, bench: { sim: b, m: metrics(b, rf) } };
 }
 
 // ---------- data: month-end prices ----------
@@ -158,6 +160,7 @@ export function sliceFor(data, symbols, years) {
   const n = data.dates.length - first;
   const from = first + Math.max(0, n - (years * 12 + 1));
   return {
+    rf: Array.isArray(data.rf) ? data.rf.slice(from) : (data.rf ?? null),
     dates: data.dates.slice(from),
     series: Object.fromEntries(symbols.map((s) => [s, data.series[s].slice(from)])),
     limitedBy: from === first ? limiter : null, // set only when the start came from a late fund, not from the period
