@@ -17,6 +17,15 @@ const svg = (tag, attrs = {}) => {
 const money = (x) => (x < 0 ? "-" : "") + "$" + Math.round(Math.abs(x)).toLocaleString("en-US");
 const pct = (x, d = 1) => (x == null || Number.isNaN(x) ? "n/a" : (x * 100).toFixed(d) + "%");
 const spct = (x, d = 1) => (x == null ? "n/a" : (x >= 0 ? "+" : "") + (x * 100).toFixed(d) + "%");
+const TIPS = {
+  gain: "Ending value minus the money you put in, before taxes.",
+  year: "How fast the investments grew each year, as if $1 had stayed in the whole time. Your deposits and timing don't flatter it. Needs 12 months of history.",
+  ups: "How much the monthly returns swing, shown as a yearly figure (volatility). Higher means a bumpier ride.",
+  fall: "The biggest drop from a previous high point, before it recovered (maximum drawdown).",
+  sharpe: "Return above a safe cash rate (3-month Treasury bills) for each unit of ups and downs. Higher is better: below 0.5 is weak, around 1 is good, above 2 is rare. Needs 12 months of history.",
+  ends: "What the money would be worth on the last date, before taxes.",
+};
+const tip = (label, key) => el("span", { class: "tip", tabindex: "0", "data-tip": TIPS[key], "aria-description": TIPS[key] }, label);
 const monthYear = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "numeric" });
 
 const state = { years: 5, data: null, labels: {}, demo: true, source: "", rows: [], presets: [], mixName: "Your mix" };
@@ -32,7 +41,7 @@ async function load() {
   let d, demo = false;
   if (globalThis.UFO_DATA) d = globalThis.UFO_DATA; // set by scripts/build_single_page.py (one-file copy of the site)
   else try { d = await getJson("data/prices.json"); } catch { d = await getJson("data/demo-prices.json"); demo = true; }
-  state.data = { dates: d.dates, series: d.series };
+  state.data = { dates: d.dates, series: d.series, rf: d.rf ?? null }; // rf: cash rate in % a year (list per date, or one number)
   state.labels = d.labels || {};
   state.demo = demo;
   state.source = d.asOf ? `Prices to ${d.asOf}.` : "";
@@ -108,7 +117,7 @@ function render() {
     const needed = [...new Set([...Object.keys(mix), bench, ...others])];
     const data = sliceFor(state.data, needed, state.years);
     if (data.dates.length < 3) throw new Error("Not enough months of prices to compare.");
-    const r = compare({ prices: data.series, mix, benchmark: bench, initial, monthly, strategy: $("strategy").value });
+    const r = compare({ prices: data.series, mix, benchmark: bench, initial, monthly, strategy: $("strategy").value, rf: data.rf });
     draw({ r, dates: data.dates, monthly, bench, limitedBy: data.limitedBy, years: state.years });
     drawOthers({ data, mix, others, initial, monthly, mixEnd: r.mix.m.endValue });
   } catch (e) {
@@ -121,12 +130,14 @@ function render() {
 function card(kind, title, m) {
   const rows = [
     ["Gain", (m.gain >= 0 ? "+" : "") + money(m.gain)],
-    ["Per year", m.annualReturn == null ? "n/a (under 12 mo)" : spct(m.annualReturn)],
+    ["Per year", m.annualReturn == null ? "n/a" : spct(m.annualReturn)],
     ["Ups and downs", m.volatility == null ? "n/a" : pct(m.volatility)],
     ["Worst fall", pct(m.maxDrawdown)],
+    ["Sharpe ratio", m.sharpe == null ? "n/a" : m.sharpe.toFixed(2)],
   ];
+  const keys = ["gain", "year", "ups", "fall", "sharpe"];
   const dl = el("dl");
-  for (const [k, v] of rows) dl.append(el("dt", {}, k), el("dd", {}, v));
+  rows.forEach(([k, v], i) => dl.append(el("dt", {}, tip(k, keys[i])), el("dd", {}, v)));
   return el("div", { class: `card ${kind}` }, el("h3", {}, title), el("div", { class: "hero" }, money(m.endValue)), dl);
 }
 
@@ -163,7 +174,7 @@ function drawOthers({ data, mix, others, initial, monthly, mixEnd }) {
     const d = mixEnd - m.endValue;
     return el("tr", {}, el("td", {}, b), el("td", {}, money(m.endValue)), el("td", {}, m.annualReturn == null ? "n/a" : spct(m.annualReturn)), el("td", {}, (d >= 0 ? "+" : "-") + money(Math.abs(d))));
   });
-  const head = el("tr", {}, ...["Benchmark", "Ends at", "Per year", `${state.mixName} vs it`].map((t) => el("th", { scope: "col" }, t)));
+  const head = el("tr", {}, ...["Benchmark", "Ends at", "Per year", `${state.mixName} vs it`].map((t, i) => el("th", { scope: "col" }, i === 1 ? tip(t, "ends") : i === 2 ? tip(t, "year") : t)));
   box.replaceChildren(el("h3", {}, "Other benchmarks"), el("table", {}, el("thead", {}, head), el("tbody", {}, ...rows)));
 }
 
@@ -285,7 +296,7 @@ $("csv").addEventListener("change", async (e) => {
   try {
     const parsed = parsePricesCsv(await file.text());
     if (parsed.dates.length < 13) throw new Error("Need at least 13 months of prices that every fund shares.");
-    state.data = { dates: parsed.dates, series: parsed.series };
+    state.data = { dates: parsed.dates, series: parsed.series, rf: null }; // no cash rate in a CSV, so no Sharpe
     state.labels = {}; state.demo = false; state.source = ""; state.presets = []; state.mixName = "Your mix";
     const names = Object.keys(parsed.series);
     state.rows = names.slice(0, 2).map((s, i) => ({ sym: s, w: i ? 40 : 60 }));
