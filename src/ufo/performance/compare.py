@@ -120,7 +120,8 @@ def run_all(reg: Registry, root: Path, store: PriceStore, benchmark: str = "VTI"
     return [run_account(a, root, store, benchmark, today, max_age) for a in reg.accounts]
 
 
-def print_table(runs: list[AccountRun], benchmark: str, console: Console | None = None, notes: list[str] | None = None) -> None:
+def print_table(runs: list[AccountRun], benchmark: str, console: Console | None = None, notes: list[str] | None = None,
+                groups: list | None = None) -> None:
     c = console or Console()
     t = Table(title=f"All accounts vs {benchmark}", header_style="bold")
     for col, right in (("Account", False), ("Type", False), ("Value", True), ("Net in", True), ("IRR", True),
@@ -134,6 +135,15 @@ def print_table(runs: list[AccountRun], benchmark: str, console: Console | None 
         rep = r.result.report
         t.add_row(a.label, a.wrapper.value, money(r.end_value), ("-" if r.net_contributions < 0 else "") + money(abs(r.net_contributions)), pct(rep.irr), spct(rep.excess_irr),
                   r.quality, ", ".join(r.flags))
+    for g in groups or []:
+        if g.error or g.report is None:
+            t.add_row(f"[bold]{g.name}[/bold]", "combined", "", "", "", "", "[red]not computed[/red]", g.error)
+            continue
+        rep = g.report
+        net = rep.contributed - rep.withdrawn
+        t.add_row(f"[bold]{g.name}[/bold]", "combined", money(g.end_value), ("-" if net < 0 else "") + money(abs(net)), pct(rep.irr),
+                  spct(rep.excess_irr), g.quality, f"{len(g.transfers)} internal transfers netted")
+        notes = list(notes or []) + g.unmatched
     c.print(t)
     for n in notes or []:
         c.print(f"[dim]- {n}[/dim]")
