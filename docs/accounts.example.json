@@ -1,0 +1,28 @@
+{
+  "accounts": [
+    {
+      "id": "brokerage-a-taxable",
+      "label": "Example taxable",
+      "brokerage": "fidelity",
+      "last_digits": "0000",
+      "wrapper": "taxable",
+      "owner": "owner",
+      "opened": "2019-03-01",
+      "closed": null,
+      "source": {"importer": "fidelity", "history_glob": "exports/example-taxable/History*.csv", "snapshot_glob": "exports/snapshots/*.csv"},
+      "ending_value": {"kind": "statement", "value": 12345.67, "as_of": "2026-10-31"}
+    },
+    {
+      "id": "example-roth",
+      "label": "Example Roth",
+      "brokerage": "fidelity",
+      "last_digits": "1111",
+      "wrapper": "roth_ira",
+      "owner": "partner",
+      "opened": "2021-01-15",
+      "closed": null,
+      "source": {"importer": "fidelity", "history_glob": "exports/example-roth/History*.csv", "snapshot_glob": ""},
+      "ending_value": {"kind": "snapshot", "value": null, "as_of": null}
+    }
+  ]
+}
