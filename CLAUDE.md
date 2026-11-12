@@ -61,7 +61,7 @@ Tests: `.venv/bin/python -m pytest -q` (309). Lint for undefined names: `.venv/b
 - Financial output is information, not advice; keep the disclaimer in user-facing text.
 
 ## Design decisions (details in `docs/decisions/`)
-Python, lean stack; no database or server until a feature needs one (0001). Read-only v1 (0002). Telegram first, SMS later (0003). Minimal write-only remote alerts (0004). Bills: card statement balances + manual bills + scheduled deposits, check the running balance, rent $0 unless paid from Joint (0005). Per-chat detail levels, exact numbers never over a chat (0006). KPIs: excess IRR (vs a total-market index) for portfolio tools, partner asks per month for the overdraft protector (0007).
+Python, lean stack; no database or server until a feature needs one (0001). Read-only v1 (0002). Telegram first, SMS later (0003). Minimal write-only remote alerts (0004). Bills: card statement balances + manual bills + scheduled deposits, check the running balance, rent $0 unless paid from Joint (0005). Per-chat detail levels, exact numbers never over a chat (0006). KPIs: excess IRR (vs a total-market index) for portfolio tools, partner asks per month for the overdraft protector (0007). How accounts are compared fairly in M10 (aligned windows, pre-tax, internal transfers net out in combined views, local only): 0011.
 
 ## Pitfalls already hit (do not repeat)
 - **Chase OAuth:** linking the same bank again creates a second Plaid connection and Chase breaks the first (`ITEM_LOGIN_REQUIRED`). The link flow prunes superseded connections; accounts are de-duplicated across connections; a broken connection is skipped, and the job prints a plain message and exits 2 instead of a traceback.
