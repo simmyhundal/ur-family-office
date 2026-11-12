@@ -47,13 +47,20 @@ def build(universe: list[list[str]], store: PriceStore, start: date, end: date, 
     dates = [per[REQUIRED][m][0].isoformat() for m in months]
     series = {s: [round(m[k][1], 4) if k in m else None for k in months] for s, m in per.items()}
     names = dict(universe)
-    return {"asOf": dates[-1], "source": "Yahoo Finance adjusted closes, fetched by GitHub Actions", "dates": dates,
+    rf = None
+    try:  # 3-month T-bill yield (percent a year) at each month-end; Sharpe needs it, everything else does not
+        bills = store.risk_free(start, end)
+        vals = [bills.on_or_before(date.fromisoformat(d)) for d in dates]
+        rf = [round(v, 3) if v is not None else None for v in vals] if any(v is not None for v in vals) else None
+    except PriceError as e:
+        skipped.append(f"cash rate: {e}")
+    return {"rf": rf, "asOf": dates[-1], "source": "Yahoo Finance adjusted closes, fetched by GitHub Actions", "dates": dates,
             "labels": {s: names[s] for s in series}, "series": series, "skipped": skipped}
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--years", type=int, default=6)
+    ap.add_argument("--years", type=int, default=11)  # the page offers up to 10 years
     ap.add_argument("--out", default=str(ROOT / "site" / "data" / "prices.json"))
     a = ap.parse_args()
     universe = json.loads((ROOT / "site" / "data" / "universe.json").read_text())
