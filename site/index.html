@@ -16,7 +16,7 @@
 
 <main class="wrap">
   <section class="panel" aria-labelledby="mix-h">
-    <h2 id="mix-h">Your mix</h2>
+    <div class="mix-head"><h2 id="mix-h">Mix</h2><label class="inline">Start from <select id="preset"></select></label></div>
     <div id="rows"></div>
     <div class="row-actions">
       <button type="button" id="add-row" class="secondary">Add a fund</button>
@@ -47,6 +47,7 @@
     <p id="period-line" class="muted"></p>
     <div class="cards" id="cards"></div>
     <p id="verdict" class="verdict" aria-live="polite"></p>
+    <div id="benchmarks" class="bench-table"></div>
     <figure class="chart-fig">
       <div class="chart-head">
         <figcaption id="chart-title">Value over time</figcaption>
