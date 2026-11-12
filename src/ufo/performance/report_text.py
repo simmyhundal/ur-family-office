@@ -29,22 +29,22 @@ def print_report(res: Result, console: Console | None = None) -> None:
     head.append(f"Your cash flows earned {pct(r.irr)} a year; the same flows in {res.benchmark} would have earned {pct(r.index_irr)}.")
     c.print(Panel(head, title="Fidelity performance", border_style=color, padding=(1, 2)))
 
-    mx = r.mix
-    t = Table(title=f"You vs {res.benchmark}" + (f" vs {mx.name}" if mx else ""), header_style="bold", show_lines=False)
+    sc = r.scenarios
+    t = Table(title=f"You vs {res.benchmark}" + "".join(f" vs {x.name}" for x in sc), header_style="bold", show_lines=False)
     t.add_column("Measure")
     t.add_column("You", justify="right")
     t.add_column(res.benchmark, justify="right")
-    if mx:
-        t.add_column(mx.name, justify="right")
-    add = lambda *cells, extra="": t.add_row(*cells, *([extra] if mx else []))
-    add("IRR (money-weighted)", pct(r.irr), pct(r.index_irr), extra=pct(mx.irr) if mx else "")
-    add("Excess IRR", spct(ex), "", extra=spct(mx.irr - r.index_irr) if mx and mx.irr is not None and r.index_irr is not None else "")
-    add("Worth today (same deposits/withdrawals)", money(r.end_value), money(r.index_end_value), extra=money(mx.end_value) if mx else "")
+    for x in sc:
+        t.add_column(x.name, justify="right")
+    add = lambda *cells, per=lambda x: "": t.add_row(*cells, *[per(x) for x in sc])
+    add("IRR (money-weighted)", pct(r.irr), pct(r.index_irr), per=lambda x: pct(x.irr))
+    add("Excess IRR", spct(ex), "", per=lambda x: spct(x.irr - r.index_irr) if x.irr is not None and r.index_irr is not None else "")
+    add("Worth today (same deposits/withdrawals)", money(r.end_value), money(r.index_end_value), per=lambda x: money(x.end_value))
     add("PME (Kaplan-Schoar), >1 beats index", num(r.pme, 3), "")
-    add("Time-weighted return / yr (est.)", pct(r.twr_annual), pct(r.index_twr_annual), extra=pct(mx.twr_annual) if mx else "")
-    add("Sharpe ratio (est.)", num(r.sharpe), num(r.index_sharpe), extra=num(mx.sharpe) if mx else "")
+    add("Time-weighted return / yr (est.)", pct(r.twr_annual), pct(r.index_twr_annual), per=lambda x: pct(x.twr_annual))
+    add("Sharpe ratio (est.)", num(r.sharpe), num(r.index_sharpe), per=lambda x: num(x.sharpe))
     add("Volatility / yr", pct(r.volatility), pct(r.index_volatility))
-    add("Max drawdown", pct(r.max_drawdown), pct(r.index_max_drawdown), extra=pct(mx.max_drawdown) if mx else "")
+    add("Max drawdown", pct(r.max_drawdown), pct(r.index_max_drawdown), per=lambda x: pct(x.max_drawdown))
     add("Beta / yearly alpha", f"{num(r.beta)} / {spct(r.alpha)}", "")
     c.print(t)
 

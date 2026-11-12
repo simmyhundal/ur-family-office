@@ -99,6 +99,8 @@ class Scenario(BaseModel):
     sharpe: float | None
     max_drawdown: float
     note: str = ""
+    kind: str = "benchmark"  # "plan" for the owner's own target mix, "benchmark" for a comparison
+    description: str = ""
 
 
 def basket_units(external: list[tuple[date, float]], weights: dict[str, float], series: dict[str, Series]):
@@ -265,7 +267,7 @@ class Report(BaseModel):
     index_max_drawdown: float
     beta: float | None
     alpha: float | None
-    mix: Scenario | None = None
+    scenarios: list[Scenario] = []
     index_end_value: float  # what the same cash flows would be worth at `end` if held in the index
     index_values: list[float]  # the same, at each month end in `months`
     months: list[date]
@@ -279,7 +281,8 @@ class Report(BaseModel):
 
 def analyze(external: list[tuple[date, float]], month_ends: list[date], values: list[float], index: Series,
             rf: Series, end: date, end_value: float, returns: list[float | None] | None = None,
-            mix: tuple[str, dict[str, float], dict[str, Series]] | None = None) -> Report:
+            scenarios: list[tuple[str, dict[str, float], str, str]] | None = None,
+            scenario_series: dict[str, Series] | None = None) -> Report:
     """`returns` are optional month-by-month portfolio returns (e.g. holdings-based); otherwise modified Dietz."""
     ext = sorted(external)
     port = monthly_returns(month_ends, values, ext)
@@ -303,9 +306,12 @@ def analyze(external: list[tuple[date, float]], month_ends: list[date], values: 
     irr = xirr(investor_flows(ext, end, end_value))
     idx = index_counterfactual(ext, index, end)
     ba = beta_alpha(p_r, b_r, r_f)
-    scenario = basket_scenario(mix[0], mix[1], mix[2], ext, month_ends, keep, r_f, end) if mix else None
+    built = []
+    for name, weights, kind, desc in scenarios or []:
+        sc = basket_scenario(name, weights, scenario_series or {}, ext, month_ends, keep, r_f, end)
+        built.append(sc.model_copy(update={"kind": kind, "description": desc}))
     return Report(
-        mix=scenario, start=ext[0][0] if ext else month_ends[0], end=end, end_value=end_value,
+        scenarios=built, start=ext[0][0] if ext else month_ends[0], end=end, end_value=end_value,
         contributed=sum(a for _, a in ext if a > 0), withdrawn=-sum(a for _, a in ext if a < 0),
         irr=irr, index_irr=idx.irr, index_note=idx.note,
         excess_irr=(irr - idx.irr) if irr is not None and idx.irr is not None else None,
