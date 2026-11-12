@@ -17,9 +17,11 @@ Update the "Current state" section at the end of every session.
 
 **Planned: move the portfolio source to Interactive Brokers (2026-11-12).** The owner's IBKR Pro account is awaiting approval (Pro, because the API is Pro-only). [M8](https://github.com/simmyhundal/ur-family-office/milestone/8) is read-only (live data, rebalance trade list, withdrawable cash) and [M9](https://github.com/simmyhundal/ur-family-office/milestone/9) is execution for the owner's own accounts. **M9 is gated: CLAUDE.md's read-only rule and decision 0002 stand until the owner accepts [decision 0010](https://github.com/simmyhundal/ur-family-office/issues/73) and edits the safety rules.** No order-capable code before then.
 
+**Prototype (2026-11-12, not deployed):** `site/` is a static, browser-only page that compares a user's mix of funds with a benchmark side by side (buy-and-hold or rebalanced, optional monthly deposits, own prices via CSV). Demo prices are **invented** (`scripts/make_demo_prices.py`), so nothing is licensed or real. `site/js/calc.mjs` matches `src/ufo/performance/metrics.py` to 1e-9 (`tests/test_site_parity.py`; node tests: `node --test tests/site/calc.test.mjs`). It is the spike for [issue 56](https://github.com/simmyhundal/ur-family-office/issues/56) and [issue 58](https://github.com/simmyhundal/ur-family-office/issues/58); publishing waits on [issue 55](https://github.com/simmyhundal/ur-family-office/issues/55), [issue 57](https://github.com/simmyhundal/ur-family-office/issues/57), [issue 61](https://github.com/simmyhundal/ur-family-office/issues/61) and [issue 62](https://github.com/simmyhundal/ur-family-office/issues/62). Details in `site/README.md`.
+
 **Not modeled:** any outflow other than cards and manual bills (see the M2 milestone).
 
-Tests: `.venv/bin/python -m pytest -q` (302). Lint for undefined names: `.venv/bin/ruff check --select F src jobs scripts tests`.
+Tests: `.venv/bin/python -m pytest -q` (304). Lint for undefined names: `.venv/bin/ruff check --select F src jobs scripts tests`.
 
 ## Run it
 - Fidelity performance report (excess IRR, Sharpe, charts; local only): `python -m jobs.performance_report --account <last digits> --end YYYY-MM-DD --end-value <statement value> [--checkpoint DATE=VALUE:label ...]`. Reads `exports/*/History*.csv` (activity history) and `exports/snapshots/*.csv` (positions, names end in Mon-DD-YYYY); writes `exports/performance-report.html` (0600). Needs network only for ticker prices (Yahoo) and the T-bill rate (FRED).
