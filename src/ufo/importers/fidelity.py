@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ufo.importers import register
-from ufo.performance.events import ParsedHistory, merge_histories
+from ufo.performance.events import ParsedHistory, merge_histories, split_by_account
 from ufo.performance.ledger import Snapshot
 from ufo.providers.fidelity_csv import parse_fidelity_positions
 from ufo.providers.fidelity_history import parse_fidelity_history
@@ -25,6 +25,8 @@ class FidelityImporter:
         hist = merge_histories(parts)
         for e in hist.events:
             e.source = self.name
+        if account_digits and any(e.account_ref for e in hist.events):  # an export that holds several accounts
+            hist = split_by_account(hist, account_digits)
         return hist
 
     def positions(self, files: list[str], account_digits: str = "") -> list[Snapshot]:

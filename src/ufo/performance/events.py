@@ -38,6 +38,7 @@ class Event(BaseModel):
     cash_balance: float | None = None  # Fidelity's running cash (core money-market) balance after this row
     seq: int = 0  # position within a day, oldest first (the export is newest-first, so it is reversed)
     account_id: str = ""  # registry id of the account the row belongs to ("" when an importer is run on its own)
+    account_ref: str = ""  # the account text exactly as the file gives it (digits/name), when a file holds several accounts
     source: str = ""  # importer name that produced the row, e.g. "fidelity"
     transfer_hint: bool = False  # the importer knows this contribution/withdrawal is a move between household accounts
 
@@ -69,3 +70,10 @@ def merge_histories(parts: list[ParsedHistory]) -> ParsedHistory:
     events = sorted((e for p in parts for e in p.events), key=lambda e: (e.when, e.seq))
     return ParsedHistory(events=events, warnings=warnings,
                          first=events[0].when if events else None, last=events[-1].when if events else None)
+
+
+def split_by_account(hist: ParsedHistory, digits: str) -> ParsedHistory:
+    """Keep the rows whose account text ends with `digits` (rows with no account text are kept: a single-account file)."""
+    keep = [e for e in hist.events if not e.account_ref or e.account_ref.endswith(digits)]
+    return ParsedHistory(events=keep, warnings=hist.warnings, first=keep[0].when if keep else None,
+                         last=keep[-1].when if keep else None)
