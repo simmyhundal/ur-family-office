@@ -20,7 +20,7 @@ from datetime import date, datetime, timedelta
 
 from pydantic import BaseModel
 
-from ufo.providers.fidelity_history import Event, Kind
+from ufo.performance.events import Event, Kind
 from ufo.providers.prices import Series
 
 CUSIP = re.compile(r"^[0-9A-Z]{9}$")
@@ -63,6 +63,7 @@ class Snapshot(BaseModel):
     """Shares per symbol that Fidelity reported on a date (a positions export), in that date's share units."""
     when: date
     quantities: dict[str, float]
+    value: float | None = None  # the brokerage's own total for the account on that date, when the file has it
 
 
 class Breakdown(BaseModel):

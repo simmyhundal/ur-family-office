@@ -13,8 +13,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ValidationError, field_validator, model_validator
 
-# Importers that can read an account's files. Issue 99 replaces this with the real importer registry.
-KNOWN_BROKERAGES: set[str] = {"fidelity"}
+from ufo import importers
 
 
 class RegistryError(Exception):
@@ -75,8 +74,8 @@ class Account(BaseModel):
     @classmethod
     def _brokerage(cls, v: str) -> str:
         v = v.strip().lower()
-        if v not in KNOWN_BROKERAGES:
-            raise ValueError(f"unknown brokerage {v!r}; known: {', '.join(sorted(KNOWN_BROKERAGES))}")
+        if v not in importers.names():
+            raise ValueError(f"unknown brokerage {v!r}; known: {', '.join(sorted(importers.names()))}")
         return v
 
     @model_validator(mode="after")

@@ -8,10 +8,10 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from ufo import importers
 from ufo.performance import metrics as M
+from ufo.performance.events import ParsedHistory
 from ufo.performance.ledger import Checkpoint, Ledger, Snapshot, is_fixed_income
-from ufo.providers.fidelity_csv import parse_fidelity_positions
-from ufo.providers.fidelity_history import merge_histories, parse_fidelity_history
 from ufo.providers.prices import PriceStore
 
 SNAPSHOT_TOLERANCE = 0.02  # a positions export is priced intraday, so ~2% against a close is normal
@@ -38,12 +38,24 @@ def run(history_files: list[str], snapshot_files: list[str], account_mask: str, 
         store: PriceStore, benchmark: str = "VTI", statement_values: list[tuple[date, float, str]] | None = None,
         mix: dict[str, float] | None = None, mix_name: str = "Target mix",
         also: list[tuple[str, dict[str, float], str]] | None = None) -> Result:
-    """`mix` is the owner's own plan; `also` are extra comparisons as (name, weights, one-line description)."""
-    parts = [parse_fidelity_history(Path(f).read_text(encoding="utf-8-sig")) for f in sorted(history_files)]
-    hist = merge_histories(parts)
+    """The single-account Fidelity entry point: a thin wrapper over `run_core` through the importer interface."""
+    imp = importers.get("fidelity")
+    hist = imp.parse(history_files)
+    snaps = imp.positions(snapshot_files, account_mask)
+    extra = [f"{Path(f).name}: no holdings for account ending {account_mask}." for f in sorted(snapshot_files)
+             if _snapshot_date(f) and _snapshot_date(f) not in {s.when for s in snaps}]
+    return run_core(hist, snaps, end, end_value, store, benchmark, statement_values, mix, mix_name, also, extra)
+
+
+def run_core(hist: ParsedHistory, snapshots: list[Snapshot], end: date, end_value: float, store: PriceStore,
+             benchmark: str = "VTI", statement_values: list[tuple[date, float, str]] | None = None,
+             mix: dict[str, float] | None = None, mix_name: str = "Target mix",
+             also: list[tuple[str, dict[str, float], str]] | None = None, extra_warnings: list[str] | None = None) -> Result:
+    """Brokerage-neutral core: already-parsed events and snapshots in, a Result out. `mix` is the owner's own plan;
+    `also` are extra comparisons as (name, weights, one-line description)."""
     if not hist.events:
         raise ValueError("No transactions found in the history files.")
-    warnings = list(hist.warnings)
+    warnings = list(hist.warnings) + list(extra_warnings or [])
     symbols = sorted({e.symbol for e in hist.events if e.symbol and not is_fixed_income(e.symbol)})
     start = hist.first - timedelta(days=5)
     scen = ([(mix_name, mix, "plan", "")] if mix else []) + [(n, w, "benchmark", d) for n, w, d in (also or [])]
@@ -56,19 +68,9 @@ def run(history_files: list[str], snapshot_files: list[str], account_mask: str, 
     ledger = Ledger(hist.events, prices)
     warnings += ledger.warnings
 
-    snaps, checks = [], []
-    for f in snapshot_files:
-        d = _snapshot_date(f)
-        if not d:
-            continue
-        holdings, w = parse_fidelity_positions(Path(f).read_text(encoding="utf-8-sig"))
-        mine = [h for h in holdings if account_mask in f"{h['account']}{h['account_mask']}"]
-        if not mine:
-            warnings.append(f"{Path(f).name}: no holdings for account ending {account_mask}.")
-            continue
-        snaps.append(Snapshot(when=d, quantities={h["symbol"]: h["quantity"] for h in mine if not h["is_cash"]}))
-        checks.append((Checkpoint(when=d - timedelta(days=1), value=sum(h["value"] or 0.0 for h in mine), source="positions snapshot"),
-                       SNAPSHOT_TOLERANCE))
+    checks = [(Checkpoint(when=sn.when - timedelta(days=1), value=sn.value, source="positions snapshot"), SNAPSHOT_TOLERANCE)
+              for sn in snapshots if sn.value is not None]
+    snaps = snapshots
     ledger.anchor(snaps)
     for d, v, src in statement_values or []:
         checks.append((Checkpoint(when=d, value=v, source=src), STATEMENT_TOLERANCE))

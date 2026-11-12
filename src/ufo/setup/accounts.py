@@ -4,7 +4,8 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
-from ..accounts.registry import (KNOWN_BROKERAGES, Account, EndValue, Registry, RegistryError, Source, Wrapper,
+from .. import importers
+from ..accounts.registry import (Account, EndValue, Registry, RegistryError, Source, Wrapper,
                                  load_registry, missing_files, registry_path, save_registry)
 from .prompts import Prompter
 
@@ -47,7 +48,7 @@ def ask_account(p: Prompter, existing: Account | None = None, taken: set[str] = 
         if aid in taken and not (e and e.id == aid):
             p.say(f"The id {aid!r} is already used.")
             continue
-        brokerages = sorted(KNOWN_BROKERAGES)
+        brokerages = sorted(importers.names())
         b = brokerages[p.choose("brokerage", "Brokerage", brokerages)]
         w = WRAPPERS[p.choose("wrapper", "Account type", [x.value for x in WRAPPERS])]
         digits = p.ask("digits", "Last digits (kept on this Mac only; - for none)", e.last_digits if e and e.last_digits else "-")
