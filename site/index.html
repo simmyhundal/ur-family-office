@@ -28,16 +28,18 @@
   <section class="panel" aria-labelledby="setup-h">
     <h2 id="setup-h">Compare with</h2>
     <div class="controls">
-      <label>Benchmark<input id="benchmark" list="tickers" autocomplete="off" spellcheck="false" value="SPY"></label>
-      <label>Period<select id="years">
-        <option value="1">1 year</option><option value="2">2 years</option><option value="3">3 years</option>
-        <option value="4">4 years</option><option value="5" selected>5 years</option></select></label>
-      <label>Style<select id="strategy">
+      <label><span class="tip" tabindex="0" data-tip="A simple yardstick fund to measure against. SPY tracks the 500 biggest US companies (the S&amp;P 500)." aria-description="A simple yardstick fund to measure against. SPY tracks the 500 biggest US companies (the S&amp;P 500).">Benchmark</span><input id="benchmark" list="tickers" autocomplete="off" spellcheck="false" value="SPY"></label>
+      <div class="field"><span id="years-l" class="lbl">History</span>
+        <div class="seg" role="group" aria-labelledby="years-l">
+          <button type="button" data-years="1">1y</button><button type="button" data-years="3">3y</button>
+          <button type="button" data-years="5" aria-pressed="true">5y</button><button type="button" data-years="10">10y</button>
+          <button type="button" data-years="99">Max</button></div></div>
+      <label><span class="tip" tabindex="0" data-tip="Buy and hold never trades. Rebalancing sells what grew and buys what lagged, to get back to your weights, every year or month." aria-description="Buy and hold never trades. Rebalancing sells what grew and buys what lagged, to get back to your weights, every year or month.">Style</span><select id="strategy">
         <option value="hold">Buy and hold</option>
         <option value="annual">Rebalance yearly</option>
         <option value="monthly">Rebalance monthly</option></select></label>
-      <label>Start ($)<input id="initial" type="number" min="1" step="100" value="10000" inputmode="decimal"></label>
-      <label>Add monthly ($)<input id="monthly" type="number" min="0" step="50" value="0" inputmode="decimal"></label>
+      <label><span class="tip" tabindex="0" data-tip="The amount invested on the first day." aria-description="The amount invested on the first day.">Start ($)</span><input id="initial" type="number" min="1" step="100" value="10000" inputmode="decimal"></label>
+      <label><span class="tip" tabindex="0" data-tip="Money added at the end of every month, split by your weights." aria-description="Money added at the end of every month, split by your weights.">Add monthly ($)</span><input id="monthly" type="number" min="0" step="50" value="0" inputmode="decimal"></label>
     </div>
     <p id="error" class="error" role="alert"></p>
   </section>
@@ -71,7 +73,7 @@
 </main>
 
 <footer class="wrap muted small">
-  <p>Adjusted prices, before taxes and trading costs. Deposits at month-end. Past results don't predict future ones. Not advice.</p>
+  <p><span class="tip" tabindex="0" data-tip="Prices that count dividends as reinvested, so funds that pay income are compared fairly." aria-description="Prices that count dividends as reinvested, so funds that pay income are compared fairly.">Adjusted prices</span>, before taxes and trading costs. Deposits at month-end. Past results don't predict future ones. Not advice.</p>
 </footer>
 <script type="module" src="js/app.js"></script>
 </body>

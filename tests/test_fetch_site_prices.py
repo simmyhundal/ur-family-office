@@ -30,7 +30,9 @@ class Fake:
         return pts
 
     def fetch_risk_free(self, start, end):
-        return []
+        if getattr(self, "no_rf", False):
+            raise PriceError("no rate")
+        return [Point(day=start + timedelta(days=i * 10), value=4.0 + i * 0.01) for i in range(((end - start).days // 10) + 1)]
 
 
 def _universe(n):
@@ -81,3 +83,13 @@ def test_presets_are_well_formed():
     for p in presets:
         assert abs(sum(p["weights"].values()) - 100) < 1e-9, p["name"]
         assert set(p["weights"]) <= universe, p["name"]  # every fund has prices in the universe
+
+
+def test_cash_rate_is_aligned_to_the_dates_and_optional(tmp_path):
+    uni = _universe(25)
+    doc = F.build(uni, PriceStore(tmp_path / "a", Fake({}), today=date(2025, 3, 20)), date(2024, 1, 1), date(2025, 3, 20))
+    assert len(doc["rf"]) == len(doc["dates"]) and all(4.0 <= v < 6.0 for v in doc["rf"])
+    broken = Fake({})
+    broken.no_rf = True
+    doc2 = F.build(uni, PriceStore(tmp_path / "b", broken, today=date(2025, 3, 20)), date(2024, 1, 1), date(2025, 3, 20))
+    assert doc2["rf"] is None and any("cash rate" in s for s in doc2["skipped"])

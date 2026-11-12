@@ -38,35 +38,39 @@ def _walk(seed: int, n: int, drift: float, vol: float) -> list[float]:
 
 
 def _python_numbers(days, prices, weights, initial, monthly, rf):
+    """`rf`: annual percent, flat (a number) or one value per date (a list)."""
     series = {s: Series(symbol=s, points=[Point(day=d, value=v) for d, v in zip(days, vals)]) for s, vals in prices.items()}
     external = [(days[0], initial)] + [(d, monthly) for d in days[1:] if monthly > 0]
     steps = M.basket_units(external, weights, series)
     values = [M.basket_value(steps, series, d) for d in days]
     mr = M.monthly_returns(days, values, sorted(external))
     rets = [m.ret for m in mr[1:]]
-    rfm = (1 + rf / 100) ** (1 / 12) - 1
+    rfs = rf if isinstance(rf, list) else [rf] * len(days)
+    rfm = [(1 + y / 100) ** (1 / 12) - 1 for y in rfs[: len(rets)]]  # the rate at the start of each month
     growth = M.growth_index(rets)
     return {
         "endValue": values[-1],
         "annualReturn": M.annualize(growth[-1], len(rets)),
         "volatility": M.volatility(rets),
-        "sharpe": M.sharpe([r - rfm for r in rets]),
+        "sharpe": M.sharpe([r - f for r, f in zip(rets, rfm)]),
         "maxDrawdown": M.max_drawdown(growth),
         "values": values,
     }
 
 
+@pytest.mark.parametrize("rf", [3.0, "varying"])
 @pytest.mark.parametrize("monthly", [0, 250])
-def test_buy_and_hold_matches_python(monthly):
+def test_buy_and_hold_matches_python(monthly, rf):
     n = 61
     days = _month_ends(n)
     prices = {"AAA": _walk(1, n, 0.008, 0.04), "BBB": _walk(2, n, 0.004, 0.02), "CCC": _walk(3, n, 0.006, 0.05)}
     weights = {"AAA": 50.0, "BBB": 30.0, "CCC": 20.0}
-    payload = {"prices": prices, "weights": weights, "initial": 10000, "monthly": monthly, "rf": 3.0}
+    rf = [0.5 + 0.08 * i for i in range(n)] if rf == "varying" else rf
+    payload = {"prices": prices, "weights": weights, "initial": 10000, "monthly": monthly, "rf": rf}
     out = subprocess.run(["node", str(ROOT / "tests/site/parity_run.mjs")], input=json.dumps(payload), capture_output=True,
                          text=True, check=True).stdout
     js = json.loads(out)
-    py = _python_numbers(days, prices, weights, 10000, monthly, 3.0)
+    py = _python_numbers(days, prices, weights, 10000, monthly, rf)
     for key in ("endValue", "annualReturn", "volatility", "sharpe", "maxDrawdown"):
         assert js[key] == pytest.approx(py[key], rel=1e-9, abs=1e-12), key
     assert all(math.isclose(a, b, rel_tol=1e-9) for a, b in zip(js["values"], py["values"]))
