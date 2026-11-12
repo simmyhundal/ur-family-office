@@ -146,14 +146,6 @@ export function toMonthly(obs) {
   return { dates, series, dropped: Math.max(...syms.map((s) => perSym[s].size)) - months.length };
 }
 
-/** Last `years` of data (years*12 months after the start date), or all of it if shorter. */
-export function window(data, years) {
-  const n = data.dates.length;
-  const keep = Math.min(n, years * 12 + 1);
-  const from = n - keep;
-  return { dates: data.dates.slice(from), series: Object.fromEntries(Object.entries(data.series).map(([s, v]) => [s, v.slice(from)])) };
-}
-
 /** Months to use for these symbols: from the latest first-price to the end, then the last `years` of that.
  *  A fund that started later shortens the period; `from` says which symbol set the start. */
 export function sliceFor(data, symbols, years) {

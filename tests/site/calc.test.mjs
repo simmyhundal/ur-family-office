@@ -1,7 +1,7 @@
 // Known-answer tests for site/js/calc.mjs. Every number is invented.   Run: node --test tests/site/
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sliceFor, simulate, metrics, compare, parsePricesCsv, toMonthly, window, normalizeWeights, maxDrawdown } from "../../site/js/calc.mjs";
+import { sliceFor, simulate, metrics, compare, parsePricesCsv, toMonthly, normalizeWeights, maxDrawdown } from "../../site/js/calc.mjs";
 
 const close = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} vs ${b}`);
 
@@ -99,14 +99,6 @@ test("CSV: bad input gets a plain message", () => {
   assert.throws(() => parsePricesCsv("date,AAA\n2024-01-31,1"), /at least two/);
 });
 
-test("window keeps the last N years of month-ends plus the start point", () => {
-  const dates = Array.from({ length: 80 }, (_, i) => `d${i}`);
-  const w = window({ dates, series: { A: dates.map((_, i) => i + 1) } }, 5);
-  assert.equal(w.dates.length, 61);
-  assert.equal(w.dates.at(-1), "d79");
-  assert.equal(window({ dates: ["a", "b"], series: { A: [1, 2] } }, 5).dates.length, 2);
-});
-
 test("CSV: a blank cell means the fund had not started yet, those months are dropped", () => {
   const d = parsePricesCsv("date,AAA,BBB\n2024-01-31,10,\n2024-02-29,11,\n2024-03-29,12,5\n2024-04-30,13,6\n");
   assert.deepEqual(d.dates, ["2024-03-29", "2024-04-30"]);
@@ -144,7 +136,7 @@ test("daily prices with weekends, holidays and a later-starting fund line up on 
     assert.ok(![0, 6].includes(dt.getUTCDay()), iso + " should be a business day");
     assert.notEqual(dt.getUTCMonth(), next.getUTCMonth(), iso + " should be within the last three days of its month");
   }
-  const r = compare({ prices: window(d, 1).series, mix: { AAA: 1, BBB: 1 }, benchmark: "AAA", initial: 1000 });
+  const r = compare({ prices: sliceFor(d, ["AAA", "BBB"], 1).series, mix: { AAA: 1, BBB: 1 }, benchmark: "AAA", initial: 1000 });
   assert.ok(r.mix.m.endValue > 1000 && r.bench.m.months === 12);
 });
 

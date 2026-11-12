@@ -29,7 +29,8 @@ async function getJson(url) {
 
 async function load() {
   let d, demo = false;
-  try { d = await getJson("data/prices.json"); } catch { d = await getJson("data/demo-prices.json"); demo = true; }
+  if (globalThis.UFO_DATA) d = globalThis.UFO_DATA; // set by scripts/build_single_page.py (one-file copy of the site)
+  else try { d = await getJson("data/prices.json"); } catch { d = await getJson("data/demo-prices.json"); demo = true; }
   state.data = { dates: d.dates, series: d.series };
   state.labels = d.labels || {};
   state.demo = demo;
