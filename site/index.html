@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portfolio vs benchmark</title>
+<meta name="description" content="Enter your mix of funds and see how it did against a benchmark like SPY.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="wrap">
+  <h1>Portfolio vs benchmark</h1>
+  <p class="lede">Enter your mix. See how it did against SPY or any benchmark.</p>
+  <p id="data-banner" class="banner" role="status"></p>
+</header>
+
+<main class="wrap">
+  <section class="panel" aria-labelledby="mix-h">
+    <h2 id="mix-h">Your mix</h2>
+    <div id="rows"></div>
+    <div class="row-actions">
+      <button type="button" id="add-row" class="secondary">Add a fund</button>
+      <span id="weight-note" class="muted"></span>
+    </div>
+    <datalist id="tickers"></datalist>
+  </section>
+
+  <section class="panel" aria-labelledby="setup-h">
+    <h2 id="setup-h">Compare with</h2>
+    <div class="controls">
+      <label>Benchmark<input id="benchmark" list="tickers" autocomplete="off" spellcheck="false" value="SPY"></label>
+      <label>Period<select id="years">
+        <option value="1">1 year</option><option value="2">2 years</option><option value="3">3 years</option>
+        <option value="4">4 years</option><option value="5" selected>5 years</option></select></label>
+      <label>Style<select id="strategy">
+        <option value="hold">Buy and hold</option>
+        <option value="annual">Rebalance yearly</option>
+        <option value="monthly">Rebalance monthly</option></select></label>
+      <label>Start ($)<input id="initial" type="number" min="1" step="100" value="10000" inputmode="decimal"></label>
+      <label>Add monthly ($)<input id="monthly" type="number" min="0" step="50" value="0" inputmode="decimal"></label>
+    </div>
+    <p id="error" class="error" role="alert"></p>
+  </section>
+
+  <section aria-labelledby="res-h">
+    <h2 id="res-h">Results</h2>
+    <p id="period-line" class="muted"></p>
+    <div class="cards" id="cards"></div>
+    <p id="verdict" class="verdict" aria-live="polite"></p>
+    <figure class="chart-fig">
+      <div class="chart-head">
+        <figcaption id="chart-title">Value over time</figcaption>
+        <div id="legend" class="legend"></div>
+      </div>
+      <div id="chart" class="chart" tabindex="0" role="img" aria-labelledby="chart-title chart-desc"></div>
+      <p id="chart-desc" class="sr-only"></p>
+      <button type="button" id="toggle-table" class="link" aria-expanded="false" aria-controls="table-wrap">Show table</button>
+      <div id="table-wrap" hidden></div>
+    </figure>
+  </section>
+
+  <details class="panel own">
+    <summary>Use your own prices (CSV)</summary>
+    <p class="muted small"><code>date,SPY,VTI</code> or <code>date,symbol,price</code>, adjusted prices. Stays in your browser.</p>
+    <div class="controls">
+      <label class="file">File<input id="csv" type="file" accept=".csv,text/csv"></label>
+      <button type="button" id="reset-data" class="secondary" hidden>Back to built-in prices</button>
+    </div>
+  </details>
+</main>
+
+<footer class="wrap muted small">
+  <p>Adjusted prices, before taxes and trading costs. Deposits at month-end. Past results don't predict future ones. Not advice.</p>
+</footer>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
