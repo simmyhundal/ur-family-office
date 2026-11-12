@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write   # only to update the "prices" data branch below
   pages: write
   id-token: write
 
@@ -36,6 +36,17 @@ jobs:
           name: site-prices
           path: site/data/prices.json
           retention-days: 14
+      - name: Keep a copy of the prices on the "prices" branch (never blocks the deploy)
+        continue-on-error: true
+        run: |
+          d=$(mktemp -d)
+          cp site/data/prices.json "$d/"
+          git -C "$d" init -q -b prices
+          git -C "$d" config user.name github-actions
+          git -C "$d" config user.email actions@users.noreply.github.com
+          git -C "$d" add prices.json
+          git -C "$d" commit -qm "Prices as of $(date -u +%F)"
+          git -C "$d" push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" prices
       - uses: actions/configure-pages@v5
         with:
           enablement: true   # may need a token with admin rights; if it fails, enable Pages by hand (Settings > Pages > GitHub Actions)
