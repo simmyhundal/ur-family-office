@@ -31,7 +31,14 @@ jobs:
       - run: pip install "pydantic>=2.7"
       - name: Fetch prices (fails the run if too little comes back, so a bad fetch never replaces a good site)
         run: python scripts/fetch_site_prices.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site-prices
+          path: site/data/prices.json
+          retention-days: 14
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true   # may need a token with admin rights; if it fails, enable Pages by hand (Settings > Pages > GitHub Actions)
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

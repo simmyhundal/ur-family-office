@@ -61,3 +61,12 @@ def test_too_few_tickers_raises(tmp_path):
 def test_missing_benchmark_raises(tmp_path):
     with pytest.raises(PriceError):
         F.build(_universe(25), PriceStore(tmp_path, Fake({}, broken={"SPY"}), today=date(2025, 3, 20)), date(2024, 1, 1), date(2025, 3, 20))
+
+
+def test_single_page_build_inlines_everything():
+    spec2 = importlib.util.spec_from_file_location("build_single_page", Path(__file__).resolve().parents[1] / "scripts" / "build_single_page.py")
+    B = importlib.util.module_from_spec(spec2)
+    spec2.loader.exec_module(B)
+    out = B.build('{"dates":["2024-01-31"],"labels":{"A":"</script>"},"series":{"A":[1]}}')
+    assert "<style>" in out and "globalThis.UFO_DATA" in out and 'src="js/app.js"' not in out and "export " not in out and "import {" not in out
+    assert "</script>\"" not in out.split("globalThis.UFO_DATA")[1].split("</script>")[0]  # data cannot close the tag early
