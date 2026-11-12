@@ -4,7 +4,7 @@ A small tool for one household (two people, a Joint and a Personal Chase account
 
 Update the "Current state" section at the end of every session.
 
-## Current state (2026-11-05, end of session)
+## Current state (2026-11-12, end of session)
 **Live on the owner's Mac mini:** Plaid is linked to Chase (production; one healthy connection with two checking accounts and two cards; read-only products). A Telegram bot posts to a private group (so far the owner only; **the group is set to `headroom` detail**). A launchd agent (`com.ufo.daily-check`) runs `python -m jobs.check_balance --send` **every Monday 08:00**. Config is `.data/alert.json` (gitignored): cushion and Personal minimum $1,500, rent not paid from Joint ($0), two monthly deposits from Personal dated the 1st, one card paid from Joint. **The first on-demand status message ("Joint is covered through Nov 30") was sent to Telegram on 2026-11-05.** **Also verified live on 2026-11-05 (owner confirmed in the group): the on-demand "covered" message and a real low-balance alert (test run with `--joint 1000 --personal 5000 --send`, minimal wording, no figures). The weekly "covered" heartbeat (`notify_when_ok`) is now enabled in `.data/alert.json`; detail stays minimal.**
 
 **What the check models:** today's Joint balance, walked day by day through the window: card payments out (statement balance and due date from Plaid Liabilities; looked at up to 30 days early), manual bills out, scheduled deposits in (same-day bills first). It compares the *lowest point* to the cushion and says how much to move from Personal (shortfall rounded up to $10, Personal keeps its minimum).

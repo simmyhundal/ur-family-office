@@ -61,7 +61,7 @@
 
   <section class="panel" aria-labelledby="own-h">
     <h2 id="own-h">Use your own prices</h2>
-    <p class="muted">Load a CSV of month-end (or daily) <em>adjusted</em> prices, so dividends are counted. Either one column per fund (<code>date,VTI,BND</code>) or three columns (<code>date,symbol,price</code>). The file is read in your browser and never uploaded.</p>
+    <p class="muted">Load a CSV of month-end (or daily) <em>adjusted</em> prices, so dividends are counted. Either one column per fund (<code>date,VTI,BND</code>) or three columns (<code>date,symbol,price</code>). The file is read in your browser and never uploaded. Blank cells are fine: a fund that started later just shortens the shared period. A single-fund download from a price site (Open, High, Low, Adj Close) is not this layout.</p>
     <div class="controls">
       <label class="file">Prices file<input id="csv" type="file" accept=".csv,text/csv"></label>
       <button type="button" id="reset-data" class="secondary" hidden>Back to the demo funds</button>
@@ -77,7 +77,7 @@
         <dt>Total return</dt><dd>The same measure over the whole period, not per year.</dd>
         <dt>Ups and downs (volatility)</dt><dd>How much monthly returns swing, as a yearly figure. Higher means a bumpier ride.</dd>
         <dt>Worst fall</dt><dd>The biggest drop from a previous high point.</dd>
-        <dt>Sharpe ratio</dt><dd>Return above a cash rate for each unit of ups and downs. Higher is better. Here the cash rate is a flat assumption.</dd>
+        <dt>Sharpe ratio</dt><dd>Return above a cash rate for each unit of ups and downs. Higher is better. Here the cash rate is a flat assumption (3.5% a year with the demo funds, and the same with your own file).</dd>
       </dl>
     </details>
     <details><summary>Assumptions and limits</summary>

@@ -106,3 +106,44 @@ test("window keeps the last N years of month-ends plus the start point", () => {
   assert.equal(w.dates.at(-1), "d79");
   assert.equal(window({ dates: ["a", "b"], series: { A: [1, 2] } }, 5).dates.length, 2);
 });
+
+test("CSV: a blank cell means the fund had not started yet, those months are dropped", () => {
+  const d = parsePricesCsv("date,AAA,BBB\n2024-01-31,10,\n2024-02-29,11,\n2024-03-29,12,5\n2024-04-30,13,6\n");
+  assert.deepEqual(d.dates, ["2024-03-29", "2024-04-30"]);
+  assert.deepEqual(d.series.BBB, [5, 6]);
+  assert.equal(d.dropped, 2);
+});
+
+test("CSV: a column with no prices at all is reported by name", () => {
+  assert.throws(() => parsePricesCsv("date,AAA,BBB\n2024-01-31,10,\n2024-02-29,11,\n"), /No prices found for BBB/);
+});
+
+test("CSV: a single-fund download from a price site gets a plain explanation", () => {
+  assert.throws(() => parsePricesCsv("Date,Open,High,Low,Close,Adj Close,Volume\n2024-01-31,1,2,1,2,2,5\n2024-02-29,1,2,1,2,2,5\n"), /single-fund download/);
+});
+
+test("daily prices with weekends, holidays and a later-starting fund line up on real month-ends", () => {
+  // Invented business-day series for three years; the second fund starts 14 months in (blank before that).
+  const lines = ["date,AAA,BBB"];
+  let day = 0;
+  for (let t = Date.UTC(2021, 0, 1); t < Date.UTC(2024, 0, 1); t += 86400000) {
+    const dt = new Date(t), wd = dt.getUTCDay();
+    if (wd === 0 || wd === 6) continue; // no weekend prices
+    if (dt.getUTCMonth() === 6 && dt.getUTCDate() === 4) continue; // a holiday
+    day++;
+    const a = (100 * 1.0004 ** day).toFixed(4);
+    const b = t >= Date.UTC(2022, 2, 1) ? (50 * 1.0002 ** day).toFixed(4) : "";
+    lines.push(`${dt.toISOString().slice(0, 10)},${a},${b}`);
+  }
+  const d = parsePricesCsv(lines.join("\n"));
+  assert.equal(d.dates[0].slice(0, 7), "2022-03"); // first month both funds have prices
+  assert.equal(d.dates.at(-1).slice(0, 7), "2023-12");
+  assert.equal(d.dates.length, 22);
+  for (const iso of d.dates) {
+    const dt = new Date(iso + "T00:00:00Z"), next = new Date(dt.getTime() + 86400000 * 3);
+    assert.ok(![0, 6].includes(dt.getUTCDay()), iso + " should be a business day");
+    assert.notEqual(dt.getUTCMonth(), next.getUTCMonth(), iso + " should be within the last three days of its month");
+  }
+  const r = compare({ prices: window(d, 1).series, mix: { AAA: 1, BBB: 1 }, benchmark: "AAA", initial: 1000 });
+  assert.ok(r.mix.m.endValue > 1000 && r.bench.m.months === 12);
+});

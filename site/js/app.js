@@ -117,9 +117,11 @@ function draw({ r, dates, monthly, years }) {
   const mixName = "Your mix", benchName = $("benchmark").value + " (benchmark)";
   $("cards").replaceChildren(card("mix", mixName, mix.m), card("bench", benchName, bench.m));
   const diff = mix.m.endValue - bench.m.endValue;
+  const fall = (m) => pct(Math.abs(m.maxDrawdown));
+  const deeper = mix.m.maxDrawdown < bench.m.maxDrawdown ? "deeper" : mix.m.maxDrawdown > bench.m.maxDrawdown ? "shallower" : "the same";
   $("verdict").textContent = diff === 0 ? "Your mix and the benchmark ended in the same place."
     : `Your mix ended ${money(Math.abs(diff))} ${diff > 0 ? "ahead of" : "behind"} the benchmark (${spct(mix.m.endValue / bench.m.endValue - 1)} on the end value). ` +
-      (mix.m.maxDrawdown < bench.m.maxDrawdown ? "It also had a deeper worst fall." : "Its worst fall was no deeper.");
+      `Its worst fall was ${fall(mix.m)}, against ${fall(bench.m)} for the benchmark (${deeper}).`;
   drawChart({ dates, series: [{ name: mixName, key: "mix", color: "var(--mix)", v: mix.sim.values }, { name: benchName, key: "bench", color: "var(--bench)", v: bench.sim.values }], put: monthly > 0 ? mix.sim.contributed : null });
   drawTable(dates, mixName, benchName, mix.sim.values, bench.sim.values, monthly > 0 ? mix.sim.contributed : null);
 }

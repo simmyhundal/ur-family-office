@@ -110,17 +110,22 @@ export function parsePricesCsv(text) {
   const head = split(lines[0]).map((h) => h.toLowerCase());
   if (head[0] !== "date") throw new Error('The first column must be called "date".');
   const rows = lines.slice(1).map(split);
+  if (head.includes("open") && (head.includes("adj close") || head.includes("adj_close")))
+    throw new Error("This looks like a single-fund download (Open, High, Low, Adj Close). Put one adjusted-price column per fund in one file, or use the date,symbol,price layout.");
   const obs = {}; // symbol -> Map(dateISO -> price)
   const long = head.length === 3 && ["symbol", "ticker"].includes(head[1]);
   if (long) {
-    for (const [d, sym, p] of rows) (obs[sym.toUpperCase()] ??= new Map()).set(d, Number(p));
+    for (const [d, sym, p] of rows) if (p !== "" && p !== undefined) (obs[sym.toUpperCase()] ??= new Map()).set(d, Number(p));
   } else {
     const syms = split(lines[0]).slice(1).map((s) => s.toUpperCase());
     syms.forEach((s) => (obs[s] = new Map()));
-    for (const r of rows) syms.forEach((s, i) => obs[s].set(r[0], Number(r[i + 1])));
+    // A blank cell means "no price yet" (a fund that started later than the others); toMonthly then drops those months.
+    for (const r of rows) syms.forEach((s, i) => { if (r[i + 1] !== "" && r[i + 1] !== undefined) obs[s].set(r[0], Number(r[i + 1])); });
   }
   for (const [s, m] of Object.entries(obs))
     for (const [d, p] of m) if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || !(p > 0)) throw new Error(`Bad row for ${s} on "${d}": dates must be YYYY-MM-DD and prices above zero.`);
+  const empty = Object.keys(obs).filter((s) => obs[s].size === 0);
+  if (empty.length || !Object.keys(obs).length) throw new Error(`No prices found for ${empty.join(", ") || "any fund"}.`);
   return toMonthly(obs);
 }
 
