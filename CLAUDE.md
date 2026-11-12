@@ -23,7 +23,7 @@ Update the "Current state" section at the end of every session.
 
 **Not modeled:** any outflow other than cards and manual bills (see the M2 milestone).
 
-Tests: `.venv/bin/python -m pytest -q` (337). Lint for undefined names: `.venv/bin/ruff check --select F src jobs scripts tests`.
+Tests: `.venv/bin/python -m pytest -q` (336). Lint for undefined names: `.venv/bin/ruff check --select F src jobs scripts tests`.
 
 ## Run it
 - Fidelity performance report (excess IRR, Sharpe, charts; local only): `python -m jobs.performance_report --account <last digits> --end YYYY-MM-DD --end-value <statement value> [--checkpoint DATE=VALUE:label ...]`. Reads `exports/*/History*.csv` (activity history) and `exports/snapshots/*.csv` (positions, names end in Mon-DD-YYYY); writes `exports/performance-report.html` (0600). Needs network only for ticker prices (Yahoo) and the T-bill rate (FRED).
