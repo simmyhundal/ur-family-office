@@ -61,3 +61,8 @@ code { background: var(--bg); padding: 1px 4px; border-radius: 4px; }
 footer.wrap { padding-bottom: 40px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .own { padding-top: 12px; } .own summary { margin: 0; }
+.mix-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+label.inline { flex-direction: row; align-items: center; gap: 8px; }
+.bench-table { margin: 12px 0 0; padding: 4px 16px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.bench-table h3 { font-size: 1rem; margin: 8px 0 0; }
+.bench-table:empty { display: none; }

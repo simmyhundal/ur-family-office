@@ -70,3 +70,14 @@ def test_single_page_build_inlines_everything():
     out = B.build('{"dates":["2024-01-31"],"labels":{"A":"</script>"},"series":{"A":[1]}}')
     assert "<style>" in out and "globalThis.UFO_DATA" in out and 'src="js/app.js"' not in out and "export " not in out and "import {" not in out
     assert "</script>\"" not in out.split("globalThis.UFO_DATA")[1].split("</script>")[0]  # data cannot close the tag early
+
+
+def test_presets_are_well_formed():
+    import json
+    root = Path(__file__).resolve().parents[1] / "site" / "data"
+    universe = {s for s, _ in json.loads((root / "universe.json").read_text())}
+    presets = json.loads((root / "presets.json").read_text())
+    assert presets and all(p["name"] for p in presets)
+    for p in presets:
+        assert abs(sum(p["weights"].values()) - 100) < 1e-9, p["name"]
+        assert set(p["weights"]) <= universe, p["name"]  # every fund has prices in the universe

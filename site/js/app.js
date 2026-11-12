@@ -19,7 +19,8 @@ const pct = (x, d = 1) => (x == null || Number.isNaN(x) ? "n/a" : (x * 100).toFi
 const spct = (x, d = 1) => (x == null ? "n/a" : (x >= 0 ? "+" : "") + (x * 100).toFixed(d) + "%");
 const monthYear = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "numeric" });
 
-const state = { data: null, labels: {}, demo: true, source: "", rows: [] };
+const state = { data: null, labels: {}, demo: true, source: "", rows: [], presets: [], mixName: "Your mix" };
+const OTHER = ["SPY", "VTI", "QQQ", "IWM", "AGG"]; // shown in the "other benchmarks" table when the data has them
 
 async function getJson(url) {
   const res = await fetch(url);
@@ -36,13 +37,21 @@ async function load() {
   state.demo = demo;
   state.source = d.asOf ? `Prices to ${d.asOf}.` : "";
   const has = (x) => x in d.series;
+  let presets = [];
+  if (!demo) { try { presets = globalThis.UFO_PRESETS || await getJson("data/presets.json"); } catch { /* no presets is fine */ } }
+  state.presets = presets.filter((p) => Object.keys(p.weights).every(has)); // only mixes whose funds all have prices
   state.rows = demo ? [{ sym: "DEMOUS", w: 60 }, { sym: "DEMOBD", w: 30 }, { sym: "DEMOGD", w: 10 }]
-    : [{ sym: "VTI", w: 60 }, { sym: "BND", w: 30 }, { sym: "GLD", w: 10 }].filter((r) => has(r.sym));
+    : state.presets.length ? rowsOf(state.presets[0]) : starter();
+  state.mixName = state.presets.length && !demo ? state.presets[0].name : "Your mix";
   $("benchmark").value = has("SPY") ? "SPY" : Object.keys(d.series)[0];
   setup();
 }
 
 const symbols = () => Object.keys(state.data.series);
+const rowsOf = (p) => Object.entries(p.weights).map(([sym, w]) => ({ sym, w }));
+const starter = () => (["VTI", "BND"].every((x) => x in state.data.series) ? [{ sym: "VTI", w: 60 }, { sym: "BND", w: 40 }]
+  : symbols().slice(0, 2).map((sym, i) => ({ sym, w: i ? 40 : 60 })));
+function markCustom() { state.mixName = "Your mix"; $("preset").value = "custom"; }
 
 function setup() {
   $("data-banner").textContent = state.demo
@@ -52,6 +61,10 @@ function setup() {
   $("tickers").replaceChildren(...symbols().map((s) => el("option", { value: s }, state.labels[s] || "")));
   state.rows = state.rows.filter((r) => symbols().includes(r.sym));
   if (!state.rows.length) state.rows = [{ sym: symbols()[0], w: 100 }];
+  const pre = $("preset");
+  pre.replaceChildren(...state.presets.map((p, i) => el("option", { value: String(i) }, p.name)), el("option", { value: "custom" }, "Your own"));
+  pre.value = state.mixName === "Your mix" ? "custom" : String(state.presets.findIndex((p) => p.name === state.mixName));
+  pre.closest("label").hidden = !state.presets.length;
   renderRows();
   render();
 }
@@ -61,11 +74,11 @@ function renderRows() {
   box.replaceChildren();
   state.rows.forEach((row, i) => {
     const sel = el("input", { list: "tickers", autocomplete: "off", spellcheck: "false", value: row.sym, "aria-label": `Fund ${i + 1}`, placeholder: "Ticker" });
-    sel.addEventListener("input", () => { row.sym = sel.value.trim().toUpperCase(); render(); });
+    sel.addEventListener("input", () => { row.sym = sel.value.trim().toUpperCase(); markCustom(); render(); });
     const w = el("input", { type: "number", min: "0", max: "100", step: "1", value: String(row.w), "aria-label": `Weight ${i + 1}, percent` });
-    w.addEventListener("input", () => { row.w = Number(w.value); render(); });
+    w.addEventListener("input", () => { row.w = Number(w.value); markCustom(); render(); });
     const rm = el("button", { type: "button", class: "rm", "aria-label": `Remove fund ${i + 1}` }, "×");
-    rm.addEventListener("click", () => { state.rows.splice(i, 1); renderRows(); render(); });
+    rm.addEventListener("click", () => { state.rows.splice(i, 1); markCustom(); renderRows(); render(); });
     box.append(el("div", { class: "mix-row" }, sel, w, rm));
   });
 }
@@ -91,15 +104,17 @@ function render() {
     const bench = $("benchmark").value.trim().toUpperCase();
     const unknown = [...Object.keys(mix), bench].filter((x) => !(x in state.data.series));
     if (unknown.length) throw new Error(`No prices for ${unknown.join(", ")}. Pick from the list, or use your own CSV.`);
-    const needed = [...new Set([...Object.keys(mix), bench])];
+    const others = OTHER.filter((x) => x in state.data.series);
+    const needed = [...new Set([...Object.keys(mix), bench, ...others])];
     const data = sliceFor(state.data, needed, Number($("years").value));
     if (data.dates.length < 3) throw new Error("Not enough months of prices to compare.");
     const r = compare({ prices: data.series, mix, benchmark: bench, initial, monthly, strategy: $("strategy").value });
     draw({ r, dates: data.dates, monthly, bench, limitedBy: data.limitedBy });
+    drawOthers({ data, mix, others, initial, monthly, mixEnd: r.mix.m.endValue });
   } catch (e) {
     err.textContent = e.message;
     for (const id of ["verdict", "period-line", "chart-desc"]) $(id).textContent = "";
-    for (const id of ["cards", "chart", "legend", "table-wrap"]) $(id).replaceChildren();
+    for (const id of ["cards", "chart", "legend", "table-wrap", "benchmarks"]) $(id).replaceChildren();
   }
 }
 
@@ -119,11 +134,11 @@ function draw({ r, dates, monthly, bench, limitedBy }) {
   const { mix, bench: b } = r;
   $("period-line").textContent = `${monthYear(dates[0])} to ${monthYear(dates.at(-1))}.` +
     (limitedBy ? ` Starts when ${limitedBy} does.` : "") + ` Put in ${money(mix.m.putIn)}.`;
-  const mixName = "Your mix", benchName = bench;
+  const mixName = state.mixName, benchName = bench;
   $("cards").replaceChildren(card("mix", mixName, mix.m), card("bench", benchName, b.m));
   const diff = mix.m.endValue - b.m.endValue;
   $("verdict").textContent = diff === 0 ? "Same result."
-    : `Your mix finished ${money(Math.abs(diff))} ${diff > 0 ? "ahead of" : "behind"} ${bench}. Worst fall: ${pct(Math.abs(mix.m.maxDrawdown))} vs ${pct(Math.abs(b.m.maxDrawdown))}.`;
+    : `${mixName} finished ${money(Math.abs(diff))} ${diff > 0 ? "ahead of" : "behind"} ${bench}. Worst fall: ${pct(Math.abs(mix.m.maxDrawdown))} vs ${pct(Math.abs(b.m.maxDrawdown))}.`;
   drawChart({ dates, series: [{ name: mixName, key: "mix", color: "var(--mix)", v: mix.sim.values }, { name: benchName, key: "bench", color: "var(--bench)", v: b.sim.values }], put: monthly > 0 ? mix.sim.contributed : null });
   drawTable(dates, mixName, benchName, mix.sim.values, b.sim.values, monthly > 0 ? mix.sim.contributed : null);
 }
@@ -138,6 +153,18 @@ function niceTicks(max) {
   const out = [];
   for (let v = 0; ; v += step) { out.push(v); if (v >= max) break; }
   return out;
+}
+
+function drawOthers({ data, mix, others, initial, monthly, mixEnd }) {
+  const box = $("benchmarks");
+  if (others.length < 2) { box.replaceChildren(); return; }
+  const rows = others.map((b) => {
+    const m = compare({ prices: data.series, mix, benchmark: b, initial, monthly, strategy: $("strategy").value }).bench.m;
+    const d = mixEnd - m.endValue;
+    return el("tr", {}, el("td", {}, b), el("td", {}, money(m.endValue)), el("td", {}, m.annualReturn == null ? "n/a" : spct(m.annualReturn)), el("td", {}, (d >= 0 ? "+" : "-") + money(Math.abs(d))));
+  });
+  const head = el("tr", {}, ...["Benchmark", "Ends at", "Per year", `${state.mixName} vs it`].map((t) => el("th", { scope: "col" }, t)));
+  box.replaceChildren(el("h3", {}, "Other benchmarks"), el("table", {}, el("thead", {}, head), el("tbody", {}, ...rows)));
 }
 
 function drawChart({ dates, series, put }) {
@@ -208,7 +235,7 @@ function drawChart({ dates, series, put }) {
     ...series.map((s) => el("span", {}, el("i", { style: `background:${s.color}` }), s.name)),
     ...(put ? [el("span", {}, el("i", { style: "background:var(--put)" }), "Put in")] : []));
   const a = series[0], b = series[1];
-  $("chart-desc").textContent = `Your mix goes from ${money(a.v[0])} to ${money(a.v.at(-1))}; the benchmark from ${money(b.v[0])} to ${money(b.v.at(-1))}. Arrow keys step through months.`;
+  $("chart-desc").textContent = `${state.mixName} goes from ${money(a.v[0])} to ${money(a.v.at(-1))}; the benchmark from ${money(b.v[0])} to ${money(b.v.at(-1))}. Arrow keys step through months.`;
 }
 
 function drawTable(dates, an, bn, a, b, put) {
@@ -229,10 +256,16 @@ new ResizeObserver(() => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => drawChart(lastChart), 100);
 }).observe($("chart"));
+$("preset").addEventListener("change", () => {
+  const p = state.presets[Number($("preset").value)];
+  state.rows = p ? rowsOf(p) : starter();
+  state.mixName = p ? p.name : "Your mix";
+  renderRows(); render();
+});
 $("add-row").addEventListener("click", () => {
   const used = new Set(state.rows.map((r) => r.sym));
   state.rows.push({ sym: symbols().find((s) => !used.has(s)) || symbols()[0], w: 10 });
-  renderRows(); render();
+  markCustom(); renderRows(); render();
 });
 for (const id of ["benchmark", "years", "strategy", "initial", "monthly"]) $(id).addEventListener("input", render);
 $("toggle-table").addEventListener("click", () => {
@@ -248,7 +281,7 @@ $("csv").addEventListener("change", async (e) => {
     const parsed = parsePricesCsv(await file.text());
     if (parsed.dates.length < 13) throw new Error("Need at least 13 months of prices that every fund shares.");
     state.data = { dates: parsed.dates, series: parsed.series };
-    state.labels = {}; state.demo = false; state.source = "";
+    state.labels = {}; state.demo = false; state.source = ""; state.presets = []; state.mixName = "Your mix";
     const names = Object.keys(parsed.series);
     state.rows = names.slice(0, 2).map((s, i) => ({ sym: s, w: i ? 40 : 60 }));
     $("benchmark").value = names[0];
