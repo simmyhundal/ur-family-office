@@ -15,56 +15,9 @@ from __future__ import annotations
 import csv
 import io
 from datetime import date, datetime
-from enum import Enum
 
-from pydantic import BaseModel
-
+from ufo.performance.events import EXTERNAL, Event, Kind, ParsedHistory, merge_histories  # noqa: F401  (re-exported: the model is brokerage-neutral now)
 from ufo.providers.fidelity_csv import parse_number
-
-
-class Kind(str, Enum):
-    BUY = "buy"
-    SELL = "sell"
-    CONTRIBUTION = "contribution"  # external, money in
-    WITHDRAWAL = "withdrawal"  # external, money out
-    DIVIDEND = "dividend"
-    INTEREST = "interest"
-    FEE = "fee"
-    REINVESTMENT = "reinvestment"  # internal
-    SPLIT = "split"
-
-
-EXTERNAL = {Kind.CONTRIBUTION, Kind.WITHDRAWAL}
-
-
-class Event(BaseModel):
-    when: date
-    kind: Kind
-    symbol: str = ""
-    quantity: float | None = None
-    price: float | None = None
-    amount: float = 0.0  # cash effect on the account, as in the file (money in positive)
-    fees: float = 0.0
-    in_kind: bool = False  # securities moved rather than cash
-    description: str = ""
-    cash_balance: float | None = None  # Fidelity's running cash (core money-market) balance after this row
-    seq: int = 0  # position within a day, oldest first (the export is newest-first, so it is reversed)
-
-    @property
-    def external_flow(self) -> float:
-        """Signed value crossing the account boundary (+ in, - out); 0 for anything internal."""
-        if self.kind == Kind.CONTRIBUTION:
-            return abs(self.amount)
-        if self.kind == Kind.WITHDRAWAL:
-            return -abs(self.amount)
-        return 0.0
-
-
-class ParsedHistory(BaseModel):
-    events: list[Event]
-    warnings: list[str]
-    first: date | None = None
-    last: date | None = None
 
 
 def _classify(action: str, has_symbol: bool) -> tuple[Kind | None, bool]:
@@ -141,18 +94,5 @@ def parse_fidelity_history(text: str) -> ParsedHistory:
             e.amount = abs(e.quantity * e.price) * (1 if e.kind == Kind.CONTRIBUTION else -1)  # value at market on the date
         elif e.in_kind and e.amount == 0.0:
             warnings.append(f"{e.when}: in-kind transfer of {e.symbol} has no value; add it by hand.")
-    return ParsedHistory(events=events, warnings=warnings,
-                         first=events[0].when if events else None, last=events[-1].when if events else None)
-
-
-def merge_histories(parts: list[ParsedHistory]) -> ParsedHistory:
-    """Combine several exports. Rows are never de-duplicated (two identical trades can be real);
-    overlapping date ranges are reported so the owner can check for a repeated export."""
-    dated = sorted((p for p in parts if p.first and p.last), key=lambda p: p.first)
-    warnings = [w for p in parts for w in p.warnings]
-    for a, b in zip(dated, dated[1:]):
-        if b.first <= a.last:
-            warnings.append(f"Exports overlap ({b.first} to {min(a.last, b.last)}): rows may be counted twice.")
-    events = sorted((e for p in parts for e in p.events), key=lambda e: (e.when, e.seq))
     return ParsedHistory(events=events, warnings=warnings,
                          first=events[0].when if events else None, last=events[-1].when if events else None)
