@@ -166,3 +166,33 @@ test("sliceFor: a large period (Max) returns everything the funds share", () => 
   assert.equal(w.limitedBy, "B");
   assert.equal(sliceFor(data, ["A"], 10).dates.length, 121);
 });
+
+test("Sharpe: matches the formula, and a flat or per-month cash rate give the same answer when equal", () => {
+  const rets = Array.from({ length: 12 }, (_, i) => (i % 2 ? 0 : 0.02));
+  const prices = { A: [100] };
+  for (const r of rets) prices.A.push(prices.A.at(-1) * (1 + r));
+  const sim = simulate({ prices, weights: { A: 1 }, initial: 1000 });
+  const expected = (0.01 / Math.sqrt((12 * 1e-4) / 11)) * Math.sqrt(12);
+  close(metrics(sim, 0).sharpe, expected, 1e-9);
+  close(metrics(sim, Array(13).fill(0)).sharpe, expected, 1e-9);
+  const withRate = metrics(sim, 4).sharpe;
+  close(withRate, metrics(sim, Array(13).fill(4)).sharpe, 1e-12);
+  assert.ok(withRate < expected, "a positive cash rate lowers Sharpe");
+});
+
+test("Sharpe is null when the cash rate is unknown or a month's rate is missing", () => {
+  const prices = { A: Array.from({ length: 14 }, (_, i) => 100 + i * (i % 3)) };
+  const sim = simulate({ prices, weights: { A: 1 }, initial: 1000 });
+  assert.equal(metrics(sim, null).sharpe, null);
+  assert.equal(metrics(sim, [1, null, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]).sharpe, null);
+  assert.notEqual(metrics(sim, 1).sharpe, null);
+});
+
+test("sliceFor carries the cash-rate array along with the dates", () => {
+  const data = { dates: ["a", "b", "c", "d"], series: { A: [1, 2, 3, 4] }, rf: [1, 2, 3, 4] };
+  assert.deepEqual(sliceFor(data, ["A"], 1).rf, [1, 2, 3, 4]);
+  const long = { dates: Array.from({ length: 30 }, (_, i) => `d${i}`), series: { A: Array(30).fill(1) }, rf: Array.from({ length: 30 }, (_, i) => i) };
+  const w = sliceFor(long, ["A"], 1);
+  assert.equal(w.rf.length, 13);
+  assert.equal(w.rf[0], 17);
+});
