@@ -142,9 +142,9 @@ def print_table(runs: list[AccountRun], benchmark: str, console: Console | None 
         rep = g.report
         net = rep.contributed - rep.withdrawn
         t.add_row(f"[bold]{g.name}[/bold]", "combined", money(g.end_value), ("-" if net < 0 else "") + money(abs(net)), pct(rep.irr),
-                  spct(rep.excess_irr), g.quality, f"{len(g.transfers)} internal transfers netted")
+                  spct(rep.excess_irr), g.quality, f"{len(g.transfers)} netted")
         notes = list(notes or []) + g.unmatched
     c.print(t)
-    for n in notes or []:
+    for n in dict.fromkeys(notes or []):
         c.print(f"[dim]- {n}[/dim]")
     c.print("[dim]Figures are before tax. IRR rests on exact dated flows plus the ending value.\nInformation, not investment advice.[/dim]")

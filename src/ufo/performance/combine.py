@@ -39,6 +39,7 @@ class GroupRun(BaseModel):
     end_value: float | None = None
     transfers: list[Transfer] = []
     unmatched: list[str] = []
+    flows: list[tuple[date, float]] = []
     quality: str = "estimated"
     error: str = ""
 
@@ -112,13 +113,14 @@ def combine(kind: str, name: str, runs: list[AccountRun], store: PriceStore, ben
     except (PriceError, ValueError) as e:
         g.error = f"not computed: {e}"
         return g
+    g.flows = flows
     g.end, g.end_value = end, sum(r.end_value for r in runs)
     g.report = M.analyze(flows, months, [by_month[m] for m in months], prices[benchmark], rf, end, g.end_value)
     g.quality = "exact" if all(r.quality == "exact" for r in runs) else "estimated"
     return g
 
 
-def groups(runs: list[AccountRun]) -> list[tuple[str, str, list[AccountRun]]]:
+def groups(runs: list[AccountRun], singletons: bool = False) -> list[tuple[str, str, list[AccountRun]]]:
     """The combined lines worth showing: everything, and each brokerage / owner / wrapper holding two or more accounts."""
     out = [("all", "All accounts", runs)] if len(runs) > 1 else []
     for kind, key in (("brokerage", lambda r: r.account.brokerage), ("owner", lambda r: r.account.owner),
@@ -126,9 +128,9 @@ def groups(runs: list[AccountRun]) -> list[tuple[str, str, list[AccountRun]]]:
         by: dict[str, list[AccountRun]] = {}
         for r in runs:
             by.setdefault(key(r), []).append(r)
-        out += [(kind, f"{kind}: {k}", v) for k, v in sorted(by.items()) if len(v) > 1 and len(v) < len(runs)]
+        out += [(kind, f"{kind}: {k}", v) for k, v in sorted(by.items()) if (len(v) > 1 or singletons) and (len(v) < len(runs) or singletons)]
     return out
 
 
-def combine_all(runs: list[AccountRun], store: PriceStore, benchmark: str = "VTI") -> list[GroupRun]:
-    return [combine(k, n, rs, store, benchmark) for k, n, rs in groups(runs)]
+def combine_all(runs: list[AccountRun], store: PriceStore, benchmark: str = "VTI", singletons: bool = False) -> list[GroupRun]:
+    return [combine(k, n, rs, store, benchmark) for k, n, rs in groups(runs, singletons)]
