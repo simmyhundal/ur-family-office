@@ -19,7 +19,7 @@ const pct = (x, d = 1) => (x == null || Number.isNaN(x) ? "n/a" : (x * 100).toFi
 const spct = (x, d = 1) => (x == null ? "n/a" : (x >= 0 ? "+" : "") + (x * 100).toFixed(d) + "%");
 const monthYear = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "numeric" });
 
-const state = { data: null, labels: {}, demo: true, source: "", rows: [], presets: [], mixName: "Your mix" };
+const state = { years: 5, data: null, labels: {}, demo: true, source: "", rows: [], presets: [], mixName: "Your mix" };
 const OTHER = ["SPY", "VTI", "QQQ", "IWM", "AGG"]; // shown in the "other benchmarks" table when the data has them
 
 async function getJson(url) {
@@ -106,10 +106,10 @@ function render() {
     if (unknown.length) throw new Error(`No prices for ${unknown.join(", ")}. Pick from the list, or use your own CSV.`);
     const others = OTHER.filter((x) => x in state.data.series);
     const needed = [...new Set([...Object.keys(mix), bench, ...others])];
-    const data = sliceFor(state.data, needed, Number($("years").value));
+    const data = sliceFor(state.data, needed, state.years);
     if (data.dates.length < 3) throw new Error("Not enough months of prices to compare.");
     const r = compare({ prices: data.series, mix, benchmark: bench, initial, monthly, strategy: $("strategy").value });
-    draw({ r, dates: data.dates, monthly, bench, limitedBy: data.limitedBy });
+    draw({ r, dates: data.dates, monthly, bench, limitedBy: data.limitedBy, years: state.years });
     drawOthers({ data, mix, others, initial, monthly, mixEnd: r.mix.m.endValue });
   } catch (e) {
     err.textContent = e.message;
@@ -130,10 +130,10 @@ function card(kind, title, m) {
   return el("div", { class: `card ${kind}` }, el("h3", {}, title), el("div", { class: "hero" }, money(m.endValue)), dl);
 }
 
-function draw({ r, dates, monthly, bench, limitedBy }) {
+function draw({ r, dates, monthly, bench, limitedBy, years }) {
   const { mix, bench: b } = r;
   $("period-line").textContent = `${monthYear(dates[0])} to ${monthYear(dates.at(-1))}.` +
-    (limitedBy ? ` Starts when ${limitedBy} does.` : "") + ` Put in ${money(mix.m.putIn)}.`;
+    (limitedBy ? ` Starts when ${limitedBy} does.` : years < 99 && mix.m.months < years * 12 ? " That is all the history there is." : "") + ` Put in ${money(mix.m.putIn)}.`;
   const mixName = state.mixName, benchName = bench;
   $("cards").replaceChildren(card("mix", mixName, mix.m), card("bench", benchName, b.m));
   const diff = mix.m.endValue - b.m.endValue;
@@ -267,7 +267,12 @@ $("add-row").addEventListener("click", () => {
   state.rows.push({ sym: symbols().find((s) => !used.has(s)) || symbols()[0], w: 10 });
   markCustom(); renderRows(); render();
 });
-for (const id of ["benchmark", "years", "strategy", "initial", "monthly"]) $(id).addEventListener("input", render);
+for (const id of ["benchmark", "strategy", "initial", "monthly"]) $(id).addEventListener("input", render);
+document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => {
+  state.years = Number(b.dataset.years);
+  document.querySelectorAll(".seg button").forEach((o) => o.setAttribute("aria-pressed", String(o === b)));
+  render();
+}));
 $("toggle-table").addEventListener("click", () => {
   const open = $("table-wrap").hidden;
   $("table-wrap").hidden = !open;

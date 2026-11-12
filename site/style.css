@@ -66,3 +66,9 @@ label.inline { flex-direction: row; align-items: center; gap: 8px; }
 .bench-table { margin: 12px 0 0; padding: 4px 16px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
 .bench-table h3 { font-size: 1rem; margin: 8px 0 0; }
 .bench-table:empty { display: none; }
+.field { display: flex; flex-direction: column; gap: 4px; } .lbl { font-size: .875rem; color: var(--ink-2); }
+.seg { display: flex; } .seg button { border-radius: 0; background: transparent; color: var(--ink); border: 1px solid var(--line); margin-left: -1px; padding: 0 12px; min-width: 44px; }
+.seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; } .seg button:last-child { border-radius: 0 6px 6px 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); position: relative; }
+@media (min-width: 641px) { .field { grid-column: span 2; } }
+.seg button { flex: 1 1 0; }

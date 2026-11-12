@@ -29,9 +29,11 @@
     <h2 id="setup-h">Compare with</h2>
     <div class="controls">
       <label>Benchmark<input id="benchmark" list="tickers" autocomplete="off" spellcheck="false" value="SPY"></label>
-      <label>Period<select id="years">
-        <option value="1">1 year</option><option value="2">2 years</option><option value="3">3 years</option>
-        <option value="4">4 years</option><option value="5" selected>5 years</option></select></label>
+      <div class="field"><span id="years-l" class="lbl">History</span>
+        <div class="seg" role="group" aria-labelledby="years-l">
+          <button type="button" data-years="1">1y</button><button type="button" data-years="3">3y</button>
+          <button type="button" data-years="5" aria-pressed="true">5y</button><button type="button" data-years="10">10y</button>
+          <button type="button" data-years="99">Max</button></div></div>
       <label>Style<select id="strategy">
         <option value="hold">Buy and hold</option>
         <option value="annual">Rebalance yearly</option>
