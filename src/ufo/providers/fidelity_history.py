@@ -87,6 +87,7 @@ def parse_fidelity_history(text: str) -> ParsedHistory:
             amount=parse_number(d.get("Amount")) or 0.0, fees=fees, in_kind=in_kind,
             description=d.get("Description", "").strip(),
             cash_balance=parse_number(d.get("Cash Balance")),
+            account_ref=(d.get("Account Number") or d.get("Account") or "").strip(),
             seq=-n if newest_first else n))
     events.sort(key=lambda e: (e.when, e.seq))
     for e in events:
