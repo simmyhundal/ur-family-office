@@ -1,0 +1,39 @@
+# Fetches real prices, then publishes site/ to GitHub Pages. Needs Settings > Pages > Source: "GitHub Actions" (once).
+name: Publish site
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", "scripts/fetch_site_prices.py", "src/ufo/providers/prices.py", ".github/workflows/site.yml"]
+  schedule:
+    - cron: "17 11 * * 1-5"   # weekdays, so prices stay current
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "pydantic>=2.7"
+      - name: Fetch prices (fails the run if too little comes back, so a bad fetch never replaces a good site)
+        run: python scripts/fetch_site_prices.py
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

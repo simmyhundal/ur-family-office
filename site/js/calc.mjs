@@ -153,3 +153,21 @@ export function window(data, years) {
   const from = n - keep;
   return { dates: data.dates.slice(from), series: Object.fromEntries(Object.entries(data.series).map(([s, v]) => [s, v.slice(from)])) };
 }
+
+/** Months to use for these symbols: from the latest first-price to the end, then the last `years` of that.
+ *  A fund that started later shortens the period; `from` says which symbol set the start. */
+export function sliceFor(data, symbols, years) {
+  let first = 0, limiter = null;
+  for (const s of symbols) {
+    const i = data.series[s].findIndex((v) => v != null);
+    if (i < 0) throw new Error(`No prices for ${s}.`);
+    if (i > first) { first = i; limiter = s; }
+  }
+  const n = data.dates.length - first;
+  const from = first + Math.max(0, n - (years * 12 + 1));
+  return {
+    dates: data.dates.slice(from),
+    series: Object.fromEntries(symbols.map((s) => [s, data.series[s].slice(from)])),
+    limitedBy: from === first ? limiter : null, // set only when the start came from a late fund, not from the period
+  };
+}

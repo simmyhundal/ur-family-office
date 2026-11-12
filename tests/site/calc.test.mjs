@@ -1,7 +1,7 @@
 // Known-answer tests for site/js/calc.mjs. Every number is invented.   Run: node --test tests/site/
 import test from "node:test";
 import assert from "node:assert/strict";
-import { simulate, metrics, compare, parsePricesCsv, toMonthly, window, normalizeWeights, maxDrawdown } from "../../site/js/calc.mjs";
+import { sliceFor, simulate, metrics, compare, parsePricesCsv, toMonthly, window, normalizeWeights, maxDrawdown } from "../../site/js/calc.mjs";
 
 const close = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} vs ${b}`);
 
@@ -146,4 +146,21 @@ test("daily prices with weekends, holidays and a later-starting fund line up on 
   }
   const r = compare({ prices: window(d, 1).series, mix: { AAA: 1, BBB: 1 }, benchmark: "AAA", initial: 1000 });
   assert.ok(r.mix.m.endValue > 1000 && r.bench.m.months === 12);
+});
+
+test("sliceFor: a later-starting fund shortens the period and is named", () => {
+  const data = { dates: ["a", "b", "c", "d", "e"], series: { SPY: [1, 2, 3, 4, 5], NEW: [null, null, 7, 8, 9] } };
+  const w = sliceFor(data, ["SPY", "NEW"], 5);
+  assert.deepEqual(w.dates, ["c", "d", "e"]);
+  assert.equal(w.limitedBy, "NEW");
+  assert.deepEqual(w.series.SPY, [3, 4, 5]);
+});
+
+test("sliceFor: the period limit wins when the data is longer, and only chosen symbols count", () => {
+  const dates = Array.from({ length: 30 }, (_, i) => `d${i}`);
+  const data = { dates, series: { SPY: dates.map((_, i) => i + 1), LATE: dates.map((_, i) => (i < 20 ? null : 1)) } };
+  const w = sliceFor(data, ["SPY"], 1);
+  assert.equal(w.dates.length, 13);
+  assert.equal(w.limitedBy, null);
+  assert.throws(() => sliceFor({ dates: ["a"], series: { X: [null] } }, ["X"], 1), /No prices for X/);
 });

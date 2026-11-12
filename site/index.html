@@ -3,15 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Your mix vs a benchmark</title>
-<meta name="description" content="Put in your mix of funds and see, side by side, how it would have done against a benchmark. Runs entirely in your browser.">
+<title>Portfolio vs benchmark</title>
+<meta name="description" content="Enter your mix of funds and see how it did against a benchmark like SPY.">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="wrap">
-  <h1>Your mix vs a benchmark</h1>
-  <p class="lede">Put in your mix of funds and see how it would have done over the past few years, side by side with a simple benchmark.</p>
-  <p class="privacy"><strong>Private by design.</strong> Everything runs in your browser. What you type, and any file you load, never leaves this page.</p>
+  <h1>Portfolio vs benchmark</h1>
+  <p class="lede">Enter your mix. See how it did against SPY or any benchmark.</p>
   <p id="data-banner" class="banner" role="status"></p>
 </header>
 
@@ -23,76 +22,55 @@
       <button type="button" id="add-row" class="secondary">Add a fund</button>
       <span id="weight-note" class="muted"></span>
     </div>
+    <datalist id="tickers"></datalist>
   </section>
 
   <section class="panel" aria-labelledby="setup-h">
-    <h2 id="setup-h">Compare it with</h2>
+    <h2 id="setup-h">Compare with</h2>
     <div class="controls">
-      <label>Benchmark<select id="benchmark"></select></label>
+      <label>Benchmark<input id="benchmark" list="tickers" autocomplete="off" spellcheck="false" value="SPY"></label>
       <label>Period<select id="years">
-        <option value="1">Last 1 year</option><option value="2">Last 2 years</option><option value="3">Last 3 years</option>
-        <option value="4">Last 4 years</option><option value="5" selected>Last 5 years</option></select></label>
-      <label>How it is managed<select id="strategy">
-        <option value="hold">Buy once and hold</option>
-        <option value="annual">Reset to your weights every year</option>
-        <option value="monthly">Reset to your weights every month</option></select></label>
-      <label>Start with ($)<input id="initial" type="number" min="1" step="100" value="10000" inputmode="decimal"></label>
-      <label>Add each month ($)<input id="monthly" type="number" min="0" step="50" value="0" inputmode="decimal"></label>
+        <option value="1">1 year</option><option value="2">2 years</option><option value="3">3 years</option>
+        <option value="4">4 years</option><option value="5" selected>5 years</option></select></label>
+      <label>Style<select id="strategy">
+        <option value="hold">Buy and hold</option>
+        <option value="annual">Rebalance yearly</option>
+        <option value="monthly">Rebalance monthly</option></select></label>
+      <label>Start ($)<input id="initial" type="number" min="1" step="100" value="10000" inputmode="decimal"></label>
+      <label>Add monthly ($)<input id="monthly" type="number" min="0" step="50" value="0" inputmode="decimal"></label>
     </div>
     <p id="error" class="error" role="alert"></p>
   </section>
 
   <section aria-labelledby="res-h">
-    <h2 id="res-h">Side by side</h2>
+    <h2 id="res-h">Results</h2>
     <p id="period-line" class="muted"></p>
     <div class="cards" id="cards"></div>
     <p id="verdict" class="verdict" aria-live="polite"></p>
     <figure class="chart-fig">
       <div class="chart-head">
-        <figcaption id="chart-title">Value of your money over time</figcaption>
-        <div id="legend" class="legend" aria-hidden="false"></div>
+        <figcaption id="chart-title">Value over time</figcaption>
+        <div id="legend" class="legend"></div>
       </div>
       <div id="chart" class="chart" tabindex="0" role="img" aria-labelledby="chart-title chart-desc"></div>
-      <p id="chart-desc" class="muted small"></p>
-      <button type="button" id="toggle-table" class="link" aria-expanded="false" aria-controls="table-wrap">Show as a table</button>
+      <p id="chart-desc" class="sr-only"></p>
+      <button type="button" id="toggle-table" class="link" aria-expanded="false" aria-controls="table-wrap">Show table</button>
       <div id="table-wrap" hidden></div>
     </figure>
   </section>
 
-  <section class="panel" aria-labelledby="own-h">
-    <h2 id="own-h">Use your own prices</h2>
-    <p class="muted">Load a CSV of month-end (or daily) <em>adjusted</em> prices, so dividends are counted. Either one column per fund (<code>date,VTI,BND</code>) or three columns (<code>date,symbol,price</code>). The file is read in your browser and never uploaded. Blank cells are fine: a fund that started later just shortens the shared period. A single-fund download from a price site (Open, High, Low, Adj Close) is not this layout.</p>
+  <details class="panel own">
+    <summary>Use your own prices (CSV)</summary>
+    <p class="muted small"><code>date,SPY,VTI</code> or <code>date,symbol,price</code>, adjusted prices. Stays in your browser.</p>
     <div class="controls">
-      <label class="file">Prices file<input id="csv" type="file" accept=".csv,text/csv"></label>
-      <button type="button" id="reset-data" class="secondary" hidden>Back to the demo funds</button>
+      <label class="file">File<input id="csv" type="file" accept=".csv,text/csv"></label>
+      <button type="button" id="reset-data" class="secondary" hidden>Back to built-in prices</button>
     </div>
-  </section>
-
-  <section class="panel" aria-labelledby="how-h">
-    <h2 id="how-h">How to read this</h2>
-    <details><summary>What the numbers mean</summary>
-      <dl>
-        <dt>Worth at the end</dt><dd>What the money would be worth on the last date, before taxes and fees, if every deposit followed your weights.</dd>
-        <dt>Return per year</dt><dd>How fast the investments grew each year, as if $1 had stayed in the whole time. Deposits do not flatter it. Shown from 12 months of data.</dd>
-        <dt>Total return</dt><dd>The same measure over the whole period, not per year.</dd>
-        <dt>Ups and downs (volatility)</dt><dd>How much monthly returns swing, as a yearly figure. Higher means a bumpier ride.</dd>
-        <dt>Worst fall</dt><dd>The biggest drop from a previous high point.</dd>
-        <dt>Sharpe ratio</dt><dd>Return above a cash rate for each unit of ups and downs. Higher is better. Here the cash rate is a flat assumption (3.5% a year with the demo funds, and the same with your own file).</dd>
-      </dl>
-    </details>
-    <details><summary>Assumptions and limits</summary>
-      <ul>
-        <li>Prices are month-end and adjusted for dividends. Fund fees are already inside fund prices; trading costs and taxes are not modeled.</li>
-        <li>Deposits happen at month-end, after that month's return. Resetting to your weights happens at month-end with no cost or tax.</li>
-        <li>The benchmark is one fund with the same starting amount, deposits and way of managing.</li>
-        <li>Past results do not predict future ones. A few years is a short sample, and one good or bad year can dominate it.</li>
-      </ul>
-    </details>
-  </section>
+  </details>
 </main>
 
 <footer class="wrap muted small">
-  <p>For information only. This is not investment, tax or legal advice, and nothing here recommends a purchase or sale.</p>
+  <p>Adjusted prices, before taxes and trading costs. Deposits at month-end. Past results don't predict future ones. Not advice.</p>
 </footer>
 <script type="module" src="js/app.js"></script>
 </body>

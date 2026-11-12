@@ -1,5 +1,5 @@
 // The page. All data stays in the browser: no network calls except loading the bundled demo prices.
-import { compare, parsePricesCsv, window as lastYears } from "./calc.mjs";
+import { compare, parsePricesCsv, sliceFor } from "./calc.mjs";
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, attrs = {}, ...kids) => {
@@ -17,36 +17,38 @@ const svg = (tag, attrs = {}) => {
 const money = (x) => (x < 0 ? "-" : "") + "$" + Math.round(Math.abs(x)).toLocaleString("en-US");
 const pct = (x, d = 1) => (x == null || Number.isNaN(x) ? "n/a" : (x * 100).toFixed(d) + "%");
 const spct = (x, d = 1) => (x == null ? "n/a" : (x >= 0 ? "+" : "") + (x * 100).toFixed(d) + "%");
-const num = (x) => (x == null ? "n/a" : x.toFixed(2));
 const monthYear = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "numeric" });
 
-const state = { data: null, labels: {}, rf: 3.5, demo: true, rows: [] };
+const state = { data: null, labels: {}, demo: true, source: "", rows: [] };
 
-async function loadDemo() {
-  const res = await fetch("data/demo-prices.json");
-  const d = await res.json();
+async function getJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(url + " " + res.status);
+  return res.json();
+}
+
+async function load() {
+  let d, demo = false;
+  try { d = await getJson("data/prices.json"); } catch { d = await getJson("data/demo-prices.json"); demo = true; }
   state.data = { dates: d.dates, series: d.series };
-  state.labels = d.labels;
-  state.rf = d.rf;
-  state.demo = true;
-  state.rows = [{ sym: "DEMOUS", w: 60 }, { sym: "DEMOBD", w: 30 }, { sym: "DEMOGD", w: 10 }];
-  $("benchmark").dataset.pending = "DEMOUS";
+  state.labels = d.labels || {};
+  state.demo = demo;
+  state.source = d.asOf ? `Prices to ${d.asOf}.` : "";
+  const has = (x) => x in d.series;
+  state.rows = demo ? [{ sym: "DEMOUS", w: 60 }, { sym: "DEMOBD", w: 30 }, { sym: "DEMOGD", w: 10 }]
+    : [{ sym: "VTI", w: 60 }, { sym: "BND", w: 30 }, { sym: "GLD", w: 10 }].filter((r) => has(r.sym));
+  $("benchmark").value = has("SPY") ? "SPY" : Object.keys(d.series)[0];
   setup();
 }
 
-function symbols() { return Object.keys(state.data.series); }
-const labelOf = (s) => (state.labels[s] ? `${s}: ${state.labels[s]}` : s);
+const symbols = () => Object.keys(state.data.series);
 
 function setup() {
   $("data-banner").textContent = state.demo
-    ? "Demo data: the funds and prices below are invented, not real. Load your own prices file further down for a real comparison."
-    : `Your prices file: ${symbols().length} funds, ${monthYear(state.data.dates[0])} to ${monthYear(state.data.dates.at(-1))}. It stays in your browser.`;
-  $("reset-data").hidden = state.demo;
-  const bench = $("benchmark");
-  const keep = bench.dataset.pending || bench.value;
-  bench.replaceChildren(...symbols().map((s) => el("option", { value: s }, labelOf(s))));
-  bench.value = symbols().includes(keep) ? keep : symbols()[0];
-  delete bench.dataset.pending;
+    ? "Demo data: invented funds, not real prices."
+    : state.source || `Your file: ${symbols().length} funds.`;
+  $("reset-data").hidden = state.demo && !$("csv").value;
+  $("tickers").replaceChildren(...symbols().map((s) => el("option", { value: s }, state.labels[s] || "")));
   state.rows = state.rows.filter((r) => symbols().includes(r.sym));
   if (!state.rows.length) state.rows = [{ sym: symbols()[0], w: 100 }];
   renderRows();
@@ -57,9 +59,8 @@ function renderRows() {
   const box = $("rows");
   box.replaceChildren();
   state.rows.forEach((row, i) => {
-    const sel = el("select", { "aria-label": `Fund ${i + 1}` }, ...symbols().map((s) => el("option", { value: s }, labelOf(s))));
-    sel.value = row.sym;
-    sel.addEventListener("change", () => { row.sym = sel.value; render(); });
+    const sel = el("input", { list: "tickers", autocomplete: "off", spellcheck: "false", value: row.sym, "aria-label": `Fund ${i + 1}`, placeholder: "Ticker" });
+    sel.addEventListener("input", () => { row.sym = sel.value.trim().toUpperCase(); render(); });
     const w = el("input", { type: "number", min: "0", max: "100", step: "1", value: String(row.w), "aria-label": `Weight ${i + 1}, percent` });
     w.addEventListener("input", () => { row.w = Number(w.value); render(); });
     const rm = el("button", { type: "button", class: "rm", "aria-label": `Remove fund ${i + 1}` }, "×");
@@ -80,50 +81,50 @@ function render() {
   const err = $("error");
   err.textContent = "";
   const total = state.rows.reduce((s, r) => s + (r.w > 0 ? r.w : 0), 0);
-  $("weight-note").textContent = total === 100 ? "Weights add up to 100%." : `Weights add up to ${Math.round(total * 10) / 10}%; they are scaled to 100%.`;
+  $("weight-note").textContent = total === 100 ? "" : `Adds up to ${Math.round(total * 10) / 10}%, scaled to 100%.`;
   try {
-    const years = Number($("years").value);
-    const data = lastYears(state.data, years);
     const initial = Number($("initial").value);
     const monthly = Number($("monthly").value) || 0;
     if (!(initial > 0)) throw new Error("Enter a starting amount above zero.");
-    if (data.dates.length < 3) throw new Error("This prices file has too few months to compare.");
     const mix = mixWeights();
-    const r = compare({ prices: data.series, mix, benchmark: $("benchmark").value, initial, monthly, strategy: $("strategy").value, rfAnnualPercent: state.rf });
-    last = { r, dates: data.dates, monthly, years };
-    draw(last);
+    const bench = $("benchmark").value.trim().toUpperCase();
+    const unknown = [...Object.keys(mix), bench].filter((x) => !(x in state.data.series));
+    if (unknown.length) throw new Error(`No prices for ${unknown.join(", ")}. Pick from the list, or use your own CSV.`);
+    const needed = [...new Set([...Object.keys(mix), bench])];
+    const data = sliceFor(state.data, needed, Number($("years").value));
+    if (data.dates.length < 3) throw new Error("Not enough months of prices to compare.");
+    const r = compare({ prices: data.series, mix, benchmark: bench, initial, monthly, strategy: $("strategy").value });
+    draw({ r, dates: data.dates, monthly, bench, limitedBy: data.limitedBy });
   } catch (e) {
     err.textContent = e.message;
-    $("verdict").textContent = ""; $("cards").replaceChildren(); $("chart").replaceChildren(); $("legend").replaceChildren(); $("table-wrap").replaceChildren();
-    $("period-line").textContent = ""; $("chart-desc").textContent = "";
+    for (const id of ["verdict", "period-line", "chart-desc"]) $(id).textContent = "";
+    for (const id of ["cards", "chart", "legend", "table-wrap"]) $(id).replaceChildren();
   }
 }
 
 function card(kind, title, m) {
   const rows = [
-    ["Money put in", money(m.putIn)], ["Gain", (m.gain >= 0 ? "+" : "") + money(m.gain)],
-    ["Total return", spct(m.totalReturn)], ["Return per year", m.annualReturn == null ? "needs 12 months" : spct(m.annualReturn)],
-    ["Ups and downs", m.volatility == null ? "needs 12 months" : pct(m.volatility)], ["Worst fall", pct(m.maxDrawdown)],
-    ["Sharpe ratio", m.sharpe == null ? "n/a" : num(m.sharpe)],
+    ["Gain", (m.gain >= 0 ? "+" : "") + money(m.gain)],
+    ["Per year", m.annualReturn == null ? "n/a (under 12 mo)" : spct(m.annualReturn)],
+    ["Ups and downs", m.volatility == null ? "n/a" : pct(m.volatility)],
+    ["Worst fall", pct(m.maxDrawdown)],
   ];
   const dl = el("dl");
   for (const [k, v] of rows) dl.append(el("dt", {}, k), el("dd", {}, v));
-  return el("div", { class: `card ${kind}` }, el("h3", {}, title), el("div", { class: "hero" }, money(m.endValue)), el("div", { class: "sub" }, "worth at the end"), dl);
+  return el("div", { class: `card ${kind}` }, el("h3", {}, title), el("div", { class: "hero" }, money(m.endValue)), dl);
 }
 
-function draw({ r, dates, monthly, years }) {
-  const { mix, bench } = r;
-  $("period-line").textContent = `${monthYear(dates[0])} to ${monthYear(dates.at(-1))} (${mix.m.months} months). Same start, same deposits, same way of managing.`;
-  const mixName = "Your mix", benchName = $("benchmark").value + " (benchmark)";
-  $("cards").replaceChildren(card("mix", mixName, mix.m), card("bench", benchName, bench.m));
-  const diff = mix.m.endValue - bench.m.endValue;
-  const fall = (m) => pct(Math.abs(m.maxDrawdown));
-  const deeper = mix.m.maxDrawdown < bench.m.maxDrawdown ? "deeper" : mix.m.maxDrawdown > bench.m.maxDrawdown ? "shallower" : "the same";
-  $("verdict").textContent = diff === 0 ? "Your mix and the benchmark ended in the same place."
-    : `Your mix ended ${money(Math.abs(diff))} ${diff > 0 ? "ahead of" : "behind"} the benchmark (${spct(mix.m.endValue / bench.m.endValue - 1)} on the end value). ` +
-      `Its worst fall was ${fall(mix.m)}, against ${fall(bench.m)} for the benchmark (${deeper}).`;
-  drawChart({ dates, series: [{ name: mixName, key: "mix", color: "var(--mix)", v: mix.sim.values }, { name: benchName, key: "bench", color: "var(--bench)", v: bench.sim.values }], put: monthly > 0 ? mix.sim.contributed : null });
-  drawTable(dates, mixName, benchName, mix.sim.values, bench.sim.values, monthly > 0 ? mix.sim.contributed : null);
+function draw({ r, dates, monthly, bench, limitedBy }) {
+  const { mix, bench: b } = r;
+  $("period-line").textContent = `${monthYear(dates[0])} to ${monthYear(dates.at(-1))}.` +
+    (limitedBy ? ` Starts when ${limitedBy} does.` : "") + ` Put in ${money(mix.m.putIn)}.`;
+  const mixName = "Your mix", benchName = bench;
+  $("cards").replaceChildren(card("mix", mixName, mix.m), card("bench", benchName, b.m));
+  const diff = mix.m.endValue - b.m.endValue;
+  $("verdict").textContent = diff === 0 ? "Same result."
+    : `Your mix finished ${money(Math.abs(diff))} ${diff > 0 ? "ahead of" : "behind"} ${bench}. Worst fall: ${pct(Math.abs(mix.m.maxDrawdown))} vs ${pct(Math.abs(b.m.maxDrawdown))}.`;
+  drawChart({ dates, series: [{ name: mixName, key: "mix", color: "var(--mix)", v: mix.sim.values }, { name: benchName, key: "bench", color: "var(--bench)", v: b.sim.values }], put: monthly > 0 ? mix.sim.contributed : null });
+  drawTable(dates, mixName, benchName, mix.sim.values, b.sim.values, monthly > 0 ? mix.sim.contributed : null);
 }
 
 // ---------- chart ----------
@@ -184,7 +185,7 @@ function drawChart({ dates, series, put }) {
     series.forEach((s, k) => { dots[k].setAttribute("cx", px); dots[k].setAttribute("cy", y(s.v[idx])); dots[k].setAttribute("visibility", "visible"); });
     tip.replaceChildren(el("b", {}, monthYear(dates[idx])),
       ...series.map((s) => el("div", {}, el("span", { class: "k", style: `background:${s.color}` }), `${s.name}: ${money(s.v[idx])}`)),
-      ...(put ? [el("div", {}, el("span", { class: "k", style: "background:var(--put)" }), `Money put in: ${money(put[idx])}`)] : []));
+      ...(put ? [el("div", {}, el("span", { class: "k", style: "background:var(--put)" }), `Put in: ${money(put[idx])}`)] : []));
     tip.hidden = false;
     const box = chart.getBoundingClientRect(), scale = box.width / W; // 1 unless the page was resized since the draw
     const left = px * scale + 12;
@@ -204,13 +205,13 @@ function drawChart({ dates, series, put }) {
 
   $("legend").replaceChildren(
     ...series.map((s) => el("span", {}, el("i", { style: `background:${s.color}` }), s.name)),
-    ...(put ? [el("span", {}, el("i", { style: "background:var(--put)" }), "Money put in")] : []));
+    ...(put ? [el("span", {}, el("i", { style: "background:var(--put)" }), "Put in")] : []));
   const a = series[0], b = series[1];
-  $("chart-desc").textContent = `Line chart. Your mix goes from ${money(a.v[0])} to ${money(a.v.at(-1))}; the benchmark goes from ${money(b.v[0])} to ${money(b.v.at(-1))}. Use the arrow keys on the chart to step through the months, or show the table.`;
+  $("chart-desc").textContent = `Your mix goes from ${money(a.v[0])} to ${money(a.v.at(-1))}; the benchmark from ${money(b.v[0])} to ${money(b.v.at(-1))}. Arrow keys step through months.`;
 }
 
 function drawTable(dates, an, bn, a, b, put) {
-  const head = ["Month", an, bn, ...(put ? ["Money put in"] : [])];
+  const head = ["Month", an, bn, ...(put ? ["Put in"] : [])];
   const table = el("table", {}, el("thead", {}, el("tr", {}, ...head.map((h) => el("th", { scope: "col" }, h)))));
   const body = el("tbody");
   dates.forEach((d, i) => body.append(el("tr", {}, el("td", {}, monthYear(d)), el("td", {}, money(a[i])), el("td", {}, money(b[i])), ...(put ? [el("td", {}, money(put[i]))] : []))));
@@ -237,23 +238,24 @@ $("toggle-table").addEventListener("click", () => {
   const open = $("table-wrap").hidden;
   $("table-wrap").hidden = !open;
   $("toggle-table").setAttribute("aria-expanded", String(open));
-  $("toggle-table").textContent = open ? "Hide the table" : "Show as a table";
+  $("toggle-table").textContent = open ? "Hide table" : "Show table";
 });
 $("csv").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
   try {
     const parsed = parsePricesCsv(await file.text());
-    if (parsed.dates.length < 13) throw new Error("Need at least 13 month-ends of prices that every fund shares.");
+    if (parsed.dates.length < 13) throw new Error("Need at least 13 months of prices that every fund shares.");
     state.data = { dates: parsed.dates, series: parsed.series };
-    state.labels = {}; state.demo = false;
-    state.rows = Object.keys(parsed.series).slice(0, 2).map((s, i) => ({ sym: s, w: i ? 40 : 60 }));
-    $("benchmark").dataset.pending = Object.keys(parsed.series)[0];
+    state.labels = {}; state.demo = false; state.source = "";
+    const names = Object.keys(parsed.series);
+    state.rows = names.slice(0, 2).map((s, i) => ({ sym: s, w: i ? 40 : 60 }));
+    $("benchmark").value = names[0];
     setup();
   } catch (err) {
     $("error").textContent = err.message;
   }
 });
-$("reset-data").addEventListener("click", () => { $("csv").value = ""; loadDemo(); });
+$("reset-data").addEventListener("click", () => { $("csv").value = ""; load(); });
 
-loadDemo().catch((e) => { $("error").textContent = "Could not load the demo prices: " + e.message; });
+load().catch((e) => { $("error").textContent = "Could not load prices: " + e.message; });
