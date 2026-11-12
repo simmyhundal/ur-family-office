@@ -13,6 +13,7 @@ from pathlib import Path
 from rich.console import Console
 
 from ufo.accounts.registry import RegistryError, load_registry, registry_path
+from ufo.performance.combine import combine_all
 from ufo.performance.compare import MAX_VALUE_AGE_DAYS, print_table, run_all, unmatched_rows
 from ufo.providers.prices import PriceStore, WebClient
 
@@ -36,7 +37,7 @@ def main(argv: list[str] | None = None, store: PriceStore | None = None, today: 
         return 2
     store = store or PriceStore(Path(a.cache), WebClient())
     runs = run_all(reg, root, store, a.benchmark, today, a.max_age_days)
-    print_table(runs, a.benchmark, con, unmatched_rows(reg, root))
+    print_table(runs, a.benchmark, con, unmatched_rows(reg, root), combine_all(runs, store, a.benchmark))
     return 0 if all(not r.error for r in runs) else 1
 
 
