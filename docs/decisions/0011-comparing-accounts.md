@@ -1,4 +1,4 @@
-# 11. How accounts are compared fairly (status: draft, awaiting the owner's yes)
+# 11. How accounts are compared fairly (status: accepted 2026-11-12)
 **Decision:** the multi-account comparison (milestone M10) shows numbers that are comparable and honest, stays local, and says what it does not know. (0008 is reserved for the local-only guard, issue 37; 0009 and 0010 are the IBKR decisions.)
 
 1. **Headline per account: money-weighted.** IRR of the account's real dated flows plus its ending value, and *excess IRR*: that IRR minus the IRR of the same deposits and withdrawals put into the benchmark (decision 0007). Time-weighted return and Sharpe are shown only as secondary figures and labelled **estimated** unless the month-end values are exact (statement-based). The data-quality badge on each row says `exact` (statement ending value, reconciliation checks pass, no inferred income) or `estimated`, with the as-of date.
