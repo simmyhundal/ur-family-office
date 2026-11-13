@@ -1,7 +1,7 @@
 // Tests for the save / upload / share modules. Every holding and number is invented.   Run: node --test tests/site/
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { FIDELITY_POSITIONS_INVENTED } from "./fixtures/fidelity-positions-invented.mjs";
 import { encodeShare, decodeShare, shareUrl, cardContent } from "../../site/js/share.mjs";
 import { parsePositions, parseNumber, csvRows, TEMPLATE_CSV } from "../../site/js/positions.mjs";
 import { savePortfolio, listPortfolios, renamePortfolio, deletePortfolio, clearEverything, STORE_KEY } from "../../site/js/portfolios.mjs";
@@ -79,7 +79,7 @@ test("template: commas in numbers, cash line, totals row, lowercase symbols", ()
 });
 
 test("invented Fidelity export: accounts combined, cash, pending, unknown and footer lines handled", () => {
-  const text = readFileSync(new URL("./fixtures/fidelity-positions-invented.csv", import.meta.url), "utf8");
+  const text = FIDELITY_POSITIONS_INVENTED;
   const r = parsePositions(text, KNOWN);
   assert.equal(r.format, "fidelity");
   // VTI 5000 + 2500 = 7500, BND 2100 -> 78.1 / 21.9
