@@ -137,7 +137,7 @@ global.document = {{getElementById: id => id==='data' ? {{textContent: {json.dum
   querySelector: s => el(s), querySelectorAll: () => [], documentElement: {{}}}};
 {script}
 const t = (hi) => niceTicks(0, hi, MONEY_STEPS, 6);
-const out = {{small: t(8400).ticks, mid: t(130000).step, big: t(322000).step, huge: t(2.4e6).step,
+const out = {{small: t(8400).ticks, mid: t(130000).step, big: t(410000).step, huge: t(2.4e6).step,
   pct: niceTicks(-0.03, 0.19, PCT_STEPS.map(m=>m/100), 6), money: [moneyAxis(0), moneyAxis(100000), moneyAxis(250000), moneyAxis(1500000)]}};
 win='inception'; grp='accounts'; draw();
 out.lines = els['#lines'].innerHTML; out.risk = els['#risk'].innerHTML;
