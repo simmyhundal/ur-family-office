@@ -1,8 +1,13 @@
 // Site configuration: defaults, validation and loading. Pure logic, no DOM, so node can test it.
 export const DEFAULTS = Object.freeze({
-  name: "UFO", wordmark: "UFO", tagline: "Out of this world possibilities", logo: "img/logo.svg",
+  name: "UFO", wordmark: "UFO", tagline: "A higher view of your money", logo: "img/logo.svg",
+  legal_name: "Mycorrhiza Partners LLC DBA Ur Family Office",
   contact_email: "", signup_endpoint: "", checkout_urls: {},
+  founder: { name: "", photo: "", linkedin: "" },
 });
+// Tagline alternatives considered (issue 175): "See every investment from above", "Your whole portfolio, in one orbit",
+// "Out-of-this-world clarity for down-to-earth money". The copyright year in the footer.
+export const YEAR = 2026;
 
 const str = (v, fallback) => (typeof v === "string" && v.trim() ? v.trim() : fallback);
 // Only https links may be an endpoint or a checkout link; anything else counts as "not set".
@@ -12,8 +17,15 @@ export const httpsUrl = (v) => {
 };
 // The logo is a path inside the site (e.g. "img/logo.svg"): no scheme, no "//", no "..", so it cannot point elsewhere.
 export const sitePath = (v, fallback) =>
-  typeof v === "string" && /^[A-Za-z0-9_-][A-Za-z0-9_./-]*\.(svg|png)$/.test(v.trim()) && !v.includes("..") && !v.includes("//") ? v.trim() : fallback;
+  typeof v === "string" && /^[A-Za-z0-9_-][A-Za-z0-9_./-]*\.(svg|png|jpe?g)$/.test(v.trim()) && !v.includes("..") && !v.includes("//") ? v.trim() : fallback;
 const email = (v) => (typeof v === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()) ? v.trim() : "");
+
+// The founder card: a name, a photo inside the site, and an https LinkedIn link (empty hides the link).
+function founderOf(f) {
+  const o = f && typeof f === "object" ? f : {};
+  return { name: str(o.name, ""), photo: sitePath(o.photo, ""), linkedin: httpsUrl(o.linkedin) };
+}
+export const copyright = (cfg) => `© ${YEAR} ${cfg.legal_name}`;
 
 export function mergeConfig(raw) {
   const r = raw && typeof raw === "object" ? raw : {};
@@ -27,9 +39,11 @@ export function mergeConfig(raw) {
     wordmark: str(r.wordmark, name),
     tagline: str(r.tagline, DEFAULTS.tagline),
     logo: sitePath(r.logo, DEFAULTS.logo),
+    legal_name: str(r.legal_name, DEFAULTS.legal_name),
     contact_email: email(r.contact_email),
     signup_endpoint: httpsUrl(r.signup_endpoint),
     checkout_urls: checkout,
+    founder: founderOf(r.founder),
   };
 }
 
@@ -67,6 +81,7 @@ export function footerHtml(cfg, root) {
 </div>
 <div class="wrap foot-legal">
   <p><b>Information, not investment advice.</b> Results are before taxes and trading costs, and past results don’t predict future ones.</p>
-  <p>Prices: month-end adjusted closes, refreshed on weekdays. Cash rate: 3-month Treasury bills from FRED.</p>
+  <p>Prices: month-end adjusted closes, completed months only. Cash rate: 3-month Treasury bills from FRED.</p>
+  <p class="copy">${esc(copyright(cfg))}</p>
 </div>`;
 }

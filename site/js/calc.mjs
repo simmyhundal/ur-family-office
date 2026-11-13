@@ -148,6 +148,22 @@ export function toMonthly(obs) {
   return { dates, series, dropped: Math.max(...syms.map((s) => perSym[s].size)) - months.length };
 }
 
+/** Completed months only: drop every date whose month has not ended yet on `today` ("YYYY-MM-DD", local date).
+ *  A month-end counts once the calendar has moved into a later month. Dates, every series and a per-date `rf` are cut together. */
+export function completedMonths(d, today) {
+  const cut = String(today).slice(0, 7);
+  let n = d.dates.length;
+  while (n > 0 && d.dates[n - 1].slice(0, 7) >= cut) n--;
+  if (n === d.dates.length) return d;
+  return { ...d, dates: d.dates.slice(0, n), series: Object.fromEntries(Object.entries(d.series).map(([s, v]) => [s, v.slice(0, n)])),
+    rf: Array.isArray(d.rf) ? d.rf.slice(0, n) : d.rf };
+}
+export const localToday = (now = new Date()) =>
+  `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "2026-10-30" -> "Oct 2026", without time zones. */
+export const throughLabel = (iso) => `${MONTHS[Number(iso.slice(5, 7)) - 1]} ${iso.slice(0, 4)}`;
+
 /** Months to use for these symbols: from the latest first-price to the end, then the last `years` of that.
  *  A fund that started later shortens the period; `from` says which symbol set the start. */
 export function sliceFor(data, symbols, years) {

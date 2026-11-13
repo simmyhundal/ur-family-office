@@ -1,9 +1,11 @@
 {
   "name": "UFO",
   "wordmark": "UFO",
-  "tagline": "Out of this world possibilities",
+  "tagline": "A higher view of your money",
+  "legal_name": "Mycorrhiza Partners LLC DBA Ur Family Office",
   "logo": "img/logo.svg",
   "contact_email": "",
   "signup_endpoint": "",
-  "checkout_urls": {}
+  "checkout_urls": {},
+  "founder": { "name": "Simmy Hundal", "photo": "img/founder.jpg", "linkedin": "" }
 }

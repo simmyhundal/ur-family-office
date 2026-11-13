@@ -7,7 +7,7 @@
 <meta name="description" content="Enter a mix of funds and compare it with a benchmark like SPY. Runs in your browser.">
 <meta name="theme-color" content="#f7f7fc" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0a0b1c" media="(prefers-color-scheme: dark)">
-<link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+<link rel="icon" type="image/svg+xml" href="../img/favicon.svg">
 <link rel="stylesheet" href="../style.css">
 <link rel="stylesheet" href="../css/try-tools.css">
 <script>document.documentElement.className = "js";</script>
@@ -15,7 +15,7 @@
 <body>
 <a class="skip" href="#main">Skip to content</a>
 <header class="site-head"><div class="wrap head-row">
-  <a class="brand" href="../" aria-label="UFO, home"><img class="brand-mark" src="../img/logo.svg" alt="" width="36" height="36"><span class="brand-tag">Out of this world possibilities</span></a>
+  <a class="brand" href="../" aria-label="UFO, home"><img class="brand-mark" src="../img/logo.svg" alt="" width="36" height="36"><span class="brand-tag">A higher view of your money</span></a>
   <nav class="main-nav" aria-label="Main"><a href="../try/" aria-current="page">Try it</a><a href="../learn/">Learn</a><a href="../teach/">Teach</a><a href="../pricing/">Pricing</a><a href="../about/">About</a></nav>
   <a class="nav-cta" href="../signup/">Sign up</a>
 </div></header>
@@ -29,6 +29,7 @@
     <span class="eyebrow">Your result</span>
     <h1 id="headline">Loading prices…</h1>
     <p class="sub" id="headline-sub"></p>
+    <div id="hl-stats" class="hl-stats"></div>
   </section>
   <p id="error" class="error" role="alert"></p>
   <figure class="chart-fig">
@@ -65,7 +66,20 @@
     </div>
   </section>
   <p id="sample-note" class="banner" role="status" hidden><b>Sample portfolio.</b> An invented person (“Sample MBA student”): $2,000 to start, then $500 a month into a made-up mix of funds. The prices are real; the person is not. Open “Your mix” to try your own.</p>
-  <p class="muted small">Next: <a href="../learn/sharpe/">see how the Sharpe ratio is worked out →</a></p>
+  <aside id="next-step" class="next-step" hidden aria-labelledby="ns-title">
+    <div class="ns-copy">
+      <span class="eyebrow">What next</span>
+      <h2 id="ns-title"></h2>
+      <p id="ns-body" class="muted"></p>
+      <p id="ns-ask" class="ns-ask"></p>
+      <div class="ns-actions">
+        <a class="btn" href="../signup/?plan=plus">Join the Plus list</a>
+        <a class="btn ghost" href="../#plus">See what Plus looks like</a>
+        <button type="button" id="ns-own" class="link">Try your own mix</button>
+      </div>
+    </div>
+    <a class="ns-learn" href="../learn/sharpe/"><span class="tag">Lesson</span><b>What is a Sharpe ratio?</b><span class="muted small">The number beside the return, in five short cards.</span></a>
+  </aside>
 
   <details class="details">
     <summary>Show details: full results</summary>
@@ -79,7 +93,7 @@
     </div>
   </details>
 
-  <details class="details">
+  <details class="details" id="settings">
     <summary>Your mix and settings</summary>
     <div class="inner">
       <div class="mix-head"><h3 id="mix-h" style="margin:0">Mix</h3><label class="inline">Start from <select id="preset"></select></label>
@@ -128,13 +142,14 @@
 </main>
 <footer class="site-foot"><div class="wrap foot-grid">
   <div class="foot-brand"><a class="brand" href="../"><img class="brand-mark" src="../img/logo.svg" alt="" width="32" height="32"><span class="brand-name">UFO</span></a>
-    <p>Out of this world possibilities. Compare a mix of funds with the market, privately, in your browser.</p></div>
+    <p>A higher view of your money. Compare a mix of funds with the market, privately, in your browser.</p></div>
   <nav class="foot-col" aria-label="Product"><h2>Product</h2><a href="../try/">Try it</a><a href="../learn/">Learn</a><a href="../teach/">For instructors</a><a href="../pricing/">Pricing</a></nav>
   <nav class="foot-col" aria-label="Company"><h2>Company</h2><a href="../about/">About</a><a href="../privacy/">Privacy</a><a href="../terms/">Terms</a><a href="../signup/">Sign up</a></nav>
 </div>
 <div class="wrap foot-legal">
   <p><b>Information, not investment advice.</b> Results are before taxes and trading costs, and past results don’t predict future ones.</p>
-  <p>Prices: month-end adjusted closes, refreshed on weekdays. Cash rate: 3-month Treasury bills from FRED.</p>
+  <p>Prices: month-end adjusted closes, completed months only. Cash rate: 3-month Treasury bills from FRED.</p>
+  <p class="copy">© 2026 Mycorrhiza Partners LLC DBA Ur Family Office</p>
 </div></footer>
 <script type="module" src="../js/app.js"></script>
 <script type="module" src="../js/chrome.mjs"></script>
