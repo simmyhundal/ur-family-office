@@ -335,7 +335,7 @@ th:last-child .tip::after, th:nth-last-child(2) .tip::after { left: auto; right:
 .lesson-table { border-collapse: collapse; margin: 6px 0 12px; width: auto; }
 .lesson-table th, .lesson-table td { padding: 6px 16px 6px 0; text-align: left; font-weight: normal; }
 .lesson-table thead th { font-weight: 650; border-bottom: 1px solid var(--line); }
-.step-card .slope { width: 100%; max-width: 520px; height: auto; }
+.step-card .slope { width: 100%; max-width: 560px; height: auto; }
 .step-card .chart-fig { box-shadow: none; padding: 0; background: none; border: 0; }
 
 /* ---------- pricing ---------- */

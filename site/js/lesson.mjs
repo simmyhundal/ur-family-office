@@ -137,7 +137,7 @@ function scale(s) {
 function slopeChart(S, B, name, bench) {
   const pts = [{ n: name, x: S.sdAnnual, y: S.meanExcessAnnual + S.meanCash * 12, c: "var(--mix)" }];
   if (B && B.sharpe != null) pts.push({ n: bench, x: B.sdAnnual, y: B.meanExcessAnnual + B.meanCash * 12, c: "var(--bench)" });
-  const cash = S.meanCash * 12, W = 520, H = 220, L = 52, Rr = 90, T = 14, Bt = 34;
+  const cash = S.meanCash * 12, W = 560, H = 220, L = 52, Rr = 190, T = 14, Bt = 34;
   const xm = Math.max(...pts.map((p) => p.x)) * 1.15, ys = [cash, ...pts.map((p) => p.y)];
   const y0 = Math.min(0, ...ys), y1 = Math.max(...ys) * 1.15 || 0.1;
   const X = (v) => L + (v / xm) * (W - L - Rr), Y = (v) => T + (1 - (v - y0) / (y1 - y0)) * (H - T - Bt);
@@ -145,7 +145,7 @@ function slopeChart(S, B, name, bench) {
   root.append(svg("line", { class: "grid", x1: L, x2: W - Rr, y1: Y(0), y2: Y(0) }), svg("line", { class: "grid", x1: L, x2: L, y1: T, y2: H - Bt }));
   const text = (x, y, t, a = {}) => { const e = svg("text", { class: "axis-text", x, y, ...a }); e.textContent = t; return e; };
   root.append(text(L + (W - L - Rr) / 2, H - 6, "Bumps (yearly volatility) →", { "text-anchor": "middle" }), text(L - 6, Y(cash) + 4, pm(cash, 1), { "text-anchor": "end" }));
-  root.append(svg("circle", { cx: X(0), cy: Y(cash), r: 4, fill: "var(--ink-2)" }), text(L + 8, Y(cash) - 8, "Cash (T-bills)"));
+  root.append(svg("circle", { cx: X(0), cy: Y(cash), r: 4, fill: "var(--ink-2)" }), text(L + 8, Y(cash) + 18, "Cash (T-bills)"));
   for (const p of pts) {
     root.append(svg("line", { x1: X(0), y1: Y(cash), x2: X(p.x), y2: Y(p.y), stroke: p.c, "stroke-width": 2 }), svg("circle", { cx: X(p.x), cy: Y(p.y), r: 5, fill: p.c }),
       text(X(p.x) + 9, Y(p.y) + 4, `${p.n} (${((p.y - cash) / p.x).toFixed(2)})`, { "font-weight": 600 }));

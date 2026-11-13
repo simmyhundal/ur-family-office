@@ -38,7 +38,7 @@ def build(prices_json: str, presets_json: str | None = None) -> str:
     script = f"<script>globalThis.UFO_DATA = {data}; globalThis.UFO_PRESETS = {presets};</script>\n<script type=\"module\">\n{code}</script>"
     out = html.replace('<script type="module" src="../js/app.js"></script>', script)
     out = re.sub(r"<nav .*?</nav>", "", out, flags=re.S)  # the other pages are not in the copy
-    out = re.sub(r'href="\.\./[^"]*"', 'href="https://simmyhundal.github.io/ur-family-office/"', out)
+    out = re.sub(r'href="\.\./([^"]*)"', r'href="https://simmyhundal.github.io/ur-family-office/\1"', out)  # keep the target page
     assert 'src="../js/app.js"' not in out and 'href="../style.css"' not in out, "page structure changed; update the builder"
     assert "../css/" not in out and "../img/" not in out and "chrome.mjs" not in out, "page structure changed; update the builder"
     return out

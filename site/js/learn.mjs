@@ -19,7 +19,8 @@ function show(i, focus = true) {
   $("step-body").replaceChildren(...s.body);
   $("back").disabled = at === 0;
   const last = at === steps.length - 1;
-  $("next").hidden = last || s.end;
+  const unextended = steps.length === mainLength;
+  $("next").hidden = last || (s.end && unextended);
   $("done").hidden = !(last || s.end);
   $("further").hidden = !(s.end && steps.length === mainLength && extra.length);
   const card = $("step-card");
