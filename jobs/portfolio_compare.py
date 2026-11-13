@@ -1,6 +1,6 @@
 """Run the performance report for every account in .data/accounts.json and print one table. Read-only, local only.
 
-  python -m jobs.portfolio_compare [--benchmark VTI] [--max-age-days 45]
+  python -m jobs.portfolio_compare [--benchmark VT] [--max-age-days 45]
 Add accounts with: python -m ufo.setup accounts. The single-account jobs.performance_report keeps working.
 """
 from __future__ import annotations
@@ -17,13 +17,13 @@ from ufo.performance.combine import combine_all
 from ufo.performance.compare import MAX_VALUE_AGE_DAYS, print_table, run_all, unmatched_rows
 from jobs.performance_report import NAMES
 from ufo.performance.holdings import classes_path, load_classes, print_holdings
-from ufo.performance.dashboard import build_data, render as render_page, write
+from ufo.performance.dashboard import BENCHMARKS, build_data, render as render_page, write
 from ufo.providers.prices import PriceError, PriceStore, WebClient
 
 
 def main(argv: list[str] | None = None, store: PriceStore | None = None, today: date | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--benchmark", default="VTI")
+    ap.add_argument("--benchmark", default="VT", help="the benchmark selected when the page opens (the page can switch between VT, VTI, SPY, QQQ, AOR and BND)")
     ap.add_argument("--max-age-days", type=int, default=MAX_VALUE_AGE_DAYS)
     ap.add_argument("--also", action="append", default=[], metavar="[NAME=]SYMBOL", help='another comparison column, repeatable: "IVV" or "Wellesley=VWINX"')
     ap.add_argument("--out", default="exports/portfolio-compare.html", help="local dashboard (owner-only file); '' to skip")
@@ -61,7 +61,17 @@ def main(argv: list[str] | None = None, store: PriceStore | None = None, today: 
         try:
             series, _ = store.report([a.benchmark] + [s for w in extras_spec.values() for s in w], start, asof)
             extras = {n: (w, series) for n, w in extras_spec.items() if all(k in series for k in w)}
-            data = build_data(done, combine_all(done, store, a.benchmark, singletons=True), a.benchmark, series[a.benchmark], extras, asof, classes, store.risk_free(start, asof))
+            alts = {}
+            for sym, _ in BENCHMARKS:  # the picker's other benchmarks; one that cannot be loaded is left out of the picker
+                if sym != a.benchmark:
+                    try:
+                        got, _w = store.report([sym], start, asof)
+                        if sym in got:
+                            alts[sym] = got[sym]
+                    except (PriceError, KeyError, ValueError):
+                        pass
+            data = build_data(done, combine_all(done, store, a.benchmark, singletons=True), a.benchmark, series[a.benchmark], extras, asof, classes, store.risk_free(start, asof),
+                              {a.benchmark: series[a.benchmark], **alts})
         except (PriceError, KeyError) as e:
             con.print(f"[red]Could not build the dashboard: {e}[/red]")
             return 1

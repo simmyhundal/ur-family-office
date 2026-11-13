@@ -46,7 +46,16 @@ def _prev_ends(months: list[date]) -> list[date]:
     return [months[i - 1] if i else date(m.year, m.month, 1) - timedelta(days=1) for i, m in enumerate(months)]
 
 
-def portfolio_figures(rep: M.Report, rf: Series | None) -> dict:
+def index_returns_on(series: Series, months: list[date]) -> list[float]:
+    """Monthly returns of a price series over the given month-ends (the previous month-end is the base, as in metrics.analyze)."""
+    out = []
+    for m, prev in zip(months, _prev_ends(months)):
+        a, b = series.on_or_before(prev), series.on_or_before(m)
+        out.append((b / a - 1) if a and b else 0.0)
+    return out
+
+
+def portfolio_figures(rep: M.Report, rf: Series | None, index: Series | None = None) -> dict:
     """All whole-portfolio numbers behind the lesson. Raw floats under 'raw', formatted text and reasons under 'fill'."""
     months = list(rep.months)
     n = len(months)
@@ -55,7 +64,7 @@ def portfolio_figures(rep: M.Report, rf: Series | None) -> dict:
     fill.update(n_months=str(n), start_month=months[0].strftime("%b %Y") if months else na("no history"),
                 end_month=months[-1].strftime("%b %Y") if months else na("no history"))
     rets = [r for r in rep.port_returns]
-    brets = list(rep.index_returns)
+    brets = index_returns_on(index, months) if index is not None else list(rep.index_returns)
     if rf is None:
         why = "the T-bill rate could not be loaded"
         for k in ("sharpe", "rf_annual", "rf_month", "mean_excess_month", "mean_excess_annual", "sd_month", "sd_annual", "sortino",
@@ -203,7 +212,8 @@ def fill_template(template: str, values: dict[str, str]) -> str:
     return re.sub(r"\{(\w+)\}", lambda m: values[m.group(1)], template)
 
 
-def build_lesson(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, rf: Series | None, template: str | None = None) -> dict:
+def build_lesson(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, rf: Series | None, template: str | None = None,
+                 index: Series | None = None) -> dict:
     """The lesson as HTML plus the points for its chart. Uses the whole-portfolio line (every account, transfers netted)."""
     whole = next((g for g in groups if g.kind == "all" and g.report is not None), None)
     ref, name = (whole.report, whole.name) if whole else (None, "")
@@ -221,7 +231,7 @@ def build_lesson(runs: list[AccountRun], groups: list[GroupRun], benchmark: str,
             values[k] = na(why)
         values["estimate_note"] = ""
     else:
-        fig = portfolio_figures(ref, rf)
+        fig = portfolio_figures(ref, rf, index)
         values.update(fig["fill"])
         raw = fig["raw"]
         values["estimate_note"] = ESTIMATE_NOTE
