@@ -71,7 +71,8 @@ def ask_account(p: Prompter, existing: Account | None = None, taken: set[str] = 
         try:
             return Account(id=aid, label=label, brokerage=b, last_digits="" if digits == "-" else digits, wrapper=w,
                            owner=owner, opened=opened, closed=closed, ending_value=ev,
-                           source=Source(importer=b, history_glob=hist, snapshot_glob="" if snap == "-" else snap))
+                           source=Source(importer=b, history_glob=hist, snapshot_glob="" if snap == "-" else snap,
+                                         statement_glob=e.source.statement_glob if e else ""))
         except ValueError as err:
             p.say(f"Could not save that account: {err}")
     raise RegistryError("Too many attempts; nothing was saved.")

@@ -175,8 +175,14 @@ def _write_csv(path: Path, pts: list[Point]) -> None:
 class PriceStore:
     def __init__(self, cache_dir: Path, client: PriceClient | None = None, today: date | None = None):
         self.dir, self.client, self.today = Path(cache_dir), client, today or date.today()
+        self.own: dict[str, list[Point]] = {}  # series supplied by an importer from its own files
+
+    def add_own(self, series: dict[str, list[Point]]) -> None:
+        self.own.update({k.strip().upper(): v for k, v in series.items()})
 
     def _load(self, name: str, start: date, end: date, fetch) -> list[Point]:
+        if name.upper() in self.own:
+            return [p for p in self.own[name.upper()] if start <= p.day <= end]
         path = self.dir / f"{name.upper()}.csv"
         have = _read_csv(path) if path.exists() else []
         # The cache is enough when it reaches the requested window; ends within a week of a weekend/holiday count.

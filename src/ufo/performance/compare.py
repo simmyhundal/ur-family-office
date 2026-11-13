@@ -84,7 +84,10 @@ def run_account(a: Account, root: Path, store: PriceStore, benchmark: str, today
         if a.source.snapshot_glob and hasattr(imp, "holdings"):
             out.holdings_as_of, out.holdings = imp.holdings(_files(root, a.source.snapshot_glob), a.last_digits)
         end, value, stmt = ending(a, snaps, today, max_age)
-        res = run_core(hist, snaps, end, value, store, benchmark)
+        if hasattr(imp, "prices"):  # an importer that supplies its own unit prices (no tickers in the files)
+            store.add_own(imp.prices(hist_files))
+        stmts = imp.statement_values(_files(root, a.source.statement_glob)) if a.source.statement_glob and hasattr(imp, "statement_values") else []
+        res = run_core(hist, snaps, end, value, store, benchmark, statement_values=stmts)
     except (ValueError, KeyError, PriceError) as e:
         out.error = str(e).strip("'\"")
         return out
