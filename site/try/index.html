@@ -8,6 +8,7 @@
 <meta name="theme-color" content="#3643c4">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%233643c4'/%3E%3Ccircle cx='16' cy='16' r='6' fill='white'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="../css/try-tools.css">
 <script>document.documentElement.className = "js";</script>
 </head>
 <body>
@@ -33,6 +34,27 @@
     <div id="chart" class="chart" tabindex="0" role="img" aria-labelledby="chart-title chart-desc"></div>
     <p id="chart-desc" class="sr-only"></p>
   </figure>
+  <p id="link-note" class="banner" role="status" hidden><b>Opened from a shared link.</b> It carried only percentages, a benchmark and a time window. Deposits are yours to set under “Your mix and settings”.</p>
+  <div class="tool-bar">
+    <button type="button" id="save-mix" class="secondary">Save this mix</button>
+    <button type="button" id="share-open" class="secondary" aria-expanded="false" aria-controls="share-panel">Share…</button>
+    <span id="save-status" class="muted small" role="status"></span>
+  </div>
+  <section id="share-panel" class="share-panel" hidden aria-labelledby="share-h">
+    <h3 id="share-h">What you would share</h3>
+    <div class="share-grid">
+      <canvas id="share-card" width="1200" height="630" role="img" aria-label="Preview of the share card"></canvas>
+      <div>
+        <label class="field"><span class="lbl">Link</span><input id="share-link" readonly aria-describedby="share-what"></label>
+        <p id="share-what" class="muted small"></p>
+        <div class="controls">
+          <button type="button" id="share-copy" class="secondary">Copy link</button>
+          <button type="button" id="share-png" class="secondary">Download card (PNG)</button>
+        </div>
+        <p class="muted small">Nothing is uploaded. The link and the card are made in your browser; you decide where to paste them.</p>
+      </div>
+    </div>
+  </section>
   <p id="sample-note" class="banner" role="status" hidden><b>Sample portfolio.</b> An invented person (“Sample MBA student”): $2,000 to start, then $500 a month into a made-up mix of funds. The prices are real; the person is not. Open “Your mix” to try your own.</p>
   <p class="muted small">Next: <a href="../learn/sharpe/">see how the Sharpe ratio is worked out →</a></p>
 
@@ -69,6 +91,17 @@
         <label><span class="tip" tabindex="0" data-tip="The amount invested on the first day.">Start ($)</span><input id="initial" type="number" min="1" step="100" value="10000" inputmode="decimal"></label>
         <label><span class="tip" tabindex="0" data-tip="Money added at the end of every month, split by your weights.">Add monthly ($)</span><input id="monthly" type="number" min="0" step="50" value="0" inputmode="decimal"></label>
       </div>
+      <h3 style="margin-top:28px">My portfolios</h3>
+      <p class="muted small">Saved in this browser only. Nothing is sent anywhere.</p>
+      <ul id="saved-list" class="saved-list"></ul>
+      <p id="saved-empty" class="muted small">None yet. Use “Save this mix” under the chart.</p>
+      <button type="button" id="clear-all" class="link">Clear everything saved on this device</button>
+      <h3 style="margin-top:28px">Start from your holdings</h3>
+      <p class="muted small">Drop a positions file and it becomes a mix, by weight. Dollar amounts are used to work out the percentages and then forgotten; they are not saved or shared. Parsed in your browser.</p>
+      <div id="drop" class="drop" tabindex="-1"><label class="file">Positions CSV<input id="positions" type="file" accept=".csv,text/csv"></label>
+        <span class="muted small">or drop it here</span></div>
+      <p class="muted small"><a href="#" id="template-dl">Download the template</a> (symbol, value). From Fidelity: Accounts &gt; Positions &gt; Download.</p>
+      <p id="positions-msg" class="muted small" role="status"></p>
     </div>
   </details>
 

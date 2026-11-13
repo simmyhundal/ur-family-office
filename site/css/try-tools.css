@@ -1,0 +1,15 @@
+/* Save, share, upload and saved-portfolio controls on the Try page. Uses the site's variables from style.css. */
+.tool-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 4px 0 16px; }
+.share-panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); padding: 18px; margin: 0 0 16px; }
+.share-grid { display: grid; gap: 18px; margin-top: 12px; }
+@media (min-width: 761px) { .share-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); align-items: start; } }
+#share-card { width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+#share-link { width: 100%; font-size: .85rem; }
+.saved-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 8px; }
+.saved-list li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; background: var(--tint); border-radius: 12px; padding: 8px 12px; }
+.saved-list .nm { font-weight: 600; overflow-wrap: anywhere; }
+.saved-list .sub { color: var(--ink-2); font-size: .85rem; }
+.saved-list .acts { display: flex; gap: 6px; }
+.saved-list button { min-height: 36px; padding: 0 12px; font-size: .9rem; }
+.drop { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; border: 2px dashed var(--line); border-radius: 14px; padding: 14px; }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
