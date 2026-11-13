@@ -92,3 +92,22 @@ def test_group_with_no_common_month_end_is_refused_by_name(tmp_path):
     runs[1].result.report.months = [date(2030, 1, 31)]  # invented: B covers only a later month
     err = combine("all", "All", runs, st, "IDX").error
     assert "no month-end is covered by every account" in err and "B from" in err
+
+
+def test_terminal_total_row_equals_sum_of_accounts_at_common_date(tmp_path):
+    import io
+    from rich.console import Console
+    from ufo.performance.compare import print_table
+    st, _ = store(tmp_path)
+    reg = build(tmp_path)
+    reg.accounts[1].ending_value.as_of = date(2022, 5, 20)  # accounts end on different dates
+    runs = run_all(reg, tmp_path, st, "IDX", TODAY)
+    gs = combine_all(runs, st, "IDX")
+    tot = next(g for g in gs if g.kind == "all")
+    at = lambda r: 0.0 if tot.end not in r.result.report.months else r.anchors.get(tot.end, (r.result.report.values[r.result.report.months.index(tot.end)],))[0]
+    assert abs(tot.end_value - sum(at(r) for r in runs)) < 0.01
+    buf = io.StringIO()
+    print_table(runs, "IDX", Console(file=buf, width=250, force_terminal=False), [], gs)
+    text = buf.getvalue()
+    assert "Total, all accounts" in text and f"{tot.end_value:,.0f}" in text and f"as of {tot.end}" in text
+    assert "latest month-end every account covers" in text and "owner: owner" in text
