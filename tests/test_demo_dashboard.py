@@ -23,7 +23,8 @@ def test_demo_page_is_labelled_and_has_phone_layout(tmp_path, monkeypatch):
     assert 'class="demo"' in page and "invented household" in page
     assert "invented demo data" in page and "local only, never sent anywhere" not in page
     assert 'id="hero"' in page and "function hero()" in page          # dollar headline
-    assert "@media (max-width:640px)" in page and "td.dataset.l=" in page  # table becomes cards on phones
+    assert "@media (max-width:640px)" in page and 'id="tblwrap"' in page  # phones keep a table: sideways scroll, sticky first column (issue 196)
+    assert "position:sticky;left:0" in page and "td.dataset.l=" not in page
     assert "CW($('#lines'))" in page                                   # charts drawn at the container's width
     for label in ("Joint brokerage", "Alex Roth IRA", "Sam Roth IRA", "Sam rollover IRA"):
         assert label in page

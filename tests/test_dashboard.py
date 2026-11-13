@@ -53,7 +53,7 @@ def test_one_command_writes_a_private_page_with_every_window_and_grouping(tmp_pa
 def test_no_external_requests_in_the_page(tmp_path):
     _, out = make(tmp_path)
     page = out.read_text()
-    assert not re.search(r"<link[^>]+href=|<script[^>]+src=|@import|fetch\(|XMLHttpRequest", page)
+    assert not re.search(r"<link[^>]+href=\"(?!data:)|<script[^>]+src=|@import|fetch\(|XMLHttpRequest", page)
 
 
 @pytest.mark.skipif(not NODE, reason="node not installed")
