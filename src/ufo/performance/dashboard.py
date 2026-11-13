@@ -34,20 +34,21 @@ def window_start(key: str, asof: date) -> date | None:
         return asof.replace(year=asof.year - n, day=28)
 
 
-def _stats(flows, report, end, end_value, index: Series, start: date | None, extras: dict[str, tuple[dict, Series]], market: bool = True) -> dict | None:
+def _stats(flows, report, end, end_value, index: Series, start: date | None, extras: dict[str, tuple[dict, Series]], market: bool = True, rf: Series | None = None) -> dict | None:
     """Figures for one window, or None when the entity does not cover it (shown as n/a, never a shortened number)."""
     fl = sorted(flows)
     base: list[tuple[date, float]] = []  # the opening value, as the first deposit of a windowed calculation
     if start is None and not market:
         irr = report.irr
         out = {"value": end_value, "net_in": report.contributed - report.withdrawn, "irr": irr, "bench_irr": report.index_irr, "excess": report.excess_irr,
-               "bench_end": report.index_end_value if report.index_irr is not None else None, "twr": None, "sharpe": None, "dd": None, "exact": True, "open": None}
+               "bench_end": report.index_end_value if report.index_irr is not None else None, "twr": None, "sharpe": None, "dd": None, "exact": True, "open": None, "risk": None}
         ext_flows = fl
     elif start is None:
         irr = report.irr
         out = {"value": end_value, "net_in": report.contributed - report.withdrawn, "irr": irr, "bench_irr": report.index_irr,
                "excess": report.excess_irr, "bench_end": report.index_end_value, "twr": report.twr_annual,
-               "sharpe": report.sharpe, "dd": report.max_drawdown, "exact": True, "open": None}
+               "sharpe": report.sharpe, "dd": report.max_drawdown, "exact": True, "open": None,
+               "risk": {"vol": report.volatility, "ret": report.twr_annual, "sharpe": report.sharpe}}
         ext_flows = fl
     else:
         if not fl or fl[0][0] > start:
@@ -63,15 +64,16 @@ def _stats(flows, report, end, end_value, index: Series, start: date | None, ext
         irr = M.xirr(M.investor_flows(ext_flows, end, end_value) + [(od, -ov)])
         base = [(od, ov)]
         cf = M.index_counterfactual(base + ext_flows, index, end)
+        chart = _window_chart(report, i, end, end_value, base + ext_flows, index, market)
         if not market:  # the benchmark comparison needs only dated flows and values; the return measures need prices
             return {"value": end_value, "net_in": sum(a for _, a in ext_flows), "irr": irr, "bench_irr": cf.irr,
                     "excess": (irr - cf.irr) if irr is not None and cf.irr is not None else None, "bench_end": cf.terminal_value,
-                    "twr": None, "sharpe": None, "dd": None, "exact": False, "open": str(od), "extras": {}}
+                    "twr": None, "sharpe": None, "dd": None, "exact": False, "open": str(od), "extras": {}, "chart": chart, "risk": None}
         g = M.growth_index(report.port_returns[i + 1:])
         out = {"value": end_value, "net_in": sum(a for _, a in ext_flows), "irr": irr, "bench_irr": cf.irr,
                "excess": (irr - cf.irr) if irr is not None and cf.irr is not None else None, "bench_end": cf.terminal_value,
                "twr": M.annualize(g[-1], len(g)) if g else None, "sharpe": None, "dd": M.max_drawdown(g) if g else None,
-               "exact": False, "open": str(od)}
+               "exact": False, "open": str(od), "chart": chart, "risk": _window_risk(report, i, rf)}
     out["extras"] = {}
     if not market:
         return out
@@ -83,14 +85,32 @@ def _stats(flows, report, end, end_value, index: Series, start: date | None, ext
     return out
 
 
-def _basket_risk(weights: dict[str, float], series: Series | dict, months: list[date], rf: Series | None) -> dict | None:
+def _window_chart(report, i: int, end: date, end_value: float, flows, index: Series, market: bool) -> dict:
+    """Month-end values from the window's opening month, and (for market accounts) the same flows held in the benchmark."""
+    months, values = list(report.months[i:]), list(report.values[i:])
+    if end not in months:
+        months.append(end)
+        values.append(end_value)
+    bench = [round(v, 2) for v in M.index_path(flows, index, months)] if market else []
+    return {"months": [str(m) for m in months], "values": [round(v, 2) for v in values], "bench": bench}
+
+
+def _window_risk(report, i: int, rf: Series | None) -> dict:
+    """Annualised return, volatility and Sharpe over the months after the window's opening month."""
+    rets = [r for r in report.port_returns[i + 1:] if r is not None]
+    ex = [r - M.monthly_rf(rf, report.months[j - 1]) for j, r in zip(range(i + 1, len(report.months)), report.port_returns[i + 1:]) if r is not None] if rf is not None else []
+    g = M.growth_index(rets)
+    return {"vol": M.volatility(rets), "ret": M.annualize(g[-1], len(g)) if g else None, "sharpe": M.sharpe(ex) if rf is not None else None}
+
+
+def _basket_risk(weights: dict[str, float], series: Series | dict, months: list[date], rf: Series | None, first_prev: date | None = None) -> dict | None:
     """Annualised return, volatility and Sharpe of a fixed-weight mix (rebalanced monthly) over the given month-ends."""
     if len(months) < 12:
         return None
     total = sum(weights.values())
     rets, ex = [], []
     for i, m in enumerate(months):
-        prev = months[i - 1] if i else date(m.year, m.month, 1) - timedelta(days=1)
+        prev = months[i - 1] if i else (first_prev or date(m.year, m.month, 1) - timedelta(days=1))
         r = 0.0
         for sym, w in weights.items():
             sr = series[sym] if isinstance(series, dict) else series
@@ -102,44 +122,67 @@ def _basket_risk(weights: dict[str, float], series: Series | dict, months: list[
     return {"vol": M.volatility(rets), "ret": M.annualize(g[-1], len(g)), "sharpe": M.sharpe(ex) if rf is not None else None}
 
 
-def risk_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, index: Series,
-              extras: dict[str, tuple[dict, Series]], rf: Series | None) -> dict:
-    """Points for the risk-vs-return scatter (issue 129), since inception. Entities with no volatility are listed, not plotted."""
-    pts, left = [], []
+def _bench_points(ref: M.Report, key: str, asof: date, benchmark: str, extras: dict[str, tuple[dict, Series]], rf: Series | None) -> list[dict]:
+    """The benchmark and extra baskets over the same window as the entities (the whole-portfolio history for 'inception')."""
+    start = window_start(key, asof)
+    if start is None:
+        i = -1
+    else:
+        idx = [j for j, m in enumerate(ref.months) if m <= start]
+        if not idx:
+            return []
+        i = idx[-1]
+    months = list(ref.months[i + 1:])
+    rets = list(ref.index_returns[i + 1:])
+    if not months:
+        return []
+    g = M.growth_index(rets)
+    prevs = [ref.months[j - 1] for j in range(i + 1, len(ref.months))] if i >= 0 else None
+    if prevs is None:  # whole history: the first month's opening rate is the month before it
+        prevs = [date(months[0].year, months[0].month, 1) - timedelta(days=1)] + months[:-1]
+    ex = [r - M.monthly_rf(rf, pv) for r, pv in zip(rets, prevs)] if rf is not None else []
+    exact = start is None
+    out = [{"label": benchmark, "kind": "benchmark", "gk": "", "vol": M.volatility(rets), "ret": M.annualize(g[-1], len(g)),
+            "sharpe": M.sharpe(ex) if rf is not None else None, "exact": exact}]
+    for name, (w, series) in extras.items():
+        bk = _basket_risk(w, series, months, rf, first_prev=prevs[0])
+        if bk:
+            out.append({"label": name, "kind": "benchmark", "gk": "", "exact": exact, **bk})
+    return [p for p in out if p["vol"] is not None and p["ret"] is not None]
 
-    def add(label, kind, rep, quality):
-        if rep is None or rep.volatility is None or rep.twr_annual is None:
-            left.append([label, "fewer than 12 months of history"])
-            return
-        if rep.volatility > MAX_PLAUSIBLE_VOL:  # early months with almost no capital make monthly returns explode
-            left.append([label, "figures not meaningful: very little capital in the early months"])
-            return
-        pts.append({"label": label, "kind": kind, "vol": rep.volatility, "ret": rep.twr_annual, "sharpe": rep.sharpe, "exact": quality == "exact"})
 
-    for r in runs:
-        if r.error or r.result is None:
-            continue
-        if not r.market:
-            left.append([r.account.label, "non-market account: no volatility"])
-            continue
-        add(r.account.label, "account", r.result.report, r.quality)
-    ref = None
-    for g in groups:
-        if g.error or g.report is None:
-            continue
-        kind = "all" if g.kind == "all" else "group"
-        add(g.name, kind, g.report, g.quality)
-        if g.kind == "all":
-            ref = g.report
-    ref = ref or max((r.result.report for r in runs if r.result and r.market), key=lambda x: len(x.months), default=None)
-    if ref is not None and ref.index_volatility is not None and ref.index_twr_annual is not None:
-        pts.append({"label": benchmark, "kind": "benchmark", "vol": ref.index_volatility, "ret": ref.index_twr_annual,
-                    "sharpe": ref.index_sharpe, "exact": True})
-        for name, (w, series) in extras.items():
-            b = _basket_risk(w, series, list(ref.months), rf)
-            if b and b["vol"] is not None and b["ret"] is not None:
-                pts.append({"label": name, "kind": "benchmark", "exact": True, **b})
-    return {"points": pts, "left_off": left}
+def risk_data(ents: list[dict], runs: list[AccountRun], groups: list[GroupRun], benchmark: str,
+              extras: dict[str, tuple[dict, Series]], rf: Series | None, asof: date) -> dict:
+    """Points for the risk-vs-return scatter (issue 129), per window. Entities with no volatility are listed, not plotted.
+    Each point carries its kind and grouping so the page can show only the rows the grouping picker selects."""
+    ref = next((g.report for g in groups if g.kind == "all" and g.report is not None), None) or \
+        max((r.result.report for r in runs if r.result and r.market), key=lambda x: len(x.months), default=None)
+    out = {}
+    for key, _ in WINDOWS:
+        pts, left = [], []
+        for e in ents:
+            if e.get("error") or "windows" not in e or e["kind"] not in ("account", "group"):
+                continue
+            kind = "all" if e.get("groupKind") == "all" else e["kind"]
+            if e.get("market") is False:
+                left.append([e["label"], "non-market account: no volatility", kind, ""])
+                continue
+            w = e["windows"].get(key)
+            if w is None:
+                left.append([e["label"], "does not cover this window", kind, e.get("groupKind", "")])
+                continue
+            r = w.get("risk")
+            if not r or r["vol"] is None or r["ret"] is None:
+                left.append([e["label"], "fewer than 12 months of history" if key == "inception" else "fewer than 12 months in this window", kind, e.get("groupKind", "")])
+            elif r["vol"] > MAX_PLAUSIBLE_VOL:  # early months with almost no capital make monthly returns explode
+                left.append([e["label"], "figures not meaningful: very little capital in the early months", kind, e.get("groupKind", "")])
+            else:
+                pts.append({"label": e["label"], "kind": kind, "gk": e.get("groupKind", ""), "vol": r["vol"], "ret": r["ret"],
+                            "sharpe": r["sharpe"], "exact": bool(w["exact"] and e.get("quality") == "exact")})
+        if ref is not None:
+            pts += _bench_points(ref, key, asof, benchmark, extras, rf)
+        out[key] = {"points": pts, "left_off": left}
+    return out
 
 
 def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, index: Series,
@@ -158,7 +201,7 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
             if run and run.holdings:
                 e["holdings"] = dict(summarize(run.holdings, classes or {}), as_of=str(run.holdings_as_of))
         else:
-            e.update(type="combined")
+            e.update(type="combined", members=[next((r.account.label for r in runs if r.account.id == m), m) for m in next(g.members for g in groups if g.name == label)])
         if rep is None:
             ents.append(e)
             continue
@@ -166,14 +209,14 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
         note = notes_.get(label, "") if kind == "group" else ""
         e.update(start=str(rep.start), as_of=str(end), quality=quality, closed=closed,
                  windows={k: (None if (k != "inception" and (closed or end < asof)) else
-                              _stats(flows, rep, end, ev, index, window_start(k, asof), extras, market)) for k, _ in WINDOWS},
+                              _stats(flows, rep, end, ev, index, window_start(k, asof), extras, market, rf)) for k, _ in WINDOWS},
                  months=[str(m) for m in rep.months] + ([str(end)] if end not in rep.months else []),
                  values=[round(v, 2) for v in rep.values] + ([round(ev, 2)] if end not in rep.months else []),
                  bench=([round(v, 2) for v in rep.index_values] + ([round(rep.index_end_value, 2)] if end not in rep.months else [])) if market else [], note=note)
         ents.append(e)
     return {"benchmark": benchmark, "asof": str(asof), "windows": WINDOWS, "extras": list(extras), "entities": ents,
             "classes": [[k, v] for k, v in CLASSES.items()],
-            "risk": risk_data(runs, groups, benchmark, index, extras, rf)}
+            "risk": risk_data(ents, runs, groups, benchmark, extras, rf, asof)}
 
 
 PAGE_CSS = """
@@ -237,9 +280,12 @@ function bars(rs){
   s+=`<text class="val" x="${L-8}" y="${y+14}" text-anchor="end">${esc(l)}</text><rect class="${v>=0?'bar-pos':'bar-neg'}" x="${v>=0?x0:x0-w}" y="${y}" width="${w}" height="18" rx="3"/>`+
      `<text class="val" x="${v>=0?x0+w+6:x0-w-6}" y="${y+14}" text-anchor="${v>=0?'start':'end'}">${spct(v)}</text>`;});
  $('#bars').innerHTML=s+'</svg>';}
+function view(e){// the series to chart for the picked window, or null when the entity does not cover it
+ if(win==='inception')return e.months?e:null;
+ const w=e.windows&&e.windows[win];return w&&w.chart?{label:e.label,months:w.chart.months,values:w.chart.values,bench:w.chart.bench}:null;}
 function lines(rs){
- const es=rs.filter(e=>e.months);
- if(!es.length){$('#lines').innerHTML='';$('#key').innerHTML='';return;}
+ const es=rs.map(view).filter(Boolean);
+ if(!es.length){$('#lines').innerHTML='<p class="na">Nothing to chart for this window.</p>';$('#key').innerHTML='';return;}
  const t=d=>Date.parse(d),all=es.flatMap(e=>e.months.map(t)),t0=Math.min(...all),t1=Math.max(...all);
  const ys=es.flatMap(e=>e.values.concat(showBench?e.bench:[])),ymax=Math.max(...ys,1)*1.05;
  const W=860,H=300,L=64,R=14,T=12,B=28,X=d=>L+(t(d)-t0)/((t1-t0)||1)*(W-L-R),Y=v=>T+(H-T-B)*(1-v/ymax);
@@ -253,7 +299,7 @@ function lines(rs){
  $('#lines').innerHTML=s+'</svg>';
  $('#key').innerHTML=es.map((e,i)=>`<span><i style="background:${COLORS[i%8]}"></i>${esc(e.label)}</span>`).join('')+(showBench?`<span class="small">dashed: same deposits and withdrawals in ${esc(D.benchmark)}</span>`:'');}
 function scatter(){
- const R=D.risk,P=R.points;
+ const R=D.risk[win],keep=p=>p.kind==='benchmark'||p.kind==='all'||(grp==='accounts'?p.kind==='account':(grp!=='all'&&p.gk===grp)),P=R.points.filter(keep),LO=R.left_off.filter(keep);
  if(P.length<2){$('#risk').innerHTML='<p class="na">Not enough history (12 months) for a risk and return chart.</p>';}
  else{
   const W=860,H=380,L=64,Rr=40,T=14,B=44,xm=Math.max(...P.map(p=>p.vol))*1.15,ys=P.map(p=>p.ret),y0=Math.min(0,...ys),y1=Math.max(...ys,0.01)*1.15;
@@ -268,9 +314,9 @@ function scatter(){
    s+=`<g class="pt pt-${p.kind}"><title>${esc(tip)}</title><circle class="${p.exact?'solid':'hollow'}" cx="${X(p.vol)}" cy="${Y(p.ret)}" r="${p.kind==='all'?9:6}"/>`+
       `<text class="axis" x="${X(p.vol)+11}" y="${ly[p.label+p.kind]+4}">${esc(p.label)} · S ${num(p.sharpe)}</text></g>`;}
   $('#risk').innerHTML=s+'</svg>';}
- $('#riskleft').textContent=R.left_off.length?'Not on the chart: '+R.left_off.map(([l,w])=>l+' ('+w+')').join('; ')+'.':'';}
+ $('#riskleft').textContent=LO.length?'Not on the chart: '+LO.map(([l,w])=>l+' ('+w+')').join('; ')+'.':'';}
 function holdings(){
- const es=D.entities.filter(e=>e.kind==='account'&&e.holdings);
+ const shown=new Set(rows().flatMap(e=>e.members||[e.label])),es=D.entities.filter(e=>e.kind==='account'&&e.holdings&&(grp==='all'||shown.has(e.label)));
  if(!es.length){$('#hold').innerHTML='';return;}
  const keys=D.classes.filter(([k])=>es.some(e=>e.holdings.by_class[k]));
  let h='<h2>What each account holds</h2><div class="scroll"><table><tr><th>Account</th>'+keys.map(([k,l])=>`<th>${esc(l)}</th>`).join('')+'</tr>';
