@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Try it · UFO</title>
+<meta name="description" content="Enter a mix of funds and compare it with a benchmark like SPY. Runs in your browser.">
+<meta name="theme-color" content="#3643c4">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%233643c4'/%3E%3Ccircle cx='16' cy='16' r='6' fill='white'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="../style.css">
+<script>document.documentElement.className = "js";</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-head"><div class="wrap">
+  <a class="wordmark" href="../" aria-label="UFO, home">UFO<span>.</span></a>
+  <nav aria-label="Main">
+    <a href="../try/" aria-current="page">Try it</a><a href="../learn/">Learn</a><a href="../about/">About</a>
+  </nav>
+</div></header>
+<main id="main">
+
+<div class="wrap">
+  <section class="summary" aria-live="polite">
+    <p id="data-banner" class="banner" role="status"></p>
+    <h1 id="headline">Loading prices…</h1>
+    <p class="sub" id="headline-sub"></p>
+  </section>
+  <p id="error" class="error" role="alert"></p>
+  <figure class="chart-fig">
+    <div class="chart-head">
+      <figcaption id="chart-title">Value over time</figcaption>
+      <div id="legend" class="legend"></div>
+    </div>
+    <div id="chart" class="chart" tabindex="0" role="img" aria-labelledby="chart-title chart-desc"></div>
+    <p id="chart-desc" class="sr-only"></p>
+  </figure>
+  <p id="sample-note" class="banner" role="status" hidden><b>Sample portfolio.</b> An invented person (“Sample MBA student”): $2,000 to start, then $500 a month into a made-up mix of funds. The prices are real; the person is not. Open “Your mix” to try your own.</p>
+  <p class="muted small">Next: <a href="../learn/sharpe/">see how the Sharpe ratio is worked out →</a></p>
+
+  <details class="details">
+    <summary>Show details: full results</summary>
+    <div class="inner">
+      <p id="period-line" class="muted"></p>
+      <div class="cards" id="cards"></div>
+      <p id="verdict" class="verdict"></p>
+      <div id="benchmarks" class="bench-table"></div>
+      <button type="button" id="toggle-table" class="link" aria-expanded="false" aria-controls="table-wrap">Show month-by-month table</button>
+      <div id="table-wrap" hidden></div>
+    </div>
+  </details>
+
+  <details class="details">
+    <summary>Your mix and settings</summary>
+    <div class="inner">
+      <div class="mix-head"><h3 id="mix-h" style="margin:0">Mix</h3><label class="inline">Start from <select id="preset"></select></label>
+        <button type="button" id="sample" class="secondary">Load the sample</button></div>
+      <div id="rows"></div>
+      <div class="row-actions"><button type="button" id="add-row" class="secondary">Add a fund</button><span id="weight-note" class="muted"></span></div>
+      <datalist id="tickers"></datalist>
+      <h3 style="margin-top:28px">Compare with</h3>
+      <div class="controls">
+        <label><span class="tip" tabindex="0" data-tip="A simple yardstick fund to measure against. SPY tracks the 500 biggest US companies (the S&amp;P 500).">Benchmark</span><input id="benchmark" list="tickers" autocomplete="off" spellcheck="false" value="SPY"></label>
+        <div class="field"><span id="years-l" class="lbl">History</span>
+          <div class="seg" role="group" aria-labelledby="years-l">
+            <button type="button" data-years="1">1y</button><button type="button" data-years="3">3y</button>
+            <button type="button" data-years="5" aria-pressed="true">5y</button><button type="button" data-years="10">10y</button>
+            <button type="button" data-years="99">Max</button></div></div>
+        <label><span class="tip" tabindex="0" data-tip="Buy and hold never trades. Rebalancing sells what grew and buys what lagged, to get back to your weights, every year or month.">Style</span><select id="strategy">
+          <option value="hold">Buy and hold</option><option value="annual">Rebalance yearly</option><option value="monthly">Rebalance monthly</option></select></label>
+        <label><span class="tip" tabindex="0" data-tip="The amount invested on the first day.">Start ($)</span><input id="initial" type="number" min="1" step="100" value="10000" inputmode="decimal"></label>
+        <label><span class="tip" tabindex="0" data-tip="Money added at the end of every month, split by your weights.">Add monthly ($)</span><input id="monthly" type="number" min="0" step="50" value="0" inputmode="decimal"></label>
+      </div>
+    </div>
+  </details>
+
+  <details class="details">
+    <summary>Use your own prices (CSV)</summary>
+    <div class="inner">
+      <p class="muted small"><code>date,SPY,VTI</code> or <code>date,symbol,price</code>, adjusted prices. Stays in your browser; nothing is uploaded.</p>
+      <div class="controls">
+        <label class="file">File<input id="csv" type="file" accept=".csv,text/csv"></label>
+        <button type="button" id="reset-data" class="secondary" hidden>Back to built-in prices</button>
+      </div>
+    </div>
+  </details>
+</div>
+</main>
+<footer class="site-foot"><div class="wrap">
+  <p><b>Information, not investment advice.</b> Results are before taxes and trading costs, and past results don’t predict future ones.</p>
+  <p>Prices: month-end adjusted closes, refreshed on weekdays. Cash rate: 3-month Treasury bills from FRED. <a href="../about/">About this site</a></p>
+</div></footer>
+<script type="module" src="../js/app.js"></script>
+</body>
+</html>
