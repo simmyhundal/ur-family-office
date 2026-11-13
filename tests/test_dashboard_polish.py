@@ -48,8 +48,8 @@ def test_narrow_terminal_drops_columns_keeps_values(tmp_path):
     narrow, wide = Console(record=True, width=80), Console(record=True, width=200)
     print_table(runs, "IDX", narrow, [], combine_all(runs, st, "IDX"))
     print_table(runs, "IDX", wide, [], combine_all(runs, st, "IDX"))
-    assert "Type" in wide.export_text() and "Type" not in narrow.export_text()
-    assert "IRR" in narrow.export_text()
+    nt, wt = narrow.export_text(), wide.export_text()
+    assert "Type" in wt and "Type" not in nt and "IRR" in nt
 
 
 def test_institution_groups_manual_accounts_and_defaults_to_brokerage(tmp_path):
