@@ -2,6 +2,9 @@
 import { compare, parsePricesCsv, sliceFor } from "./calc.mjs";
 import { $, el, svg, money, pct, spct, monthYear, revealOnScroll, saveMix, SAMPLE } from "./util.mjs";
 import { loadPrices } from "./data.mjs";
+import { savePortfolio, listPortfolios, renamePortfolio, deletePortfolio, clearEverything } from "./portfolios.mjs";
+import { parsePositions, TEMPLATE_CSV } from "./positions.mjs";
+import { encodeShare, decodeShare, cardContent } from "./share.mjs";
 
 const TIPS = {
   gain: "Ending value minus the money you put in, before taxes.",
@@ -26,7 +29,10 @@ async function load() {
   state.mixName = state.presets.length && !p.demo ? state.presets[0].name : "Your mix";
   $("benchmark").value = has("SPY") ? "SPY" : Object.keys(p.data.series)[0];
   setup();
-  if (new URLSearchParams(location.search).get("sample") === "1") loadSample();
+  const shared = decodeShare(location.search);
+  if (shared) applyConfig({ ...shared, name: "Shared mix" }, { fromLink: true });
+  else if (new URLSearchParams(location.search).get("sample") === "1") loadSample();
+  renderSaved();
 }
 
 const symbols = () => Object.keys(state.data.series);
@@ -72,7 +78,7 @@ function mixWeights() {
   return out;
 }
 
-let last = null;
+let lastR = null; // the latest result, for the share card
 
 function render() {
   const err = $("error");
@@ -95,6 +101,8 @@ function render() {
     draw({ r, dates: data.dates, monthly, bench, limitedBy: data.limitedBy, years: state.years });
     drawOthers({ data, mix, others, initial, monthly, mixEnd: r.mix.m.endValue });
     drawSummary({ r, bench });
+    lastR = { r, bench, mix, years: state.years, strategy: $("strategy").value, initial, monthly };
+    if (!$("share-panel").hidden) drawSharePanel();
     saveMix({ rows: state.rows, benchmark: bench, initial, monthly, strategy: $("strategy").value, years: state.years, name: state.mixName, sample: state.sample });
   } catch (e) {
     err.textContent = e.message;
@@ -259,6 +267,139 @@ function loadSample() {
   setup();
   $("preset").value = "custom";
 }
+
+// ---------- apply a saved mix or a shared link ----------
+function applyConfig(c, { fromLink = false } = {}) {
+  const have = symbols();
+  const rows = Object.entries(c.weights).filter(([sym]) => have.includes(sym)).map(([sym, w]) => ({ sym, w }));
+  const missing = Object.keys(c.weights).filter((x) => !have.includes(x));
+  if (!rows.length) { $("error").textContent = "None of those funds have prices in the current data."; return; }
+  state.rows = rows; state.mixName = c.name || "Your mix"; state.sample = false;
+  if (c.benchmark && have.includes(c.benchmark)) $("benchmark").value = c.benchmark;
+  if (c.strategy) $("strategy").value = c.strategy;
+  if (c.initial > 0) $("initial").value = c.initial;
+  if (c.monthly != null && !fromLink) $("monthly").value = c.monthly;
+  if (fromLink) { $("initial").value = 10000; $("monthly").value = 0; }
+  if (c.years) state.years = c.years;
+  document.querySelectorAll(".seg button").forEach((o) => o.setAttribute("aria-pressed", String(Number(o.dataset.years) === state.years)));
+  setup();
+  $("preset").value = "custom";
+  $("link-note").hidden = !fromLink;
+  if (missing.length) $("error").textContent = `No prices for ${missing.join(", ")}; left out.`;
+}
+
+// ---------- save / my portfolios (this browser only) ----------
+const store = () => { try { return localStorage; } catch { return null; } };
+function currentConfig() {
+  return { name: state.mixName === "Your mix" ? "My mix" : state.mixName, weights: mixWeights(), benchmark: $("benchmark").value.trim().toUpperCase(),
+    years: state.years, strategy: $("strategy").value, initial: Number($("initial").value), monthly: Number($("monthly").value) || 0 };
+}
+function renderSaved() {
+  const st = store(), list = $("saved-list");
+  const items = st ? listPortfolios(st) : [];
+  $("saved-empty").hidden = items.length > 0;
+  list.replaceChildren(...items.map((p) => {
+    const open = el("button", { type: "button", class: "secondary" }, "Open");
+    open.addEventListener("click", () => { applyConfig(p); $("save-status").textContent = `Opened “${p.name}”.`; });
+    const ren = el("button", { type: "button", class: "secondary", "aria-label": `Rename ${p.name}` }, "Rename");
+    ren.addEventListener("click", () => { const n = prompt("Name for this mix", p.name); if (n) { renamePortfolio(st, p.id, n); renderSaved(); } });
+    const del = el("button", { type: "button", class: "secondary", "aria-label": `Delete ${p.name}` }, "Delete");
+    del.addEventListener("click", () => { deletePortfolio(st, p.id); renderSaved(); });
+    const n = Object.keys(p.weights).length;
+    return el("li", {}, el("div", {}, el("div", { class: "nm" }, p.name), el("div", { class: "sub" }, `${n} fund${n === 1 ? "" : "s"} vs ${p.benchmark || "n/a"}, ${p.years >= 99 ? "all history" : p.years + "y"}`)), el("div", { class: "acts" }, open, ren, del));
+  }));
+}
+$("save-mix").addEventListener("click", () => {
+  const st = store();
+  if (!st) { $("save-status").textContent = "This browser isn't allowing saving."; return; }
+  try {
+    const cfg = currentConfig();
+    const name = prompt("Name for this mix", cfg.name);
+    if (name === null) return;
+    savePortfolio(st, { ...cfg, name });
+    renderSaved();
+    $("save-status").textContent = "Saved on this device. Find it under “Your mix and settings”, My portfolios.";
+  } catch (e) { $("save-status").textContent = e.message; }
+});
+$("clear-all").addEventListener("click", () => {
+  if (!confirm("Remove every saved mix and setting from this device? This can't be undone.")) return;
+  let n = 0;
+  try { n = clearEverything(localStorage, sessionStorage).length; } catch { /* storage blocked: nothing saved */ }
+  renderSaved();
+  $("save-status").textContent = n ? "Cleared everything saved on this device." : "Nothing was saved on this device.";
+});
+
+// ---------- positions CSV -> mix ----------
+async function loadPositions(file) {
+  const msg = $("positions-msg");
+  try {
+    const res = parsePositions(await file.text(), symbols());
+    applyConfig({ weights: res.weights, name: "My holdings" });
+    markCustom(); state.mixName = "My holdings"; render();
+    msg.textContent = `Loaded ${Object.keys(res.weights).length} holdings from a ${res.format === "fidelity" ? "Fidelity positions" : "template"} file as percentages. ${res.notes.join(" ")}`;
+    $("error").textContent = "";
+  } catch (e) { msg.textContent = e.message; }
+}
+$("positions").addEventListener("change", (e) => { if (e.target.files[0]) loadPositions(e.target.files[0]); });
+const drop = $("drop");
+for (const ev of ["dragenter", "dragover"]) drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); });
+for (const ev of ["dragleave", "drop"]) drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); });
+drop.addEventListener("drop", (e) => { const f = e.dataTransfer?.files?.[0]; if (f) loadPositions(f); });
+$("template-dl").addEventListener("click", (e) => {
+  e.preventDefault();
+  const url = URL.createObjectURL(new Blob([TEMPLATE_CSV], { type: "text/csv" }));
+  const a = el("a", { href: url, download: "positions-template.csv" });
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+
+// ---------- share link and card (percentages only) ----------
+function shareConfig() {
+  return { weights: mixWeights(), benchmark: lastR.bench, years: lastR.years, strategy: lastR.strategy };
+}
+function drawSharePanel() {
+  if (!lastR) return;
+  const cfg = shareConfig();
+  const link = `${location.origin}${location.pathname}?${encodeShare(cfg)}`;
+  $("share-link").value = link;
+  const n = Object.keys(cfg.weights).length;
+  $("share-what").textContent = `The link carries ${n} holding${n === 1 ? "" : "s"} as percentages, the benchmark (${cfg.benchmark}), the time window and the style. It does not carry dollar amounts, deposits or your mix's name. The card below is exactly what the image will show.`;
+  const m = lastR.r.mix.m, b = lastR.r.bench.m;
+  const c = cardContent({ ...cfg, mixAnnual: m.annualReturn, benchAnnual: b.annualReturn, mixSharpe: m.sharpe, benchSharpe: b.sharpe });
+  paintCard($("share-card"), c);
+}
+function paintCard(cv, c) {
+  const g = cv.getContext("2d"), css = getComputedStyle(document.documentElement), v = (k) => css.getPropertyValue(k).trim();
+  const W = cv.width, H = cv.height, font = "ui-rounded, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+  g.fillStyle = v("--surface") || "#fff"; g.fillRect(0, 0, W, H);
+  g.fillStyle = v("--mix") || "#3643c4"; g.fillRect(0, 0, 14, H);
+  g.textBaseline = "alphabetic";
+  const t = (txt, x, y, size, color, weight = 600) => { g.font = `${weight} ${size}px ${font}`; g.fillStyle = color; g.fillText(txt, x, y); };
+  t(c.title, 70, 110, 54, v("--ink") || "#181c32", 750);
+  t(c.window, 70, 160, 28, v("--ink-2") || "#51597a", 500);
+  t(c.mixLine, 70, 300, 96, v("--mix") || "#3643c4", 750);
+  t(c.benchLine, 70, 370, 40, v("--bench") || "#b4470f");
+  t(c.sharpeLine, 70, 430, 36, v("--ink") || "#181c32", 600);
+  t(c.mixText, 70, 505, 28, v("--ink-2") || "#51597a", 500);
+  t(c.foot, 70, 580, 22, v("--ink-2") || "#51597a", 500);
+}
+$("share-open").addEventListener("click", () => {
+  const open = $("share-panel").hidden;
+  $("share-panel").hidden = !open;
+  $("share-open").setAttribute("aria-expanded", String(open));
+  if (open) drawSharePanel();
+});
+$("share-copy").addEventListener("click", async () => {
+  const inp = $("share-link");
+  try { await navigator.clipboard.writeText(inp.value); $("save-status").textContent = "Link copied."; }
+  catch { inp.select(); $("save-status").textContent = "Press Ctrl/Cmd+C to copy the selected link."; }
+});
+$("share-png").addEventListener("click", () => {
+  $("share-card").toBlob((blob) => {
+    const url = URL.createObjectURL(blob);
+    const a = el("a", { href: url, download: "my-mix-vs-benchmark.png" });
+    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+});
 
 // ---------- events ----------
 let resizeTimer = null, lastWidth = 0;
