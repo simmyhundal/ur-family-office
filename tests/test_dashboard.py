@@ -122,3 +122,33 @@ def test_combined_rows_compute_for_a_window_when_the_common_month_end_is_before_
     assert w["chart"]["values"][0] == pytest.approx(opening, abs=0.02)
     assert w["chart"]["months"][-1] == tot["as_of"] and w["value"] == tot["windows"]["inception"]["value"]
     assert tot["windows"]["5y"] is None  # a measure the history cannot cover stays n/a, the row itself still renders
+
+
+@pytest.mark.skipif(not NODE, reason="node not installed")
+def test_axes_use_round_steps_start_at_zero_and_draw_return_axis_at_zero(tmp_path):
+    _, out = make(tmp_path)
+    page = out.read_text()
+    script = page.split("<script>")[1].split("</script>")[0]
+    blob = re.search(r'<script id="data" type="application/json">(.*?)</script>', page, re.S).group(1)
+    harness = f"""
+const els = {{}};
+const el = id => els[id] || (els[id] = {{innerHTML:'', textContent:'', hidden:false, querySelectorAll:()=>[], set onchange(f){{}}}});
+global.document = {{getElementById: id => id==='data' ? {{textContent: {json.dumps(blob)}}} : el(id),
+  querySelector: s => el(s), querySelectorAll: () => [], documentElement: {{}}}};
+{script}
+const t = (hi) => niceTicks(0, hi, MONEY_STEPS, 6);
+const out = {{small: t(8400).ticks, mid: t(130000).step, big: t(322000).step, huge: t(2.4e6).step,
+  pct: niceTicks(-0.03, 0.19, PCT_STEPS.map(m=>m/100), 6), money: [moneyAxis(0), moneyAxis(100000), moneyAxis(250000), moneyAxis(1500000)]}};
+win='inception'; grp='accounts'; draw();
+out.lines = els['#lines'].innerHTML; out.risk = els['#risk'].innerHTML;
+console.log(JSON.stringify(out));
+"""
+    f = tmp_path / "ax.js"
+    f.write_text(harness)
+    r = subprocess.run([NODE, str(f)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    o = json.loads(r.stdout)
+    assert o["small"][0] == 0 and o["mid"] == 25000 and o["big"] == 100000 and o["huge"] == 500000
+    assert o["pct"]["lo"] == pytest.approx(-0.05) and o["pct"]["hi"] == pytest.approx(0.2) and 0 in [round(x, 9) for x in o["pct"]["ticks"]]
+    assert o["money"] == ["$0", "$100K", "$250K", "$1.5M"]
+    assert '>$0<' in o["lines"] and 'class="zero"' in o["lines"] and 'class="zero"' in o["risk"]
