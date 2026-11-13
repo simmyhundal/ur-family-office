@@ -33,6 +33,7 @@ class Source(BaseModel):
     importer: str  # name of the importer, e.g. "fidelity"
     history_glob: str  # activity-history files, relative to the project folder
     snapshot_glob: str = ""  # positions snapshots (optional)
+    statement_glob: str = ""  # periodic statements the importer can read account values from (optional)
 
 
 class EndValue(BaseModel):
