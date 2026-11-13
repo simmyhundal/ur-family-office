@@ -16,7 +16,7 @@ from rich.table import Table
 from ufo.performance.ledger import is_fixed_income
 
 CLASSES = {"us_stock": "US stock", "intl_stock": "International stock", "bonds": "Bonds", "cash": "Cash",
-           "other": "Other", "unclassified": "Unclassified"}
+           "other": "Other", "annuity": "Fixed annuity", "unclassified": "Unclassified"}
 
 
 class Holding(BaseModel):
@@ -24,6 +24,7 @@ class Holding(BaseModel):
     name: str = ""
     value: float
     is_cash: bool = False
+    fixed_annuity: bool = False
 
 
 def classes_path(root: Path) -> Path:
@@ -42,13 +43,15 @@ def load_classes(path: Path) -> dict[str, str]:
         raise ValueError(f"{path.name} must map tickers to classes, like {{\"VTI\": \"us_stock\"}}.")
     out = {}
     for sym, cls in raw.items():
-        if cls not in CLASSES or cls == "unclassified":
+        if cls not in CLASSES or cls in ("unclassified", "annuity"):
             raise ValueError(f"{path.name}: {sym} has class {cls!r}; use one of {', '.join(k for k in CLASSES if k != 'unclassified')}.")
         out[str(sym).strip().upper()] = cls
     return out
 
 
 def classify(h: Holding, mapping: dict[str, str]) -> str:
+    if h.fixed_annuity:
+        return "annuity"
     if h.is_cash:
         return "cash"
     sym = h.symbol.upper()
