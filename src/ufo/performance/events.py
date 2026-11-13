@@ -43,6 +43,12 @@ class Event(BaseModel):
     transfer_hint: bool = False  # the importer knows this contribution/withdrawal is a move between household accounts
 
     @property
+    def cash_effect(self) -> float:
+        """What the row did to the account's cash: `amount`, except that moving shares in kind moves no cash
+        (the amount is only the shares' market value, kept for the external flow)."""
+        return 0.0 if self.in_kind else self.amount
+
+    @property
     def external_flow(self) -> float:
         """Signed value crossing the account boundary (+ in, - out); 0 for anything internal."""
         if self.kind == Kind.CONTRIBUTION:

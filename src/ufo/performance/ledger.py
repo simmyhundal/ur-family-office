@@ -89,7 +89,7 @@ class Ledger:
         self._cum_cash: list[float] = []
         run = 0.0
         for e in self.events:
-            run += e.amount
+            run += e.cash_effect
             self._cum_cash.append(run)
         self.opening_cash = 0.0
         self._anchors: dict[str, list[tuple[date, float]]] = {}  # symbol -> [(day, missing shares)] from snapshots
@@ -120,18 +120,20 @@ class Ledger:
     # ---- unlisted cash credits ----
     def _credits(self) -> list[Credit]:
         credits: list[Credit] = []
-        prev_bal: float | None = None
+        prev_bal: float | None = None  # last reported cash balance, plus the listed cash effect of rows since that lack one
         prev_day: date | None = None
         paid: set[int] = set()
         for e in self.events:
             if e.cash_balance is None:
+                if prev_bal is not None:  # a row without a balance still moved cash: carry it so the next jump is not blamed on it
+                    prev_bal += e.cash_effect
                 continue
             if prev_bal is None:
-                opening = round(e.cash_balance - e.amount, 2)
+                opening = round(e.cash_balance - e.cash_effect, 2)
                 if abs(opening) > EPS:
                     credits.append(Credit(when=e.when, amount=opening, why="opening"))
             else:
-                resid = round(e.cash_balance - (prev_bal + e.amount), 2)
+                resid = round(e.cash_balance - (prev_bal + e.cash_effect), 2)
                 if abs(resid) > EPS:
                     due = [(i, b) for i, b in enumerate(self.bonds) if i not in paid and prev_day < b.matures <= e.when]
                     est = sum(b.proceeds for _, b in due)
@@ -217,8 +219,12 @@ class Ledger:
         for e in self.events:
             if e.when > day:
                 break
-            if e.kind in (Kind.BUY, Kind.SELL) and e.symbol and not is_fixed_income(e.symbol) and e.quantity:
+            if not (e.symbol and e.quantity) or is_fixed_income(e.symbol):
+                continue
+            if e.kind in (Kind.BUY, Kind.SELL):
                 q[e.symbol] += e.quantity * self._split_factor(e.symbol, e.when)
+            elif e.in_kind and e.kind in (Kind.CONTRIBUTION, Kind.WITHDRAWAL):  # shares moved in or out, no cash
+                q[e.symbol] += abs(e.quantity) * (1 if e.kind == Kind.CONTRIBUTION else -1) * self._split_factor(e.symbol, e.when)
         return {s: v for s, v in q.items() if abs(v) > 1e-6}
 
     def cash_on(self, day: date) -> float:

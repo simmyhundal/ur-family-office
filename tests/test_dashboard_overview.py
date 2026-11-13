@@ -144,3 +144,10 @@ def test_page_footer_keeps_the_disclaimer_and_pre_tax_note():
     assert "Information, not investment advice. Past performance does not predict future results." in foot
     assert "before tax" in foot and "local only, never sent anywhere" in foot
     assert "prefers-reduced-motion" in page
+
+
+def test_overview_labels_accounts_that_do_not_reconcile():
+    """Issue 189's guard must stay visible in the redesigned overview: cards, the detail sheet and a partial total."""
+    from ufo.performance.dashboard import JS
+    assert "Does not reconcile" in JS and "e.unreconciled" in JS
+    assert "t.excluded" in JS and "Partial" in JS

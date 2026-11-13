@@ -123,7 +123,7 @@ def _group_opening(g: GroupRun, runs: list[AccountRun]) -> dict[date, float]:
     snapshot where the account has one, otherwise the rebuilt ledger). A member not yet open, or already closed, counts 0."""
     out: dict[date, float] = {}
     for r in runs:
-        if r.account.id not in g.members or r.result is None:
+        if r.account.id not in g.members or r.result is None or r.unreconciled:
             continue
         rep = r.result.report
         for m, v in zip(rep.months, rep.values):
@@ -204,6 +204,9 @@ def risk_data(ents: list[dict], runs: list[AccountRun], groups: list[GroupRun], 
             if e.get("error") or "windows" not in e or e["kind"] not in ("account", "group"):
                 continue
             kind = "all" if e.get("groupKind") == "all" else e["kind"]
+            if e.get("unreconciled"):
+                left.append([e["label"], "estimated, does not reconcile: month-end values do not match its statements", kind, ""])
+                continue
             if e.get("market") is False:
                 left.append([e["label"], "non-market account: no volatility", kind, ""])
                 continue
@@ -242,6 +245,7 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
     alts = {sym: s for sym, s in (benchmarks or {}).items() if sym != benchmark}
     order = ([benchmark] if benchmark not in dict(BENCHMARKS) else []) + [sym for sym, _ in BENCHMARKS if sym == benchmark or sym in alts]
     ents = []
+    good = [r for r in runs if not r.unreconciled]
     notes_ = {g.name: g.note for g in groups}
     pairs = [(r.account.label, "account", "", r.account, r.events and [(e.when, e.external_flow) for e in r.events if e.external_flow],
               r.result.report if r.result else None, r.end, r.end_value, r.quality, r.flags, r.error, r.market, {d: v for d, (v, _) in r.anchors.items()}) for r in runs]
@@ -249,6 +253,9 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
         pairs.append((g.name, "group", g.kind, None, g.flows, g.report, g.end, g.end_value, g.quality, [], g.error, True, _group_opening(g, runs) if g.report else None))
     for label, kind, gk, acct, flows, rep, end, ev, quality, flags, err, market, opening in pairs:
         e = {"label": label, "kind": kind, "groupKind": gk, "error": err, "flags": flags}
+        bad_run = next((r for r in runs if r.account is acct and r.unreconciled), None) if acct is not None else None
+        if bad_run:
+            e["unreconciled"] = bad_run.unreconciled
         if acct is not None:
             e.update(market=acct.market, type=acct.wrapper.value, brokerage=acct.institution_name, owner=acct.owner)
             run = next((r for r in runs if r.account is acct), None)
@@ -257,6 +264,7 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
             elif run and run.holdings_note:
                 e["holdings_note"] = run.holdings_note
         else:
+            e["excluded"] = list(next(g.excluded for g in groups if g.name == label))
             e.update(type="combined", members=[next((r.account.label for r in runs if r.account.id == m), m) for m in next(g.members for g in groups if g.name == label)])
         if rep is None:
             ents.append(e)
@@ -264,11 +272,16 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
         closed = bool(acct and acct.closed)
         note = notes_.get(label, "") if kind == "group" else ""
         e.update(start=str(rep.start), as_of=str(end), quality=quality, closed=closed,
-                 windows={k: (None if (k != "inception" and closed) else
+                 windows={k: (None if (k != "inception" and (closed or bad_run)) else
                               _stats(flows, rep, end, ev, index, window_start(k, asof), extras, market, rf, opening)) for k, _ in WINDOWS},
                  months=[str(m) for m in rep.months] + ([str(end)] if end not in rep.months else []),
                  values=[round(v, 2) for v in rep.values] + ([round(ev, 2)] if end not in rep.months else []),
                  bench=([round(v, 2) for v in rep.index_values] + ([round(rep.index_end_value, 2)] if end not in rep.months else [])) if market else [], note=note)
+        if bad_run:  # since-inception IRR and excess rest on dated flows plus the exact ending value; everything on month-ends is dropped
+            w = e["windows"]["inception"]
+            if w:
+                w.update(twr=None, sharpe=None, dd=None, risk=None, extras={})
+            e.update(months=None, values=None, bench=[])
         e["bm"] = {}
         for sym, series in alts.items():
             ws = {}
@@ -283,9 +296,9 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
         ents.append(e)
     return {"benchmark": benchmark, "asof": str(asof), "windows": WINDOWS, "extras": list(extras), "entities": ents,
             "classes": [[k, v] for k, v in CLASSES.items()],
-            "risk": risk_data(ents, runs, groups, benchmark, extras, rf, asof, {benchmark: index, **alts}),
-            "lesson": build_lesson(runs, groups, label_of(benchmark), rf),
-            "lessons": {sym: build_lesson(runs, groups, label_of(sym), rf, index=s) for sym, s in alts.items()},
+            "risk": risk_data(ents, good, groups, benchmark, extras, rf, asof, {benchmark: index, **alts}),
+            "lesson": build_lesson(good, groups, label_of(benchmark), rf),
+            "lessons": {sym: build_lesson(good, groups, label_of(sym), rf, index=s) for sym, s in alts.items()},
             "benchmarks": [[sym, label_of(sym)] for sym in order], "benchmarkLabel": label_of(benchmark)}
 
 
@@ -519,13 +532,13 @@ function excessWords(w){if(!w||w.excess==null)return null;if(Math.abs(w.excess)<
 function trow(e,label,cls){
   if(e.error||!e.windows)return `<tr class="${cls}"><td>${label}</td><td>${esc(e.type||'')}</td><td colspan="${NCOLS-2}" class="err">not computed: ${esc(e.error)}</td></tr>`;
   const w=WS(e);
-  if(!w)return `<tr class="${cls}"><td>${label}</td><td>${esc(e.type)}</td><td>${e.start}</td><td colspan="${NCOLS-3}" class="na" title="${esc(e.kind==='group'?'the combined line starts after this window begins, or has under a month of history in it':'this account starts after the window begins, or is closed')}">n/a: does not cover this window</td></tr>`;
-  const q=w.exact&&e.quality==='exact'?'exact':'estimated';
+  if(!w)return `<tr class="${cls}"><td>${label}</td><td>${esc(e.type)}</td><td>${e.start}</td><td colspan="${NCOLS-3}" class="na" title="${esc(e.unreconciled?'estimated, does not reconcile: '+e.unreconciled+'. Windowed figures are left out rather than shown wrong; the since-inception IRR is unaffected.':e.kind==='group'?'the combined line starts after this window begins, or has under a month of history in it':'this account starts after the window begins, or is closed')}">n/a: ${e.unreconciled?'estimated, does not reconcile':'does not cover this window'}</td></tr>`;
+  const q=e.unreconciled?'estimated, does not reconcile':w.exact&&e.quality==='exact'?'exact':'estimated';
   const why=whyOf(e,w);
   const c=(f,v,k)=>v==null?`<td class="na" title="${esc(why[k])}">n/a</td>`:`<td>${f(v)}</td>`;
   return `<tr class="${cls}"><td>${label}${e.closed?' <span class="small">(closed)</span>':''}</td><td>${esc(e.type)}</td><td>${e.start}</td><td>${money(w.value)}</td><td>${money(w.net_in)}</td>`+
    c(pct,w.irr,'irr')+(w.twr_thru&&w.twr!=null&&w.twr_thru!==w.thru?`<td title="through ${w.twr_thru}">${pct(w.twr)}</td>`:c(pct,w.twr,'twr'))+c(spct,w.excess,'excess')+c(money,w.bench_end,'bench')+c(num,w.sharpe,'sharpe')+c(pct,w.dd,'dd')+
-   `<td class="${q==='exact'?'exact':'est'}" title="${esc((e.flags||[]).join('; '))}">${q}, as of ${w.thru||e.as_of}${e.note?' (common month-end)':''}${(e.flags||[]).some(f=>f.startsWith('history ends'))?' *':''}</td>`+D.extras.map(n=>c(spct,w.extras[n]&&w.extras[n].excess,'excess')).join('')+'</tr>';}
+   `<td class="${q==='exact'?'exact':'est'}" title="${esc((e.flags||[]).join('; ')+(e.excluded&&e.excluded.length?'; left out, does not reconcile: '+e.excluded.join(', '):''))}">${q}, as of ${w.thru||e.as_of}${e.note?' (common month-end)':''}${e.excluded&&e.excluded.length?'; left out, does not reconcile: '+esc(e.excluded.join(', ')):''}${(e.flags||[]).some(f=>f.startsWith('history ends'))?' *':''}</td>`+D.extras.map(n=>c(spct,w.extras[n]&&w.extras[n].excess,'excess')).join('')+'</tr>';}
 let NCOLS=12;
 function table(rs){
  const head=['Account','Type','Started','Value','Net in','IRR','Time-weighted return (est.)','Excess IRR vs '+BL(),'Worth today in '+BL(),'Sharpe (est.)','Worst fall','Data']
@@ -662,9 +675,10 @@ function unscrub(key){const g=CH[key];if(!g)return;g.i=null;const el=document.ge
 function hero(){// the first thing on a phone: what it is worth, and the same money in the benchmark, in dollars
  const accts=D.entities.filter(e=>e.kind==='account'),t=totalEnt(),wi=t&&!t.error&&WS(t,'inception');
  if(!wi||wi.value==null){$('#hero').innerHTML='';$('#chart').innerHTML='';$('#src').innerHTML='<p class="small">Nothing to show yet.</p>';return;}
- const w=WS(t),n=accts.length,est=isEst(t,w),asof=w&&w.thru||t.as_of,sub=`${n===1?'One account':n+' accounts'} · as of ${fmtDate(asof)}`;
+ const ex=t.excluded||[],w=WS(t),n=accts.length-ex.length,est=isEst(t,w),asof=w&&w.thru||t.as_of,sub=`${ex.length?n+' of '+accts.length+' accounts':n===1?'One account':n+' accounts'} · as of ${fmtDate(asof)}`;
  let s=`<h1 class="eyebrow">All investments ${est?'<button type="button" class="chip est" data-act="info" data-k="est">Estimated</button>':'<span class="chip ok">Exact</span>'}</h1>`+
   `<p class="bal" id="val-hero" data-d="${money(wi.value)}">${money(wi.value)}</p><p class="balsub" id="sub-hero" data-d="${esc(sub)}">${esc(sub)}</p>`;
+ if(ex.length)s+=`<p class="small"><span class="chip bad">Partial</span> Left out of this total because their history does not match their statements yet: ${esc(ex.join(', '))}.</p>`;
  if(t.note)s+=`<p class="small">The total is ${esc(t.note)}${/non-market/.test(t.note)?' (a fixed annuity counts in value and deposits; it has no market prices)':''}.</p>`;
  if(!w)s+=`<p class="say">Your accounts do not go back ${({ytd:'to the start of the year','1y':'a full year','3y':'3 years','5y':'5 years'})[win]||'that far'} yet. Pick a shorter period.</p>`;
  else{const v=verdict(w),pd=period(w);
@@ -694,7 +708,7 @@ function card(e){// one rounded card per row: name, balance, sparkline and one p
  const k=esc(e.label),open=`type="button" class="acct" data-act="open" data-k="${k}"`;
  if(e.error||!e.windows)return `<button ${open}><span class="n">${esc(nice(e))}</span><span class="v">n/a</span><span class="s">${esc(subOf(e))}</span><span class="h"><span class="chip bad">Not computed</span><span class="small">${esc(e.error||'')}</span><span class="chev">›</span></span></button>`;
  const w=WS(e),wi=WS(e,'inception'),val=(w||wi||{}).value,tags=[];
- if(w&&isEst(e,w))tags.push('<span class="chip est">Estimated</span>');
+ if(e.unreconciled)tags.push('<span class="chip bad">Does not reconcile</span>');else if(w&&isEst(e,w))tags.push('<span class="chip est">Estimated</span>');
  if(e.closed)tags.push('<span class="chip">Closed</span>');
  if(e.market===false)tags.push('<span class="chip">No market prices</span>');
  const head=!w?'<span class="na">Not open for this whole period</span>':(excessWords(w)||'<span class="na">No benchmark comparison</span>');
@@ -723,7 +737,7 @@ function sheetHtml(e){
  const head=`<div class="sh-head"><div><h2 id="sheet-h">${esc(nice(e))}</h2><div class="s">${esc(subOf(e))}${e.start?' · since '+esc(fmtMon(e.start)):''}</div></div><button type="button" class="icon" data-act="close" aria-label="Close">${svgI('<path d="M6 6l12 12M18 6 6 18"/>')}</button></div>`;
  if(e.error||!e.windows)return head+`<section><p class="err">Not computed: ${esc(e.error||'')}</p></section>`;
  const w=WS(e),wi=WS(e,'inception'),val=(w||wi).value,est=isEst(e,w);
- let s=head+`<section><p class="eyebrow">${est?'<button type="button" class="chip est" data-act="info" data-k="est">Estimated</button>':'<span class="chip ok">Exact</span>'}${e.closed?'<span class="chip">Closed</span>':''}${e.market===false?'<span class="chip">No market prices</span>':''}</p>`+
+ let s=head+`<section><p class="eyebrow">${e.unreconciled?'<span class="chip bad">Does not reconcile</span>':est?'<button type="button" class="chip est" data-act="info" data-k="est">Estimated</button>':'<span class="chip ok">Exact</span>'}${e.closed?'<span class="chip">Closed</span>':''}${e.market===false?'<span class="chip">No market prices</span>':''}</p>`+
   `<p class="bal" id="val-sheet" data-d="${money(val)}">${money(val)}</p><p class="balsub" id="sub-sheet" data-d="as of ${esc(fmtDate(w&&w.thru||e.as_of))}">as of ${esc(fmtDate(w&&w.thru||e.as_of))}</p>`;
  if(w){const v=verdict(w),pd=period(w);if(v)s+=`<p class="say">${pd?capS(pd)+', ':''}${v}${pd?'.':' since '+esc(fmtMon(e.start))+'.'}</p>`;}
  s+=`<div class="pills" style="margin-top:14px">${pills(D.windows.map(([k])=>[k,WSHORT[k]||k]),win,'win',k=>!WS(e,k))}</div>`;
@@ -738,7 +752,7 @@ function sheetHtml(e){
   ['Time-weighted return (est.)',...(()=>{const r=f(pct,w.twr,'twr');return [r[0],r[1]||twrN];})()],['Sharpe (est.)',...f(num,w.sharpe,'sharpe')],['Worst fall',...f(pct,w.dd,'dd')]]
   .concat(D.extras.map(n=>['Excess vs '+n,...f(spct,w.extras[n]&&w.extras[n].excess,'excess')]));
  s+=`<section><h3 style="margin-bottom:10px">The figures</h3><div class="figs">${F.map(([l,x,n],i)=>fig(l,x,n||(i<3&&cumN?cumN:''))).join('')}</div></section>`;
- const notes=[`${est?'Estimated':'Exact'}, as of ${w.thru||e.as_of}${e.note?' ('+e.note+')':''}.`].concat((e.flags||[]).map(capS)).concat(w.unstable?['Some months had very little capital, so monthly returns in this window are not meaningful.']:[]);
+ const notes=(e.unreconciled?['Estimated, does not reconcile: '+e.unreconciled+'. It is left out of combined totals and of periods other than since the start, rather than shown wrong.']:[]).concat([`${est?'Estimated':'Exact'}, as of ${w.thru||e.as_of}${e.note?' ('+e.note+')':''}.`]).concat((e.flags||[]).map(capS)).concat(w.unstable?['Some months had very little capital, so monthly returns in this window are not meaningful.']:[]);
  if(e.members)notes.push('Includes: '+e.members.join(', ')+'. Transfers between these accounts net out.');
  s+=`<section><h3 style="margin-bottom:8px">About these numbers</h3><ul class="notes">${notes.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></section>`;
  return s+sheetHold(e);}
