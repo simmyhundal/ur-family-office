@@ -97,6 +97,10 @@ def run_account(a: Account, root: Path, store: PriceStore, benchmark: str, today
     out.result, out.events, out.end, out.end_value = res, hist.events, end, value
     bad = [q for q in res.reconciliation if not q["ok"]]
     out.quality = "exact" if stmt and not bad and not res.income_credited else "estimated"
+    note = getattr(imp, "estimate_note", "")  # an importer whose statements leave flow dates or values inside a period unknown
+    if note:
+        out.quality = "estimated"
+        out.flags.append(note)
     if (end - res.first_trade).days < SHORT_HISTORY_DAYS:
         out.flags.append("short history")
     if a.closed:
