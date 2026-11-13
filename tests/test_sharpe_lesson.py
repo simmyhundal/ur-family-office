@@ -140,3 +140,30 @@ console.log(h.includes('<svg'), (h.match(/<line x1=/g)||[]).length >= 2, h.inclu
     r = subprocess.run([NODE, str(f)], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     assert r.stdout.split() == ["true", "true", "true", "true", "false"]
+
+
+def test_lesson_period_toggle_sanity_check_and_compounding():
+    rep, months = fake_report(30)
+    rf = flat_rf(months)
+    f = S.portfolio_figures(rep, rf)["fill"]
+    rfm = M.monthly_rf(rf, date(2020, 1, 31))
+    ex = [r - rfm for r in rep.port_returns]
+    m, sd = mean(ex), stdev(ex)
+    assert f["n_within"] == str(sum(1 for x in ex if abs(x - m) <= sd))
+    g = 1.0
+    for r in rep.port_returns:
+        g *= 1 + r
+    assert f["compounded_annual"] == f"{(g ** (12 / 30) - 1) * 100:.2f}%"
+    assert f["rf_annual_compounded"] == f"{((1 + rfm) ** 12 - 1) * 100:.2f}%" and f["rf_annual"] == f"{rfm * 12 * 100:.2f}%"
+    assert f["monthly_table"].count("\n| ") == 12  # last twelve visible
+    older = f["monthly_table_older"]
+    assert older.startswith("::: details Show all 30 months") and older.count("\n| ") == 19  # header plus the 18 older months and older.endswith(":::")
+    assert S.portfolio_figures(*fake_report(10)[:1], flat_rf(fake_report(10)[1]))["fill"]["monthly_table_older"] == ""
+
+
+def test_rendered_lesson_has_toggle_period_sentences_and_the_compounding_paragraph(tmp_path):
+    html = data_of(_page(tmp_path))["lesson"]["html"]
+    assert "<details><summary>Show all " in html and "</details>" in html
+    assert html.count("Over all ") >= 2 and "of the average (about 68% would be typical)" in html
+    assert "Why times 12 and not compounded?" in html and "Sharpe, 1994" in html
+    assert not re.search(r"\{\w+\}", html)

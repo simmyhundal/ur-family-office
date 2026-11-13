@@ -67,9 +67,10 @@ def portfolio_figures(rep: M.Report, rf: Series | None, index: Series | None = N
     brets = index_returns_on(index, months) if index is not None else list(rep.index_returns)
     if rf is None:
         why = "the T-bill rate could not be loaded"
-        for k in ("sharpe", "rf_annual", "rf_month", "mean_excess_month", "mean_excess_annual", "sd_month", "sd_annual", "sortino",
-                  "benchmark_sharpe", "monthly_table"):
+        for k in ("sharpe", "rf_annual", "rf_annual_compounded", "rf_month", "mean_excess_month", "mean_excess_annual", "sd_month", "sd_annual",
+                  "sortino", "benchmark_sharpe", "monthly_table", "n_within", "compounded_annual"):
             fill[k] = na(why)
+        fill["monthly_table_older"] = ""
         raw["points"] = None
         return {"fill": fill, "raw": raw}
     rfs = [M.monthly_rf(rf, p) for p in _prev_ends(months)]
@@ -85,8 +86,14 @@ def portfolio_figures(rep: M.Report, rf: Series | None, index: Series | None = N
         rf_m = mean(rfs)
         sd = stdev(ex)
         mx = mean(ex)
-        fill.update(rf_month=pct(rf_m), rf_annual=pct(rf_m * 12), mean_excess_month=pct(mx), mean_excess_annual=pct(mx * 12),
-                    sd_month=pct(sd), sd_annual=pct(sd * math.sqrt(12)))
+        fill.update(rf_month=pct(rf_m), rf_annual=pct(rf_m * 12), rf_annual_compounded=pct((1 + rf_m) ** 12 - 1),
+                    mean_excess_month=pct(mx), mean_excess_annual=pct(mx * 12), sd_month=pct(sd), sd_annual=pct(sd * math.sqrt(12)))
+        within = sum(1 for x in ex if abs(x - mx) <= sd)
+        fill["n_within"] = str(within)
+        raw["within"] = within
+        g = M.growth_index(rets)
+        comp = M.annualize(g[-1], n) if g else None
+        fill["compounded_annual"] = pct(comp) if comp is not None else na(f"needs at least {MIN_MONTHS} months of returns")
         raw.update(rf_month=rf_m, mean_excess=mx, sd=sd)
         # points for the slope chart: arithmetic yearly return (average month x 12) against yearly volatility of the
         # excess returns, so the line from the risk-free point to a portfolio has slope exactly Sharpe
@@ -94,7 +101,8 @@ def portfolio_figures(rep: M.Report, rf: Series | None, index: Series | None = N
                          "portfolio": {"ret": mean(rets) * 12, "vol": sd * math.sqrt(12), "sharpe": sh},
                          "benchmark": {"ret": mean(brets) * 12, "vol": stdev(bex) * math.sqrt(12), "sharpe": bsh}}
     else:
-        for k in ("rf_month", "rf_annual", "mean_excess_month", "mean_excess_annual", "sd_month", "sd_annual"):
+        for k in ("rf_month", "rf_annual", "rf_annual_compounded", "mean_excess_month", "mean_excess_annual", "sd_month", "sd_annual",
+                  "n_within", "compounded_annual"):
             fill[k] = na("fewer than 2 months of returns")
         raw["points"] = None
     # the most recent month
@@ -108,13 +116,13 @@ def portfolio_figures(rep: M.Report, rf: Series | None, index: Series | None = N
     else:
         for k in ("example_month", "ex_start_value", "ex_net_flow", "ex_end_value", "ex_gain", "ex_return"):
             fill[k] = na("needs at least two month-ends")
-    last = list(range(max(0, n - 12), n))
-    if last:
+    def table(idx):
         rows = ["| Month | Return | Cash (T-bill) for the month | Return above cash |", "|---|---|---|---|"]
-        rows += [f"| {months[i].strftime('%b %Y')} | {pct(rets[i], True)} | {pct(rfs[i])} | {pct(ex[i], True)} |" for i in last]
-        fill["monthly_table"] = "\n".join(rows)
-    else:
-        fill["monthly_table"] = na("no monthly returns")
+        return "\n".join(rows + [f"| {months[i].strftime('%b %Y')} | {pct(rets[i], True)} | {pct(rfs[i])} | {pct(ex[i], True)} |" for i in idx])
+    cut = max(0, n - 12)
+    fill["monthly_table"] = table(range(cut, n)) if n else na("no monthly returns")
+    # every month stays available: the older ones sit behind a toggle (the Sharpe ratio uses all of them)
+    fill["monthly_table_older"] = f"::: details Show all {n} months\n{table(range(0, cut))}\n:::" if cut else ""
     return {"fill": fill, "raw": raw}
 
 
@@ -167,6 +175,12 @@ def markdown_to_html(md: str) -> str:
     while i < len(lines):
         ln = lines[i]
         if not ln.strip():
+            i += 1
+        elif ln.startswith(":::"):
+            if ln.startswith("::: details "):
+                out.append(f"<details><summary>{_inline(ln[len('::: details '):].strip())}</summary>")
+            else:
+                out.append("</details>")
             i += 1
         elif ln.startswith("#"):
             lvl = len(ln) - len(ln.lstrip("#"))
@@ -221,12 +235,12 @@ def build_lesson(runs: list[AccountRun], groups: list[GroupRun], benchmark: str,
         single = [r for r in runs if r.market and r.result is not None]
         if len(single) == 1:
             ref, name = single[0].result.report, single[0].account.label
-    values: dict[str, str] = {"benchmark": benchmark, "portfolio_name": name or "your portfolio"}
+    values: dict[str, str] = {"benchmark": benchmark, "portfolio_name": name or "your portfolio", "monthly_table_older": ""}
     raw: dict = {}
     if ref is None:
         why = "no whole-portfolio line was computed (it needs at least two accounts that could be combined)"
         for k in ("sharpe", "n_months", "start_month", "end_month", "benchmark_sharpe", "example_month", "ex_start_value", "ex_net_flow",
-                  "ex_end_value", "ex_gain", "ex_return", "monthly_table", "rf_annual", "rf_month", "mean_excess_month",
+                  "ex_end_value", "ex_gain", "ex_return", "monthly_table", "n_within", "compounded_annual", "rf_annual_compounded", "rf_annual", "rf_month", "mean_excess_month",
                   "mean_excess_annual", "sd_month", "sd_annual", "sortino"):
             values[k] = na(why)
         values["estimate_note"] = ""

@@ -27,25 +27,31 @@ Your most recent month, {example_month}, worked out:
 | Gain from the investments themselves | {ex_gain} |
 | **Return for the month** | **{ex_return}** |
 
-Your last twelve months:
+Your last twelve months (older months are behind the toggle; the Sharpe ratio uses all {n_months}):
 
 {monthly_table}
-<!-- columns: Month | Return | Cash (T-bill) for the month | Return above cash -->
+
+{monthly_table_older}
+<!-- columns: Month | Return | Cash (T-bill) for the month | Return above cash. {monthly_table_older} is the rest behind a "show all" toggle, empty when there are 12 months or fewer. -->
 
 {estimate_note}
 <!-- e.g. "Month-end values for some accounts are rebuilt from transactions and prices, so these returns are estimates. The money-weighted IRR elsewhere on the dashboard is exact." -->
 
 ## Step 2: subtract what cash would have paid
 
-Any money could have sat in 3-month US Treasury bills, close to risk-free. Over these months that paid about **{rf_annual}** a year, or **{rf_month}** a month. Only the return *above* that counts as a reward for taking risk, so each month's return minus the T-bill rate is the **excess return** (last column above).
+Any money could have sat in 3-month US Treasury bills, close to risk-free. Over all {n_months} months ({start_month} to {end_month}) that paid on average **{rf_month}** a month: about **{rf_annual}** a year when multiplied by 12, or **{rf_annual_compounded}** compounded over a year. Only the return *above* that counts as a reward for taking risk, so each month's return minus the T-bill rate is the **excess return** (last column above).
 
 ## Step 3: average the excess returns
 
-Your average monthly excess return was **{mean_excess_month}**. Times 12, that is about **{mean_excess_annual}** a year.
+Over all {n_months} months, your average monthly excess return was **{mean_excess_month}**. Times 12, that is about **{mean_excess_annual}** a year.
+
+Why times 12 and not compounded? Compounding, (1 + monthly)^12 − 1, is the right way to say what you actually earned in a year; the dashboard's time-weighted return does that ({compounded_annual} here). The Sharpe ratio instead uses simple scaling, because volatility can only be scaled to a year by √12 when returns are added, not multiplied. Scaling the average by 12 and the volatility by √12 keeps both in the same units. This is the standard convention (Sharpe, 1994).
 
 ## Step 4: measure how bumpy the ride was
 
-Volatility is the standard deviation of those monthly excess returns: roughly, how far a typical month lands from the average. Yours is **{sd_month}** a month. Monthly swings don't add up twelve-fold over a year, because good and bad months partly cancel, so the yearly figure scales by √12 (about 3.46): **{sd_annual}** a year.
+Volatility is the standard deviation of those monthly excess returns over the same {n_months} months: roughly, how far a typical month lands from the average. Yours is **{sd_month}** a month. Monthly swings don't add up twelve-fold over a year, because good and bad months partly cancel, so the yearly figure scales by √12 (about 3.46): **{sd_annual}** a year.
+
+Sanity check: {n_within} of {n_months} months landed within one standard deviation of the average (about 68% would be typical).
 
 ## Step 5: divide
 
