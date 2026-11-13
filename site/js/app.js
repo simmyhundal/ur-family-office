@@ -196,8 +196,13 @@ function drawChart({ dates, series, put }) {
     root.append(lab);
   }
   const path = (v) => v.map((val, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(val).toFixed(1)}`).join("");
+  // a soft fill under the first line (the mix), drawn behind the lines
+  const grad = svg("linearGradient", { id: "mix-fill", x1: 0, y1: 0, x2: 0, y2: 1 });
+  grad.append(svg("stop", { offset: 0, "stop-color": series[0].color, "stop-opacity": 0.22 }), svg("stop", { offset: 1, "stop-color": series[0].color, "stop-opacity": 0 }));
+  const defs = svg("defs"); defs.append(grad);
+  root.append(defs, svg("path", { d: `${path(series[0].v)}L${x(n - 1).toFixed(1)},${y(0).toFixed(1)}L${x(0).toFixed(1)},${y(0).toFixed(1)}Z`, fill: "url(#mix-fill)" }));
   if (put) root.append(svg("path", { d: path(put), fill: "none", stroke: "var(--put)", "stroke-width": 2, "stroke-dasharray": "5 4" }));
-  for (const s of series) root.append(svg("path", { d: path(s.v), fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+  for (const s of [...series].reverse()) root.append(svg("path", { d: path(s.v), fill: "none", stroke: s.color, "stroke-width": s === series[0] ? 3 : 2.25, "stroke-linejoin": "round", "stroke-linecap": "round" }));
   // direct end labels (selective): the final value of each line
   const ends = series.map((s) => ({ s, yy: y(s.v.at(-1)) })).sort((a, b) => a.yy - b.yy);
   if (ends.length === 2 && ends[1].yy - ends[0].yy < 14) ends[1].yy = ends[0].yy + 14;
@@ -371,16 +376,16 @@ function paintCard(cv, c) {
   const g = cv.getContext("2d"), css = getComputedStyle(document.documentElement), v = (k) => css.getPropertyValue(k).trim();
   const W = cv.width, H = cv.height, font = "ui-rounded, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
   g.fillStyle = v("--surface") || "#fff"; g.fillRect(0, 0, W, H);
-  g.fillStyle = v("--mix") || "#3643c4"; g.fillRect(0, 0, 14, H);
+  g.fillStyle = v("--mix") || "#5b3fe0"; g.fillRect(0, 0, 14, H);
   g.textBaseline = "alphabetic";
   const t = (txt, x, y, size, color, weight = 600) => { g.font = `${weight} ${size}px ${font}`; g.fillStyle = color; g.fillText(txt, x, y); };
-  t(c.title, 70, 110, 54, v("--ink") || "#181c32", 750);
-  t(c.window, 70, 160, 28, v("--ink-2") || "#51597a", 500);
-  t(c.mixLine, 70, 300, 96, v("--mix") || "#3643c4", 750);
-  t(c.benchLine, 70, 370, 40, v("--bench") || "#b4470f");
-  t(c.sharpeLine, 70, 430, 36, v("--ink") || "#181c32", 600);
-  t(c.mixText, 70, 505, 28, v("--ink-2") || "#51597a", 500);
-  t(c.foot, 70, 580, 22, v("--ink-2") || "#51597a", 500);
+  t(c.title, 70, 110, 54, v("--ink") || "#13132b", 750);
+  t(c.window, 70, 160, 28, v("--ink-2") || "#54577a", 500);
+  t(c.mixLine, 70, 300, 96, v("--mix") || "#5b3fe0", 750);
+  t(c.benchLine, 70, 370, 40, v("--bench") || "#c2410c");
+  t(c.sharpeLine, 70, 430, 36, v("--ink") || "#13132b", 600);
+  t(c.mixText, 70, 505, 28, v("--ink-2") || "#54577a", 500);
+  t(c.foot, 70, 580, 22, v("--ink-2") || "#54577a", 500);
 }
 $("share-open").addEventListener("click", () => {
   const open = $("share-panel").hidden;
