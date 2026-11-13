@@ -182,3 +182,14 @@ def test_windows_under_a_year_are_cumulative_not_annualized(tmp_path):
     assert any(f.startswith("history ends 2021-06-15") for f in r.flags)  # the ending value is far after the last transaction
     two = DB._stats(flows, rep, r.end, r.end_value, prices["IDX"], date(2020, 6, 30), {}, True, None)
     assert two["cum"] is False
+
+
+def test_accounts_whose_latest_value_is_before_the_newest_account_still_get_every_window(tmp_path, monkeypatch):
+    """Statement-only accounts (latest value a month-end before today) used to show only 'since inception'."""
+    from datetime import timedelta
+    real = portfolio_compare.build_data
+    monkeypatch.setattr(portfolio_compare, "build_data", lambda runs, groups, bm, idx, ex, asof, *a, **k: real(runs, groups, bm, idx, ex, asof + timedelta(days=60), *a, **k))
+    _, out = make(tmp_path)
+    a = next(e for e in data_of(out.read_text())["entities"] if e["label"] == "A" and e["kind"] == "account")
+    assert a["windows"]["ytd"] is not None and a["windows"]["1y"] is not None and a["windows"]["ytd"]["thru"] == a["as_of"]
+    assert a["windows"]["5y"] is None  # started in 2020: genuinely does not cover 5 years

@@ -217,7 +217,7 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
     ents = []
     notes_ = {g.name: g.note for g in groups}
     pairs = [(r.account.label, "account", "", r.account, r.events and [(e.when, e.external_flow) for e in r.events if e.external_flow],
-              r.result.report if r.result else None, r.end, r.end_value, r.quality, r.flags, r.error, r.market, None) for r in runs]
+              r.result.report if r.result else None, r.end, r.end_value, r.quality, r.flags, r.error, r.market, {d: v for d, (v, _) in r.anchors.items()}) for r in runs]
     for g in groups:
         pairs.append((g.name, "group", g.kind, None, g.flows, g.report, g.end, g.end_value, g.quality, [], g.error, True, _group_opening(g, runs) if g.report else None))
     for label, kind, gk, acct, flows, rep, end, ev, quality, flags, err, market, opening in pairs:
@@ -235,7 +235,7 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
         closed = bool(acct and acct.closed)
         note = notes_.get(label, "") if kind == "group" else ""
         e.update(start=str(rep.start), as_of=str(end), quality=quality, closed=closed,
-                 windows={k: (None if (k != "inception" and (closed or (end < asof and kind == "account"))) else
+                 windows={k: (None if (k != "inception" and closed) else
                               _stats(flows, rep, end, ev, index, window_start(k, asof), extras, market, rf, opening)) for k, _ in WINDOWS},
                  months=[str(m) for m in rep.months] + ([str(end)] if end not in rep.months else []),
                  values=[round(v, 2) for v in rep.values] + ([round(ev, 2)] if end not in rep.months else []),
@@ -399,7 +399,7 @@ function draw(){
  seg($('#wins'),D.windows,()=>win,k=>win=k);seg($('#grps'),GROUPS,()=>grp,k=>grp=k);
  const rs=rows();table(rs);bars(rs);lines(rs);holdings();scatter();
  $('#winnote').textContent=win==='inception'?'Since inception: IRR uses exact dated flows plus the ending value; returns are per year.':
-  'Windowed figures are estimated: they start from a month-end value (a statement where there is one, otherwise rebuilt from the history) and end at the last month-end the history covers. A window under a year is cumulative, not annualized (IRR, time-weighted return and excess alike); longer windows are per year. Accounts that do not cover the window show n/a. Sharpe is shown since inception only. A * means the history ends before the ending value (hover for details): the IRR then reaches that later date while the time-weighted return stops at the last month-end.';
+  'Windowed figures are estimated: they start from a month-end value (a statement where there is one, otherwise rebuilt from the history) and end at the last month-end the history covers. A window under a year is cumulative, not annualized (IRR, time-weighted return and excess alike); longer windows are per year. Each row runs to the latest value date of its own account (see Data). Accounts that do not cover the window show n/a. Sharpe is shown since inception only. A * means the history ends before the ending value (hover for details): the IRR then reaches that later date while the time-weighted return stops at the last month-end.';
  $('#empty').hidden=rs.length>0;}
 $('#bench').onchange=e=>{showBench=e.target.checked;draw();};
 document.querySelectorAll('[data-theme-set]').forEach(b=>b.onclick=()=>{const v=b.dataset.themeSet;v==='auto'?document.documentElement.removeAttribute('data-theme'):document.documentElement.setAttribute('data-theme',v);});
