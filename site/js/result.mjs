@@ -49,10 +49,10 @@ export function nextStep(h) {
   let title, body;
   if (even) { title = `Level with ${h.bench}.`; body = "Same money at the end. The difference is in the ride."; }
   else if (!ahead) {
-    title = `Your mix trailed ${h.bench}.`;
+    title = `${h.name || "Your mix"} trailed ${h.bench}.`;
     body = bothSharpe && s > sb ? "It earned less, but with more return for each unit of risk." : "Was it the funds, the timing, or the risk you took?";
   } else {
-    title = `Your mix beat ${h.bench}.`;
+    title = `${h.name || "Your mix"} beat ${h.bench}.`;
     body = bothSharpe && s < sb ? "But it took more risk for each unit of return." : "And it earned more for each unit of risk.";
   }
   return { tone: even ? "even" : ahead ? "ahead" : "behind", title, body,

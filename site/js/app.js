@@ -128,7 +128,7 @@ function drawSummary(h) {
 }
 function statPair(label, mv, bv, h, key) {
   return el("div", { class: "hl-stat" }, el("span", { class: "k" }, tip(label, key)),
-    el("span", { class: "v" }, el("b", { class: "m" }, mv), el("span", { class: "vs" }, " vs "), el("b", { class: "b" }, bv)),
+    el("span", { class: "v" }, el("b", { class: "m" }, mv), el("span", { class: "sep" }, " vs "), el("b", { class: "b" }, bv)),
     el("span", { class: "who" }, `${h.name} vs ${h.bench}`));
 }
 
