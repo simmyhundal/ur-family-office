@@ -74,6 +74,7 @@ def _stats(flows, report, end, end_value, index: Series, start: date | None, ext
 def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, index: Series,
                extras: dict[str, tuple[dict, Series]], asof: date, classes: dict[str, str] | None = None) -> dict:
     ents = []
+    notes_ = {g.name: g.note for g in groups}
     pairs = [(r.account.label, "account", "", r.account, r.events and [(e.when, e.external_flow) for e in r.events if e.external_flow],
               r.result.report if r.result else None, r.end, r.end_value, r.quality, r.flags, r.error) for r in runs]
     for g in groups:
@@ -91,11 +92,13 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
             ents.append(e)
             continue
         closed = bool(acct and acct.closed)
+        note = notes_.get(label, "") if kind == "group" else ""
         e.update(start=str(rep.start), as_of=str(end), quality=quality, closed=closed,
                  windows={k: (None if (k != "inception" and (closed or end < asof)) else
                               _stats(flows, rep, end, ev, index, window_start(k, asof), extras)) for k, _ in WINDOWS},
-                 months=[str(m) for m in rep.months] + [str(end)], values=[round(v, 2) for v in rep.values] + [round(ev, 2)],
-                 bench=[round(v, 2) for v in rep.index_values] + [round(rep.index_end_value, 2)])
+                 months=[str(m) for m in rep.months] + ([str(end)] if end not in rep.months else []),
+                 values=[round(v, 2) for v in rep.values] + ([round(ev, 2)] if end not in rep.months else []),
+                 bench=[round(v, 2) for v in rep.index_values] + ([round(rep.index_end_value, 2)] if end not in rep.months else []), note=note)
         ents.append(e)
     return {"benchmark": benchmark, "asof": str(asof), "windows": WINDOWS, "extras": list(extras), "entities": ents,
             "classes": [[k, v] for k, v in CLASSES.items()]}
@@ -139,7 +142,7 @@ function table(rs){
   const q=w.exact&&e.quality==='exact'?'exact':'estimated';
   h+=`<tr><td>${esc(e.label)}${e.closed?' <span class="small">(closed)</span>':''}</td><td>${esc(e.type)}</td><td>${e.start}</td><td>${money(w.value)}</td><td>${money(w.net_in)}</td>`+
    `<td>${pct(w.irr)}</td><td>${spct(w.excess)}</td><td>${money(w.bench_end)}</td><td>${pct(w.twr)}</td><td>${num(w.sharpe)}</td><td>${pct(w.dd)}</td>`+
-   `<td class="${q==='exact'?'exact':'est'}">${q}, as of ${e.as_of}</td>`+D.extras.map(n=>`<td>${spct(w.extras[n]&&w.extras[n].excess)}</td>`).join('')+'</tr>';}
+   `<td class="${q==='exact'?'exact':'est'}">${q}, as of ${e.as_of}${e.note?' (common month-end)':''}</td>`+D.extras.map(n=>`<td>${spct(w.extras[n]&&w.extras[n].excess)}</td>`).join('')+'</tr>';}
  $('#tbl').innerHTML=h;}
 function bars(rs){
  const items=rs.filter(e=>e.windows&&e.windows[win]&&e.windows[win].excess!=null).map(e=>[e.label,e.windows[win].excess]).sort((a,b)=>b[1]-a[1]);

@@ -35,6 +35,7 @@ class AccountRun(BaseModel):
     flags: list[str] = []
     holdings: list[Holding] = []  # latest positions snapshot, when the importer offers one
     holdings_as_of: date | None = None
+    anchors: dict[date, tuple[float, str]] = {}  # dated values the account itself supplies: statement or snapshot
     error: str = ""
 
     @property
@@ -87,6 +88,8 @@ def run_account(a: Account, root: Path, store: PriceStore, benchmark: str, today
         if hasattr(imp, "prices"):  # an importer that supplies its own unit prices (no tickers in the files)
             store.add_own(imp.prices(hist_files))
         stmts = imp.statement_values(_files(root, a.source.statement_glob)) if a.source.statement_glob and hasattr(imp, "statement_values") else []
+        out.anchors = {sn.when: (sn.value, "snapshot") for sn in snaps if sn.value is not None}
+        out.anchors.update({d: (v, "statement") for d, v, _ in stmts})
         res = run_core(hist, snaps, end, value, store, benchmark, statement_values=stmts)
     except (ValueError, KeyError, PriceError) as e:
         out.error = str(e).strip("'\"")
@@ -150,7 +153,7 @@ def print_table(runs: list[AccountRun], benchmark: str, console: Console | None 
         rep = g.report
         net = rep.contributed - rep.withdrawn
         t.add_row(f"[bold]{g.name}[/bold]", "combined", money(g.end_value), ("-" if net < 0 else "") + money(abs(net)), pct(rep.irr),
-                  spct(rep.excess_irr), g.quality, f"{len(g.transfers)} netted")
+                  spct(rep.excess_irr), g.quality, ", ".join([f"{len(g.transfers)} netted"] + ([g.note] if g.note else [])))
         notes = list(notes or []) + g.unmatched
     c.print(t)
     for n in dict.fromkeys(notes or []):

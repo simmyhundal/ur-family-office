@@ -41,6 +41,7 @@ class GroupRun(BaseModel):
     unmatched: list[str] = []
     flows: list[tuple[date, float]] = []
     quality: str = "estimated"
+    note: str = ""  # e.g. "as of the last common month-end"
     error: str = ""
 
 
@@ -87,18 +88,37 @@ def combine(kind: str, name: str, runs: list[AccountRun], store: PriceStore, ben
         return g
     open_ = [r for r in runs if not r.account.closed]
     end = max((r.end for r in open_), default=max(r.end for r in runs))
-    stale = [r.account.label for r in open_ if r.end != end]
-    if stale:
-        g.error = f"not computed: ending values are not as of the same date ({end}) for {', '.join(stale)}"
-        return g
+    values_at: dict[str, float] = {}  # account id -> value on the common date
+    exact = all(r.quality == "exact" for r in runs)
+    if any(r.end != end for r in open_):
+        # Ending values are on different dates: value everyone at the latest month-end they all cover.
+        common = set.intersection(*(set(r.result.report.months) for r in open_))
+        if not common:
+            g.error = ("not computed: no month-end is covered by every account (" +
+                       ", ".join(f"{r.account.label} from {r.result.report.months[0]} to {r.result.report.months[-1]}"
+                                 for r in open_) + ")")
+            return g
+        end = max(common)
+        exact = True
+        for r in runs:
+            if end in r.result.report.months:
+                v, src = r.anchors.get(end) or (r.result.report.values[r.result.report.months.index(end)], "ledger")
+                exact = exact and src == "statement"
+            else:
+                v = 0.0  # closed before the common date
+            values_at[r.account.id] = v
+        g.note = f"as of {end}, the last month-end every account covers"
     pairs, g.unmatched = net_transfers(runs)
     skip = {id(e) for pair in pairs for e in pair}
     g.transfers = [Transfer(out_account=o.account_id, in_account=i.account_id, out_date=o.when, in_date=i.when,
                             amount=abs(o.amount), symbol=o.symbol) for o, i in pairs]
-    flows = sorted((e.when, e.external_flow) for r in runs for e in r.events if e.external_flow and id(e) not in skip)
+    flows = sorted((e.when, e.external_flow) for r in runs for e in r.events
+                   if e.external_flow and id(e) not in skip and e.when <= end)
     by_month: dict[date, float] = {}
     for r in runs:
         for m, v in zip(r.result.report.months, r.result.report.values):
+            if m > end:
+                continue
             by_month[m] = by_month.get(m, 0.0) + v
     months = sorted(by_month)
     if not flows or not months:
@@ -114,9 +134,9 @@ def combine(kind: str, name: str, runs: list[AccountRun], store: PriceStore, ben
         g.error = f"not computed: {e}"
         return g
     g.flows = flows
-    g.end, g.end_value = end, sum(r.end_value for r in runs)
+    g.end, g.end_value = end, (sum(values_at.values()) if values_at else sum(r.end_value for r in runs))
     g.report = M.analyze(flows, months, [by_month[m] for m in months], prices[benchmark], rf, end, g.end_value)
-    g.quality = "exact" if all(r.quality == "exact" for r in runs) else "estimated"
+    g.quality = "exact" if exact else "estimated"
     return g
 
 
