@@ -20,6 +20,8 @@ from ufo.performance.sharpe_lesson import build_lesson
 from ufo.providers.prices import Series
 
 MAX_PLAUSIBLE_VOL = 10.0  # annualised; above this a risk figure says more about tiny balances than about risk
+BENCHMARKS = [("VT", "Market (VT)"), ("VTI", "US total market (VTI)"), ("SPY", "S&P 500 (SPY)"), ("QQQ", "Nasdaq-100 (QQQ)"),
+              ("AOR", "60/40 global stocks and bonds (AOR)"), ("BND", "US bonds (BND)")]
 WINDOWS = [("ytd", "YTD"), ("1y", "1 year"), ("3y", "3 years"), ("5y", "5 years"), ("inception", "Since inception")]
 
 
@@ -36,7 +38,7 @@ def window_start(key: str, asof: date) -> date | None:
 
 
 def _stats(flows, report, end, end_value, index: Series, start: date | None, extras: dict[str, tuple[dict, Series]], market: bool = True, rf: Series | None = None,
-           opening: dict[date, float] | None = None) -> dict | None:
+           opening: dict[date, float] | None = None, alt: bool = False) -> dict | None:
     """Figures for one window, or None when the entity does not cover it (shown as n/a, never a shortened number)."""
     fl = sorted(flows)
     base: list[tuple[date, float]] = []  # the opening value, as the first deposit of a windowed calculation
@@ -87,6 +89,11 @@ def _stats(flows, report, end, end_value, index: Series, start: date | None, ext
                "twr": ((g[-1] - 1) if cum else M.annualize(g[-1], len(g))) if g else None, "sharpe": None, "dd": M.max_drawdown(g) if g else None,
                "exact": False, "open": str(od), "chart": chart, "unstable": unstable, "cum": cum, "thru": str(end), "twr_thru": str(report.months[-1]),
                "risk": {"vol": None, "ret": None, "sharpe": None} if unstable else _window_risk(report, i, rf)}
+    if alt and start is None:  # the same account against another benchmark: only the benchmark-side figures change
+        cf = M.index_counterfactual(fl, index, end)
+        out.update(bench_irr=cf.irr, excess=(irr - cf.irr) if irr is not None and cf.irr is not None else None,
+                   bench_end=cf.terminal_value if (market or cf.irr is not None) else None)
+        out["bench_path"] = [round(v, 2) for v in M.index_path(fl, index, list(report.months) + ([end] if end not in report.months else []))] if market else []
     out["extras"] = {}
     if not market:
         return out
@@ -149,7 +156,8 @@ def _basket_risk(weights: dict[str, float], series: Series | dict, months: list[
     return {"vol": M.volatility(rets), "ret": M.annualize(g[-1], len(g)), "sharpe": M.sharpe(ex) if rf is not None else None}
 
 
-def _bench_points(ref: M.Report, key: str, asof: date, benchmark: str, extras: dict[str, tuple[dict, Series]], rf: Series | None) -> list[dict]:
+def _bench_points(ref: M.Report, key: str, asof: date, benchmark: str, extras: dict[str, tuple[dict, Series]], rf: Series | None,
+                  index: Series | None = None) -> list[dict]:
     """The benchmark and extra baskets over the same window as the entities (the whole-portfolio history for 'inception')."""
     start = window_start(key, asof)
     if start is None:
@@ -160,13 +168,16 @@ def _bench_points(ref: M.Report, key: str, asof: date, benchmark: str, extras: d
             return []
         i = idx[-1]
     months = list(ref.months[i + 1:])
-    rets = list(ref.index_returns[i + 1:])
     if not months:
         return []
-    g = M.growth_index(rets)
     prevs = [ref.months[j - 1] for j in range(i + 1, len(ref.months))] if i >= 0 else None
     if prevs is None:  # whole history: the first month's opening rate is the month before it
         prevs = [date(months[0].year, months[0].month, 1) - timedelta(days=1)] + months[:-1]
+    if index is not None:
+        rets = [((index.on_or_before(m) / index.on_or_before(pv) - 1) if index.on_or_before(m) and index.on_or_before(pv) else 0.0) for m, pv in zip(months, prevs)]
+    else:
+        rets = list(ref.index_returns[i + 1:])
+    g = M.growth_index(rets)
     ex = [r - M.monthly_rf(rf, pv) for r, pv in zip(rets, prevs)] if rf is not None else []
     exact = start is None
     out = [{"label": benchmark, "kind": "benchmark", "gk": "", "vol": M.volatility(rets), "ret": M.annualize(g[-1], len(g)),
@@ -179,7 +190,7 @@ def _bench_points(ref: M.Report, key: str, asof: date, benchmark: str, extras: d
 
 
 def risk_data(ents: list[dict], runs: list[AccountRun], groups: list[GroupRun], benchmark: str,
-              extras: dict[str, tuple[dict, Series]], rf: Series | None, asof: date) -> dict:
+              extras: dict[str, tuple[dict, Series]], rf: Series | None, asof: date, benchmarks: dict[str, Series] | None = None) -> dict:
     """Points for the risk-vs-return scatter (issue 129), per window. Entities with no volatility are listed, not plotted.
     Each point carries its kind and grouping so the page can show only the rows the grouping picker selects."""
     ref = next((g.report for g in groups if g.kind == "all" and g.report is not None), None) or \
@@ -208,12 +219,26 @@ def risk_data(ents: list[dict], runs: list[AccountRun], groups: list[GroupRun], 
                             "sharpe": r["sharpe"], "exact": bool(w["exact"] and e.get("quality") == "exact")})
         if ref is not None:
             pts += _bench_points(ref, key, asof, benchmark, extras, rf)
-        out[key] = {"points": pts, "left_off": left}
+        bm = {}
+        if ref is not None:
+            for sym, series in (benchmarks or {}).items():
+                bp = _bench_points(ref, key, asof, sym, {}, rf, series)
+                if bp:
+                    bm[sym] = bp[0]
+        out[key] = {"points": pts, "left_off": left, "bm": bm}
     return out
 
 
+def label_of(sym: str) -> str:
+    return dict(BENCHMARKS).get(sym, sym)
+
+
 def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, index: Series,
-               extras: dict[str, tuple[dict, Series]], asof: date, classes: dict[str, str] | None = None, rf: Series | None = None) -> dict:
+               extras: dict[str, tuple[dict, Series]], asof: date, classes: dict[str, str] | None = None, rf: Series | None = None,
+               benchmarks: dict[str, Series] | None = None) -> dict:
+    """`benchmarks` are the series the page's benchmark picker can switch between (the default `index` is one of them)."""
+    alts = {sym: s for sym, s in (benchmarks or {}).items() if sym != benchmark}
+    order = ([benchmark] if benchmark not in dict(BENCHMARKS) else []) + [sym for sym, _ in BENCHMARKS if sym == benchmark or sym in alts]
     ents = []
     notes_ = {g.name: g.note for g in groups}
     pairs = [(r.account.label, "account", "", r.account, r.events and [(e.when, e.external_flow) for e in r.events if e.external_flow],
@@ -240,11 +265,24 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
                  months=[str(m) for m in rep.months] + ([str(end)] if end not in rep.months else []),
                  values=[round(v, 2) for v in rep.values] + ([round(ev, 2)] if end not in rep.months else []),
                  bench=([round(v, 2) for v in rep.index_values] + ([round(rep.index_end_value, 2)] if end not in rep.months else [])) if market else [], note=note)
+        e["bm"] = {}
+        for sym, series in alts.items():
+            ws = {}
+            for k, _ in WINDOWS:
+                if e["windows"][k] is None:
+                    ws[k] = None
+                    continue
+                a = _stats(flows, rep, end, ev, series, window_start(k, asof), {}, market, rf, opening, alt=True)
+                ws[k] = None if a is None else {"bench_irr": a["bench_irr"], "excess": a["excess"], "bench_end": a["bench_end"],
+                                                 "bench": a["bench_path"] if k == "inception" else a["chart"]["bench"]}
+            e["bm"][sym] = ws
         ents.append(e)
     return {"benchmark": benchmark, "asof": str(asof), "windows": WINDOWS, "extras": list(extras), "entities": ents,
             "classes": [[k, v] for k, v in CLASSES.items()],
-            "risk": risk_data(ents, runs, groups, benchmark, extras, rf, asof),
-            "lesson": build_lesson(runs, groups, benchmark, rf)}
+            "risk": risk_data(ents, runs, groups, benchmark, extras, rf, asof, {benchmark: index, **alts}),
+            "lesson": build_lesson(runs, groups, label_of(benchmark), rf),
+            "lessons": {sym: build_lesson(runs, groups, label_of(sym), rf, index=s) for sym, s in alts.items()},
+            "benchmarks": [[sym, label_of(sym)] for sym in order], "benchmarkLabel": label_of(benchmark)}
 
 
 PAGE_CSS = """
@@ -265,7 +303,7 @@ svg .pt circle{stroke:var(--pc);stroke-width:2.2}svg .pt circle.solid{fill:var(-
 
 JS = r"""
 const D=JSON.parse(document.getElementById('data').textContent);
-let win='inception',grp='accounts',showBench=true,tab='main';
+let win='inception',grp='accounts',showBench=true,tab='main',bm=D.benchmark;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const pct=x=>x==null?'n/a':(x*100).toFixed(1)+'%';
@@ -285,10 +323,15 @@ const COLORS=Array.from({length:8},(_,i)=>`var(--c${i})`);
 const GROUPS=[['accounts','Accounts'],['all','All combined'],['brokerage','By brokerage'],['owner','By owner'],['wrapper','By wrapper']];
 function seg(el,items,get,set){el.innerHTML=items.map(([k,l])=>`<button type="button" aria-pressed="${get()===k}" data-k="${k}">${esc(l)}</button>`).join('');
  el.querySelectorAll('button').forEach(b=>b.onclick=()=>{set(b.dataset.k);draw();});}
+const BL=()=>(D.benchmarks.find(b=>b[0]===bm)||[0,bm])[1];
+function WS(e,k){// window figures with the benchmark-side numbers of the picked benchmark
+ k=k||win;const w=e.windows&&e.windows[k];if(!w||bm===D.benchmark)return w;
+ const a=e.bm&&e.bm[bm]&&e.bm[bm][k];if(!a)return w;
+ const o={...w,bench_irr:a.bench_irr,excess:a.excess,bench_end:a.bench_end};if(w.chart)o.chart={...w.chart,bench:a.bench};return o;}
 function rows(){return D.entities.filter(e=>grp==='accounts'?e.kind==='account':(e.kind==='group'&&e.groupKind===grp));}
 function trow(e,label,cls){
   if(e.error||!e.windows)return `<tr class="${cls}"><td>${label}</td><td>${esc(e.type||'')}</td><td colspan="${NCOLS-2}" class="err">not computed: ${esc(e.error)}</td></tr>`;
-  const w=e.windows[win];
+  const w=WS(e);
   if(!w)return `<tr class="${cls}"><td>${label}</td><td>${esc(e.type)}</td><td>${e.start}</td><td colspan="${NCOLS-3}" class="na" title="${esc(e.kind==='group'?'the combined line starts after this window begins, or has under a month of history in it':'this account starts after the window begins, or is closed')}">n/a: does not cover this window</td></tr>`;
   const q=w.exact&&e.quality==='exact'?'exact':'estimated';
   const nm=e.market===false?'non-market account: no prices, so no return-based measures':null, wn=win!=='inception';
@@ -304,7 +347,7 @@ function trow(e,label,cls){
    `<td class="${q==='exact'?'exact':'est'}" title="${esc((e.flags||[]).join('; '))}">${q}, as of ${w.thru||e.as_of}${e.note?' (common month-end)':''}${(e.flags||[]).some(f=>f.startsWith('history ends'))?' *':''}</td>`+D.extras.map(n=>c(spct,w.extras[n]&&w.extras[n].excess,'excess')).join('')+'</tr>';}
 let NCOLS=12;
 function table(rs){
- const head=['Account','Type','Started','Value','Net in','IRR','Time-weighted return (est.)','Excess IRR vs '+D.benchmark,'Worth today in '+D.benchmark,'Sharpe (est.)','Worst fall','Data']
+ const head=['Account','Type','Started','Value','Net in','IRR','Time-weighted return (est.)','Excess IRR vs '+BL(),'Worth today in '+BL(),'Sharpe (est.)','Worst fall','Data']
   .concat(D.extras.map(n=>'Excess vs '+n));
  NCOLS=head.length;
  let h='<tr>'+head.map(x=>`<th>${esc(x)}</th>`).join('')+'</tr>';
@@ -318,7 +361,7 @@ function table(rs){
   'Non-market accounts (a fixed annuity) count in value and net in. Transfers between your own accounts net out of combined lines, so their Net in can differ from the sum of the rows.'+
   (grp!=='accounts'&&grp!=='all'?' Each group row is a subtotal for its members, valued on that group\'s own common month-end.':''):'';}
 function bars(rs){
- const items=rs.filter(e=>e.windows&&e.windows[win]&&e.windows[win].excess!=null).map(e=>[e.label,e.windows[win].excess]).sort((a,b)=>b[1]-a[1]);
+ const items=rs.filter(e=>WS(e)&&WS(e).excess!=null).map(e=>[e.label,WS(e).excess]).sort((a,b)=>b[1]-a[1]);
  if(!items.length){$('#bars').innerHTML='<p class="na">Nothing to chart for this window.</p>';return;}
  const W=860,rh=30,L=200,R=70,H=items.length*rh+44,mx=Math.max(...items.map(i=>Math.abs(i[1])),0.01),bt=niceTicks(0,mx,PCT_STEPS.map(q=>q/100),3),m=bt.hi,half=(W-L-R)/2,x0=L+half,sc=(half-60)/m;
  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Excess IRR per account">`;
@@ -328,8 +371,8 @@ function bars(rs){
      `<text class="val" x="${v>=0?x0+w+6:x0-w-6}" y="${y+14}" text-anchor="${v>=0?'start':'end'}">${spct(v)}</text>`;});
  $('#bars').innerHTML=s+'</svg>';}
 function view(e){// the series to chart for the picked window, or null when the entity does not cover it
- if(win==='inception')return e.months?e:null;
- const w=e.windows&&e.windows[win];return w&&w.chart?{label:e.label,months:w.chart.months,values:w.chart.values,bench:w.chart.bench}:null;}
+ if(win==='inception'){if(!e.months)return null;const a=bm!==D.benchmark&&e.bm&&e.bm[bm]&&e.bm[bm].inception;return a?{label:e.label,months:e.months,values:e.values,bench:a.bench}:e;}
+ const w=WS(e);return w&&w.chart?{label:e.label,months:w.chart.months,values:w.chart.values,bench:w.chart.bench}:null;}
 function lines(rs){
  const es=rs.map(view).filter(Boolean);
  if(!es.length){$('#lines').innerHTML='<p class="na">Nothing to chart for this window.</p>';$('#key').innerHTML='';return;}
@@ -344,9 +387,9 @@ function lines(rs){
   if(showBench&&e.bench.length)s+=`<polyline fill="none" stroke="${c}" stroke-width="1.6" stroke-dasharray="5 4" opacity=".7" points="${pts(e.bench)}"/>`;
   s+=`<polyline fill="none" stroke="${c}" stroke-width="2.4" stroke-linejoin="round" points="${pts(e.values)}"/>`;});
  $('#lines').innerHTML=s+'</svg>';
- $('#key').innerHTML=es.map((e,i)=>`<span><i style="background:${COLORS[i%8]}"></i>${esc(e.label)}</span>`).join('')+(showBench?`<span class="small">dashed: same deposits and withdrawals in ${esc(D.benchmark)}</span>`:'');}
+ $('#key').innerHTML=es.map((e,i)=>`<span><i style="background:${COLORS[i%8]}"></i>${esc(e.label)}</span>`).join('')+(showBench?`<span class="small">dashed: same deposits and withdrawals in ${esc(BL())}</span>`:'');}
 function scatter(){
- const R=D.risk[win],keep=p=>p.kind==='benchmark'||p.kind==='all'||(grp==='accounts'?p.kind==='account':(grp!=='all'&&p.gk===grp)),P=R.points.filter(keep),LO=R.left_off.filter(keep);
+ const R=D.risk[win],keep=p=>(p.kind==='benchmark'&&p.label!==D.benchmark)||p.kind==='all'||(grp==='accounts'?p.kind==='account':(grp!=='all'&&p.gk===grp)),P=R.points.filter(keep).concat(R.bm[bm]?[{...R.bm[bm],label:BL(),kind:'benchmark',exact:win==='inception'}]:[]),LO=R.left_off.filter(a=>keep({kind:a[2],gk:a[3],label:a[0]}));
  if(P.length<2){$('#risk').innerHTML='<p class="na">Not enough history (12 months) for a risk and return chart.</p>';}
  else{
   const W=860,H=380,L=64,Rr=40,T=14,B=44,PS=PCT_STEPS.map(m=>m/100),xt=niceTicks(0,Math.max(...P.map(p=>p.vol),0.01),PS,6),xm=xt.hi,
@@ -375,10 +418,10 @@ function holdings(){
    e.holdings.rows.map(r=>`<tr><td>${esc(r.symbol)}${r.name?' <span class="small">'+esc(r.name)+'</span>':''}</td><td>${esc(names[r.cls])}</td><td>${money(r.value)}</td><td>${pct(r.weight)}</td></tr>`).join('')+'</table></div></details>';}
  $('#hold').innerHTML=h+'<p class="small">Classes come from your local file .data/asset_classes.json; tickers missing from it show as Unclassified. Global and balanced funds are filed under Other.</p>';}
 function sharpeTab(){
- const L=D.lesson;$('#lesson').innerHTML=L.html;
+ const L=bm===D.benchmark?D.lesson:(D.lessons[bm]||D.lesson);$('#lesson').innerHTML=L.html;
  const P=L.points,c=$('#sharpechart');if(!c)return;
  if(!P){c.innerHTML='<p class="na">n/a: the chart needs the T-bill rate and at least two months of returns.</p>';return;}
- const pts=[{k:'portfolio',label:'Your portfolio',...P.portfolio},{k:'benchmark',label:D.benchmark,...P.benchmark}].filter(p=>p.ret!=null&&p.vol!=null);
+ const pts=[{k:'portfolio',label:'Your portfolio',...P.portfolio},{k:'benchmark',label:BL(),...P.benchmark}].filter(p=>p.ret!=null&&p.vol!=null);
  const W=860,H=340,Lm=64,Rm=40,T=14,B=44,PS=PCT_STEPS.map(m=>m/100),
   xt=niceTicks(0,Math.max(...pts.map(p=>p.vol),0.01),PS,6),xm=xt.hi,
   yt=niceTicks(Math.min(0,P.rf,...pts.map(p=>p.ret)),Math.max(0.01,P.rf,...pts.map(p=>p.ret)),PS,6),y0=yt.lo,y1=yt.hi;
@@ -395,7 +438,8 @@ function sharpeTab(){
  $('#sharpecap').textContent='Each line starts at the risk-free point (zero risk, the T-bill return) and ends at a portfolio. The steeper the line, the higher the Sharpe ratio: its slope is the Sharpe ratio. Returns here are the average month times 12, so they differ slightly from the compounded figures in the Risk versus return chart.';}
 function showTab(){$('#tab-main').hidden=tab!=='main';$('#tab-sharpe').hidden=tab!=='sharpe';if(tab==='sharpe')sharpeTab();}
 function draw(){
- seg($('#tabs'),[['main','Dashboard'],['sharpe','How Sharpe works']],()=>tab,k=>{tab=k;});showTab();
+ document.querySelectorAll('.bml').forEach(x=>x.textContent=BL());
+ seg($('#bms'),D.benchmarks,()=>bm,k=>{bm=k;});seg($('#tabs'),[['main','Dashboard'],['sharpe','How Sharpe works']],()=>tab,k=>{tab=k;});showTab();
  seg($('#wins'),D.windows,()=>win,k=>win=k);seg($('#grps'),GROUPS,()=>grp,k=>grp=k);
  const rs=rows();table(rs);bars(rs);lines(rs);holdings();scatter();
  $('#winnote').textContent=win==='inception'?'Since inception: IRR uses exact dated flows plus the ending value; returns are per year.':
@@ -414,15 +458,15 @@ def render(data: dict) -> str:
 <title>All investments side by side</title>
 <style>{CSS}{PAGE_CSS}</style></head><body><main>
 <header><h1>All investments side by side</h1>
-<p class="muted">As of {data['asof']} · benchmark {data['benchmark']} · local only, never sent anywhere
+<p class="muted">As of {data['asof']} · benchmark <span class="bml"></span> · local only, never sent anywhere
  · <span class="seg" aria-label="Theme"><button type="button" data-theme-set="auto">Auto</button><button type="button" data-theme-set="light">Light</button><button type="button" data-theme-set="dark">Dark</button></span></p></header>
-<nav class="controls"><div class="seg" id="tabs" aria-label="View"></div></nav>
+<nav class="controls"><div class="seg" id="tabs" aria-label="View"></div><div class="seg" id="bms" aria-label="Benchmark"></div></nav>
 <div id="tab-main">
 <section class="controls"><div class="seg" id="wins" aria-label="Window"></div><div class="seg" id="grps" aria-label="Grouping"></div>
 <label><input type="checkbox" id="bench" checked> show the same flows in the benchmark</label></section>
 <p class="small" id="winnote"></p><p class="small" id="totnote"></p><p id="empty" hidden class="na">No accounts to show for this grouping.</p>
 <section><div class="scroll"><table id="tbl"></table></div></section>
-<figure><h2>Excess IRR per account</h2><div id="bars"></div><figcaption>IRR of the real flows minus the IRR of the same deposits and withdrawals put into {data['benchmark']}. Sorted best first.</figcaption></figure>
+<figure><h2>Excess IRR per account</h2><div id="bars"></div><figcaption>IRR of the real flows minus the IRR of the same deposits and withdrawals put into <span class="bml"></span>. Sorted best first.</figcaption></figure>
 <figure><h2>Value over time</h2><div class="key" id="key"></div><div id="lines"></div><figcaption>Month-end values are estimated; the endpoints are exact.</figcaption></figure>
 <figure><h2>Risk versus return</h2><div id="risk"></div><figcaption>Each point is one account, group, your whole portfolio (large) or a benchmark (grey): time-weighted return per year against how much it swings, with its Sharpe ratio (S, return above the T-bill rate per unit of risk) in the label. Since each one's start; benchmarks cover the whole-portfolio period. Hollow points are estimated from reconstructed month-end values (decision 0011). Hover for the figures.</figcaption><p class="small" id="riskleft"></p></figure>
 <section id="hold"></section>
