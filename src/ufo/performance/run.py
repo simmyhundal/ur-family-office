@@ -27,6 +27,7 @@ class Result(BaseModel):
     income_credited: float
     events: int
     first_trade: date
+    month_values: list[tuple[date, float]] = []  # every month-end with its value, including the first partial month the report drops
 
 
 def _snapshot_date(path: str) -> date | None:
@@ -96,7 +97,8 @@ def run_core(hist: ParsedHistory, snapshots: list[Snapshot], end: date, end_valu
         notes.append("The history omits dividends and interest; cash credits the export implies were counted as income "
                      "inside the return, never as contributions.")
     return Result(report=report, reconciliation=rows, warnings=warnings, notes=notes, benchmark=benchmark,
-                  income_credited=ledger.income_total(), events=len(hist.events), first_trade=hist.first)
+                  income_credited=ledger.income_total(), events=len(hist.events), first_trade=hist.first,
+                  month_values=list(zip(months, values)))
 
 
 def find(pattern: str) -> list[str]:

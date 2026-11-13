@@ -106,7 +106,7 @@ def nonmarket_result(hist, end: date, value: float, index: Series | None = None)
                    index_end_value=cf.terminal_value if cf else 0.0, index_values=[], months=months, port_growth=[], index_growth=[], port_returns=[],
                    index_returns=[], flows_by_month=[], values=values)
     return Result(report=rep, reconciliation=[], warnings=list(hist.warnings), notes=[], benchmark="", income_credited=0.0,
-                  events=len(hist.events), first_trade=hist.first)
+                  events=len(hist.events), first_trade=hist.first, month_values=list(zip(months, values)))
 
 
 def run_account(a: Account, root: Path, store: PriceStore, benchmark: str, today: date,

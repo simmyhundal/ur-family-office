@@ -94,6 +94,7 @@ const snap = () => [els['#lines'].innerHTML.length, (els['#risk'].innerHTML.matc
 win='inception'; grp='accounts'; draw(); out.acct = snap();
 win='1y'; draw(); out.acct1y = snap();
 win='inception'; grp='owner'; draw(); out.owner = snap();
+for (const g of ['all','brokerage','owner','wrapper']) {{ grp=g; win='inception'; draw(); out['acct_in_'+g] = snap()[1]; }}
 console.log(JSON.stringify(out));
 """
     f = tmp_path / "h.js"
@@ -102,4 +103,5 @@ console.log(JSON.stringify(out));
     assert r.returncode == 0, r.stderr
     o = json.loads(r.stdout)
     assert o["acct"][0] != o["acct1y"][0]  # the value chart changed with the window
+    assert all(o["acct_in_" + g] == 0 for g in ("all", "brokerage", "owner", "wrapper"))  # combined views show no individual account points
     assert o["acct"][2] == 0 and o["owner"][1] == 0  # accounts view has no group points; group view has no account points
