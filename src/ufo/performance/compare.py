@@ -16,6 +16,7 @@ from rich.table import Table
 from ufo import importers
 from ufo.accounts.registry import Account, Registry
 from ufo.performance.events import Event
+from ufo.performance.holdings import Holding
 from ufo.performance.report_html import money, pct, spct
 from ufo.performance.run import Result, run_core
 from ufo.providers.prices import PriceError, PriceStore
@@ -32,6 +33,8 @@ class AccountRun(BaseModel):
     end_value: float | None = None
     quality: str = ""  # "exact" | "estimated"
     flags: list[str] = []
+    holdings: list[Holding] = []  # latest positions snapshot, when the importer offers one
+    holdings_as_of: date | None = None
     error: str = ""
 
     @property
@@ -78,6 +81,8 @@ def run_account(a: Account, root: Path, store: PriceStore, benchmark: str, today
         for e in hist.events:
             e.account_id = a.id
         snaps = imp.positions(_files(root, a.source.snapshot_glob), a.last_digits) if a.source.snapshot_glob else []
+        if a.source.snapshot_glob and hasattr(imp, "holdings"):
+            out.holdings_as_of, out.holdings = imp.holdings(_files(root, a.source.snapshot_glob), a.last_digits)
         end, value, stmt = ending(a, snaps, today, max_age)
         res = run_core(hist, snaps, end, value, store, benchmark)
     except (ValueError, KeyError, PriceError) as e:

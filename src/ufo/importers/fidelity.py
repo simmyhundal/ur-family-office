@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ufo.importers import register
+from ufo.performance.holdings import Holding
 from ufo.performance.events import ParsedHistory, merge_histories, split_by_account
 from ufo.performance.ledger import Snapshot
 from ufo.providers.fidelity_csv import parse_fidelity_positions
@@ -42,6 +43,16 @@ class FidelityImporter:
             out.append(Snapshot(when=d, quantities={h["symbol"]: h["quantity"] for h in mine if not h["is_cash"]},
                                 value=sum(h["value"] or 0.0 for h in mine)))
         return out
+
+    def holdings(self, files: list[str], account_digits: str = "") -> tuple[object, list[Holding]]:
+        """(snapshot date, holdings) of the newest positions file that has this account; (None, []) when none does."""
+        dated = sorted(((d, f) for f in files if (d := _snapshot_date(f))), reverse=True)
+        for d, f in dated:
+            parsed, _ = parse_fidelity_positions(Path(f).read_text(encoding="utf-8-sig"))
+            mine = [h for h in parsed if account_digits in f"{h['account']}{h['account_mask']}"]
+            if mine:
+                return d, [Holding(symbol=h["symbol"], name=h["name"] or "", value=h["value"] or 0.0, is_cash=h["is_cash"]) for h in mine]
+        return None, []
 
 
 register(FidelityImporter())

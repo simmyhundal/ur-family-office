@@ -16,6 +16,7 @@ from ufo.accounts.registry import RegistryError, load_registry, registry_path
 from ufo.performance.combine import combine_all
 from ufo.performance.compare import MAX_VALUE_AGE_DAYS, print_table, run_all, unmatched_rows
 from jobs.performance_report import NAMES
+from ufo.performance.holdings import classes_path, load_classes, print_holdings
 from ufo.performance.dashboard import build_data, render as render_page, write
 from ufo.providers.prices import PriceError, PriceStore, WebClient
 
@@ -40,8 +41,14 @@ def main(argv: list[str] | None = None, store: PriceStore | None = None, today: 
         con.print("[red]No accounts yet.[/red] Add them with: python -m ufo.setup accounts")
         return 2
     store = store or PriceStore(Path(a.cache), WebClient())
+    try:
+        classes = load_classes(classes_path(root))
+    except ValueError as e:
+        con.print(f"[red]{e}[/red]")
+        return 2
     runs = run_all(reg, root, store, a.benchmark, today, a.max_age_days)
     print_table(runs, a.benchmark, con, unmatched_rows(reg, root), combine_all(runs, store, a.benchmark))
+    print_holdings(runs, classes, con)
     done = [r for r in runs if r.result]
     if a.out and done:
         extras_spec = {}
@@ -54,7 +61,7 @@ def main(argv: list[str] | None = None, store: PriceStore | None = None, today: 
         try:
             series, _ = store.report([a.benchmark] + [s for w in extras_spec.values() for s in w], start, asof)
             extras = {n: (w, series) for n, w in extras_spec.items() if all(k in series for k in w)}
-            data = build_data(done, combine_all(done, store, a.benchmark, singletons=True), a.benchmark, series[a.benchmark], extras, asof)
+            data = build_data(done, combine_all(done, store, a.benchmark, singletons=True), a.benchmark, series[a.benchmark], extras, asof, classes)
         except (PriceError, KeyError) as e:
             con.print(f"[red]Could not build the dashboard: {e}[/red]")
             return 1

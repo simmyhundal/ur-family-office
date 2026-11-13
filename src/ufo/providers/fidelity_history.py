@@ -35,7 +35,19 @@ def _classify(action: str, has_symbol: bool) -> tuple[Kind | None, bool]:
         return Kind.CONTRIBUTION, has_symbol
     if a.startswith("TRANSFERRED TO"):
         return Kind.WITHDRAWAL, has_symbol
-    if a.startswith("DIVIDEND RECEIVED"):
+    if a.startswith("CASH CONTRIBUTION"):  # IRA contributions, current or prior year
+        return Kind.CONTRIBUTION, False
+    if a.startswith("EARLY DIST") or a.startswith("NORMAL DIST"):  # IRA distributions to the owner
+        return Kind.WITHDRAWAL, False
+    if a.startswith("TRANSFER OF ASSETS ACAT RECEIVE"):  # an incoming account transfer; without a symbol it is a cash adjustment
+        return (Kind.CONTRIBUTION, True) if has_symbol else (Kind.FEE, False)
+    if a.startswith("REDEMPTION PAYOUT"):  # a CD or T-bill paid off at maturity
+        return Kind.SELL, False
+    if a.startswith("MERGER MER PAYOUT"):
+        return Kind.SELL, False
+    if a.startswith("MERGER MER FROM"):
+        return Kind.BUY, False
+    if a.startswith("DIVIDEND RECEIVED") or a.startswith("DISTRIBUTION") or "CAP GAIN" in a[:20]:
         return Kind.DIVIDEND, False
     if a.startswith("REINVESTMENT"):
         return Kind.REINVESTMENT, False

@@ -47,7 +47,7 @@ def test_one_command_writes_a_private_page_with_every_window_and_grouping(tmp_pa
     c = next(e for e in d["entities"] if e["label"] == "C" and e["kind"] == "account")
     assert c["closed"] and c["windows"]["1y"] is None and c["windows"]["inception"]["value"] == 0.0
     assert d["extras"] == ["ACME"] and "ACME" in a["windows"]["inception"]["extras"]
-    assert "Allocation by asset class is not shown" in page
+    assert 'id="hold"' in page  # the holdings panel replaces the old "not shown" note
 
 
 def test_no_external_requests_in_the_page(tmp_path):

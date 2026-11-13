@@ -14,6 +14,7 @@ from pathlib import Path
 from ufo.performance import metrics as M
 from ufo.performance.combine import GroupRun
 from ufo.performance.compare import AccountRun
+from ufo.performance.holdings import CLASSES, summarize
 from ufo.performance.report_html import CSS
 from ufo.providers.prices import Series
 
@@ -71,7 +72,7 @@ def _stats(flows, report, end, end_value, index: Series, start: date | None, ext
 
 
 def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, index: Series,
-               extras: dict[str, tuple[dict, Series]], asof: date) -> dict:
+               extras: dict[str, tuple[dict, Series]], asof: date, classes: dict[str, str] | None = None) -> dict:
     ents = []
     pairs = [(r.account.label, "account", "", r.account, r.events and [(e.when, e.external_flow) for e in r.events if e.external_flow],
               r.result.report if r.result else None, r.end, r.end_value, r.quality, r.flags, r.error) for r in runs]
@@ -81,6 +82,9 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
         e = {"label": label, "kind": kind, "groupKind": gk, "error": err, "flags": flags}
         if acct is not None:
             e.update(type=acct.wrapper.value, brokerage=acct.brokerage, owner=acct.owner)
+            run = next((r for r in runs if r.account is acct), None)
+            if run and run.holdings:
+                e["holdings"] = dict(summarize(run.holdings, classes or {}), as_of=str(run.holdings_as_of))
         else:
             e.update(type="combined")
         if rep is None:
@@ -93,7 +97,8 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
                  months=[str(m) for m in rep.months] + [str(end)], values=[round(v, 2) for v in rep.values] + [round(ev, 2)],
                  bench=[round(v, 2) for v in rep.index_values] + [round(rep.index_end_value, 2)])
         ents.append(e)
-    return {"benchmark": benchmark, "asof": str(asof), "windows": WINDOWS, "extras": list(extras), "entities": ents}
+    return {"benchmark": benchmark, "asof": str(asof), "windows": WINDOWS, "extras": list(extras), "entities": ents,
+            "classes": [[k, v] for k, v in CLASSES.items()]}
 
 
 PAGE_CSS = """
@@ -160,9 +165,21 @@ function lines(rs){
   s+=`<polyline fill="none" stroke="${c}" stroke-width="2.4" stroke-linejoin="round" points="${pts(e.values)}"/>`;});
  $('#lines').innerHTML=s+'</svg>';
  $('#key').innerHTML=es.map((e,i)=>`<span><i style="background:${COLORS[i%8]}"></i>${esc(e.label)}</span>`).join('')+(showBench?`<span class="small">dashed: same deposits and withdrawals in ${esc(D.benchmark)}</span>`:'');}
+function holdings(){
+ const es=D.entities.filter(e=>e.kind==='account'&&e.holdings);
+ if(!es.length){$('#hold').innerHTML='';return;}
+ const keys=D.classes.filter(([k])=>es.some(e=>e.holdings.by_class[k]));
+ let h='<h2>What each account holds</h2><div class="scroll"><table><tr><th>Account</th>'+keys.map(([k,l])=>`<th>${esc(l)}</th>`).join('')+'</tr>';
+ for(const e of es)h+=`<tr><td>${esc(e.label)}</td>`+keys.map(([k])=>`<td>${e.holdings.by_class[k]?pct(e.holdings.by_class[k]):'-'}</td>`).join('')+'</tr>';
+ h+='</table></div>';
+ const names=Object.fromEntries(D.classes);
+ for(const e of es){
+  h+=`<details><summary>${esc(e.label)}: ${money(e.holdings.total)} as of ${esc(e.holdings.as_of)}</summary><div class="scroll"><table><tr><th>Fund</th><th>Class</th><th>Value</th><th>Weight</th></tr>`+
+   e.holdings.rows.map(r=>`<tr><td>${esc(r.symbol)}${r.name?' <span class="small">'+esc(r.name)+'</span>':''}</td><td>${esc(names[r.cls])}</td><td>${money(r.value)}</td><td>${pct(r.weight)}</td></tr>`).join('')+'</table></div></details>';}
+ $('#hold').innerHTML=h+'<p class="small">Classes come from your local file .data/asset_classes.json; tickers missing from it show as Unclassified. Global and balanced funds are filed under Other.</p>';}
 function draw(){
  seg($('#wins'),D.windows,()=>win,k=>win=k);seg($('#grps'),GROUPS,()=>grp,k=>grp=k);
- const rs=rows();table(rs);bars(rs);lines(rs);
+ const rs=rows();table(rs);bars(rs);lines(rs);holdings();
  $('#winnote').textContent=win==='inception'?'Since inception: IRR uses exact dated flows plus the ending value.':
   'Windowed figures are estimated: they start from a reconstructed month-end value. Accounts that do not cover the window show n/a. Sharpe is shown since inception only.';
  $('#empty').hidden=rs.length>0;}
@@ -187,7 +204,8 @@ def render(data: dict) -> str:
 <section><div class="scroll"><table id="tbl"></table></div></section>
 <figure><h2>Excess IRR per account</h2><div id="bars"></div><figcaption>IRR of the real flows minus the IRR of the same deposits and withdrawals put into {data['benchmark']}. Sorted best first.</figcaption></figure>
 <figure><h2>Value over time</h2><div class="key" id="key"></div><div id="lines"></div><figcaption>Month-end values are estimated; the endpoints are exact.</figcaption></figure>
-<section class="small"><p>Allocation by asset class is not shown: no asset-class source exists yet.</p>
+<section id="hold"></section>
+<section class="small">
 <p>All figures are before tax. A taxable account's number is not comparable with an IRA or Roth on an after-tax basis. Transfers between your own accounts are external for each account alone and net out in combined lines. See decision 0011.</p></section>
 <p class="small">Information, not investment advice. Past performance does not predict future results.</p>
 </main><script id="data" type="application/json">{blob}</script><script>{JS}</script></body></html>"""
