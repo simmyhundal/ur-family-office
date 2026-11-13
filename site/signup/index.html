@@ -7,14 +7,14 @@
 <meta name="description" content="Join the list for early access.">
 <meta name="theme-color" content="#f7f7fc" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0a0b1c" media="(prefers-color-scheme: dark)">
-<link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+<link rel="icon" type="image/svg+xml" href="../img/favicon.svg">
 <link rel="stylesheet" href="../style.css">
 <script>document.documentElement.className = "js";</script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
 <header class="site-head"><div class="wrap head-row">
-  <a class="brand" href="../" aria-label="UFO, home"><img class="brand-mark" src="../img/logo.svg" alt="" width="36" height="36"><span class="brand-tag">Out of this world possibilities</span></a>
+  <a class="brand" href="../" aria-label="UFO, home"><img class="brand-mark" src="../img/logo.svg" alt="" width="36" height="36"><span class="brand-tag">A higher view of your money</span></a>
   <nav class="main-nav" aria-label="Main"><a href="../try/">Try it</a><a href="../learn/">Learn</a><a href="../teach/">Teach</a><a href="../pricing/">Pricing</a><a href="../about/">About</a></nav>
   <a class="nav-cta" href="../signup/" aria-current="page">Sign up</a>
 </div></header>
@@ -24,7 +24,7 @@
   <div class="signup-side">
     <div class="page-head reveal"><span class="eyebrow">Early access</span><h1>Be first to see what’s next</h1><p class="sub">Join the list and we will email you when new features open. No payment, no portfolio data, no promises about returns.</p></div>
     <ul class="checks reveal">
-      <li><div><b>All your accounts side by side</b><span>The next thing we are building, for the Plus plan.</span></div></li>
+      <li><div><b>Plus: every account side by side</b><span>With what-if tests to lower risk. <a href="../#plus">See what Plus looks like</a>.</span></div></li>
       <li><div><b>Class pilots for instructors</b><span>Choose “Instructor” and we will get in touch about your course.</span></div></li>
       <li><div><b>Only what you type here is sent</b><span>Email, role, school, plan interest and consent. Nothing else.</span></div></li>
     </ul>
@@ -48,24 +48,30 @@
 </main>
 <footer class="site-foot"><div class="wrap foot-grid">
   <div class="foot-brand"><a class="brand" href="../"><img class="brand-mark" src="../img/logo.svg" alt="" width="32" height="32"><span class="brand-name">UFO</span></a>
-    <p>Out of this world possibilities. Compare a mix of funds with the market, privately, in your browser.</p></div>
+    <p>A higher view of your money. Compare a mix of funds with the market, privately, in your browser.</p></div>
   <nav class="foot-col" aria-label="Product"><h2>Product</h2><a href="../try/">Try it</a><a href="../learn/">Learn</a><a href="../teach/">For instructors</a><a href="../pricing/">Pricing</a></nav>
   <nav class="foot-col" aria-label="Company"><h2>Company</h2><a href="../about/">About</a><a href="../privacy/">Privacy</a><a href="../terms/">Terms</a><a href="../signup/">Sign up</a></nav>
 </div>
 <div class="wrap foot-legal">
   <p><b>Information, not investment advice.</b> Results are before taxes and trading costs, and past results don’t predict future ones.</p>
-  <p>Prices: month-end adjusted closes, refreshed on weekdays. Cash rate: 3-month Treasury bills from FRED.</p>
+  <p>Prices: month-end adjusted closes, completed months only. Cash rate: 3-month Treasury bills from FRED.</p>
+  <p class="copy">© 2026 Mycorrhiza Partners LLC DBA Ur Family Office</p>
 </div></footer>
 <script type="module">import { revealOnScroll } from "../js/util.mjs"; revealOnScroll();</script>
 <script type="module" src="../js/chrome.mjs"></script>
 <script type="module">
 import { cfg } from "../js/chrome.mjs";
-import { parseParams, buildSignupPayload, validateSignup, submitSignup } from "../js/signup.mjs";
+import { parseParams, buildSignupPayload, validateSignup, submitSignup, mailtoJoin } from "../js/signup.mjs";
 const $ = (id) => document.getElementById(id);
 const pre = parseParams(location.search);
 if (pre.plan) $("f-plan").value = pre.plan;
 if (pre.role) $("f-role").value = pre.role;
-if (!cfg.signup_endpoint) { $("status").textContent = "Sign-ups open soon. Nothing is sent from this form yet."; $("go").disabled = true; }
+if (!cfg.signup_endpoint) {
+  $("go").disabled = true;
+  const href = mailtoJoin(cfg.contact_email, pre.plan);
+  if (href) { $("status").textContent = "Sign-ups by form open soon. Until then: "; const a = document.createElement("a"); a.href = href; a.textContent = "email us to join the list"; $("status").append(a, "."); }
+  else $("status").textContent = "Sign-ups open soon. Nothing is sent from this form yet.";
+}
 $("signup").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const p = buildSignupPayload({ email: $("f-email").value, role: $("f-role").value, school: $("f-school").value, plan: $("f-plan").value, consent: $("f-consent").checked });

@@ -6,7 +6,12 @@
       "price": "$0",
       "status": "available",
       "blurb": "Everything on the site today.",
-      "features": ["Compare a mix of funds with a benchmark", "Sharpe, return and risk in plain language", "The step-by-step lessons", "A sample portfolio to try"],
+      "features": [
+        "Compare a mix of funds with a benchmark",
+        "Sharpe, return and risk in plain language",
+        "The step-by-step lessons",
+        "A sample portfolio to try"
+      ],
       "checkout_url": ""
     },
     {
@@ -14,9 +19,15 @@
       "name": "Plus",
       "price": "$4/month",
       "status": "planned",
-      "blurb": "For people who want all their accounts in one place.",
-      "features": ["All your accounts side by side", "Saved portfolios", "Everything in Free"],
-      "checkout_url": ""
+      "blurb": "Your whole portfolio from above: every account side by side.",
+      "features": [
+        "Every account side by side, against one benchmark",
+        "Find what drags your returns",
+        "Test a change before you make it",
+        "Everything in Free"
+      ],
+      "checkout_url": "",
+      "teaser": "#plus"
     },
     {
       "id": "scheduler",
@@ -24,7 +35,10 @@
       "price": "To be decided",
       "status": "later",
       "blurb": "Coming later. Reminders first.",
-      "features": ["Reminders to review your mix", "Everything in Plus"],
+      "features": [
+        "Reminders to review your mix",
+        "Everything in Plus"
+      ],
       "checkout_url": ""
     }
   ]

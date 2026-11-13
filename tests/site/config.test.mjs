@@ -23,7 +23,7 @@ test("header and footer render the name and links", () => {
   const cfg = mergeConfig({ name: "Renamed", contact_email: "a@example.com" });
   const h = headerHtml(cfg, "../", "pricing");
   assert.match(h, /href="..\/pricing\/" aria-current="page"/); assert.match(h, /Sign up/);
-  assert.match(h, /<img class="brand-mark" src="..\/img\/logo.svg"/); assert.match(h, /Out of this world possibilities/);
+  assert.match(h, /<img class="brand-mark" src="..\/img\/logo.svg"/); assert.match(h, /A higher view of your money/);
   assert.match(h, /aria-label="Renamed, home"/); assert.ok(!/>Renamed</.test(h), "the name is not shown in the header");
   const f = footerHtml(cfg, "../");
   assert.match(f, /<span class="brand-name">Renamed<\/span>/); assert.match(f, /src="..\/img\/logo.svg"/);
@@ -79,4 +79,49 @@ test("with an endpoint, posts only the payload fields", async () => {
 test("query params preselect, unknown ignored", () => {
   assert.deepEqual(parseParams("?plan=plus&role=instructor"), { plan: "plus", role: "instructor" });
   assert.deepEqual(parseParams("?plan=x&role=<b>"), { plan: "", role: "" });
+});
+
+test("footer carries the legal name; the tagline is the new default", () => {
+  const cfg = mergeConfig({});
+  assert.equal(cfg.tagline, "A higher view of your money");
+  assert.equal(cfg.legal_name, "Mycorrhiza Partners LLC DBA Ur Family Office");
+  assert.ok(footerHtml(cfg, "").includes("© 2026 Mycorrhiza Partners LLC DBA Ur Family Office"));
+  assert.ok(footerHtml(mergeConfig({ legal_name: "Invented Co" }), "").includes("© 2026 Invented Co"));
+});
+test("founder: photo is a path inside the site, LinkedIn https only (empty hides it)", () => {
+  const c = mergeConfig({ founder: { name: "A. Founder", photo: "img/founder.jpg", linkedin: "" } });
+  assert.deepEqual(c.founder, { name: "A. Founder", photo: "img/founder.jpg", linkedin: "" });
+  assert.equal(mergeConfig({ founder: { photo: "https://x.example/p.jpg", linkedin: "http://x.example" } }).founder.photo, "");
+  assert.equal(mergeConfig({ founder: { linkedin: "javascript:1" } }).founder.linkedin, "");
+  assert.equal(mergeConfig({ founder: { linkedin: "https://www.linkedin.com/in/example" } }).founder.linkedin, "https://www.linkedin.com/in/example");
+  assert.deepEqual(mergeConfig(null).founder, { name: "", photo: "", linkedin: "" });
+});
+test("the shipped site.json has the legal name, tagline and founder", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const c = mergeConfig(JSON.parse(await readFile(new URL("../../site/data/site.json", import.meta.url), "utf8")));
+  assert.equal(c.tagline, "A higher view of your money");
+  assert.equal(c.legal_name, "Mycorrhiza Partners LLC DBA Ur Family Office");
+  assert.equal(c.founder.name, "Simmy Hundal"); assert.equal(c.founder.photo, "img/founder.jpg");
+});
+
+test("mailto fallback only with a contact email; subject names the plan", async () => {
+  const { mailtoJoin } = await import("../../site/js/signup.mjs");
+  assert.equal(mailtoJoin(""), ""); assert.equal(mailtoJoin("not-an-email"), ""); assert.equal(mailtoJoin("a@b.example?bcc=x@y.z"), "");
+  assert.equal(mailtoJoin("hello@invented.example", "plus"), "mailto:hello@invented.example?subject=Join%20the%20Plus%20list");
+  assert.equal(mailtoJoin("hello@invented.example", "nonsense"), "mailto:hello@invented.example?subject=Join%20the%20list");
+});
+test("every page's static header and footer match what chrome.mjs renders (pages without JS, the one-file copy)", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const site = new URL("../../site/", import.meta.url);
+  const cfg = mergeConfig(JSON.parse(await readFile(new URL("data/site.json", site), "utf8")));
+  const pages = { "index.html": ["", "home"], "try/index.html": ["../", "try"], "learn/index.html": ["../", "learn"], "learn/sharpe/index.html": ["../../", "learn"],
+    "teach/index.html": ["../", "teach"], "pricing/index.html": ["../", "pricing"], "signup/index.html": ["../", "signup"], "privacy/index.html": ["../", "privacy"],
+    "terms/index.html": ["../", "terms"], "about/index.html": ["../", "about"] };
+  for (const [f, [root, key]] of Object.entries(pages)) {
+    const html = await readFile(new URL(f, site), "utf8");
+    assert.ok(html.includes(`<header class="site-head">${headerHtml(cfg, root, key)}</header>`), f + " header: run node scripts/sync_site_chrome.mjs");
+    assert.ok(html.includes(`<footer class="site-foot">${footerHtml(cfg, root)}</footer>`), f + " footer: run node scripts/sync_site_chrome.mjs");
+    assert.ok(html.includes("© 2026 Mycorrhiza Partners LLC DBA Ur Family Office"), f);
+    assert.ok(!/about \d+ minutes|Running on/.test(html), f);
+  }
 });

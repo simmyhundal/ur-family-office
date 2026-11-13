@@ -7,14 +7,14 @@
 <meta name="description" content="Compare a mix of funds with the market and understand risk versus return, privately in your browser.">
 <meta name="theme-color" content="#f7f7fc" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0a0b1c" media="(prefers-color-scheme: dark)">
-<link rel="icon" type="image/svg+xml" href="img/logo.svg">
+<link rel="icon" type="image/svg+xml" href="img/favicon.svg">
 <link rel="stylesheet" href="style.css">
 <script>document.documentElement.className = "js";</script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
 <header class="site-head"><div class="wrap head-row">
-  <a class="brand" href="" aria-label="UFO, home"><img class="brand-mark" src="img/logo.svg" alt="" width="36" height="36"><span class="brand-tag">Out of this world possibilities</span></a>
+  <a class="brand" href="" aria-label="UFO, home"><img class="brand-mark" src="img/logo.svg" alt="" width="36" height="36"><span class="brand-tag">A higher view of your money</span></a>
   <nav class="main-nav" aria-label="Main"><a href="try/">Try it</a><a href="learn/">Learn</a><a href="teach/">Teach</a><a href="pricing/">Pricing</a><a href="about/">About</a></nav>
   <a class="nav-cta" href="signup/">Sign up</a>
 </div></header>
@@ -23,107 +23,98 @@
 <section class="home-hero mesh">
   <div class="wrap">
     <div class="hero-copy">
-      <a class="pill glass" href="learn/sharpe/"><b>Lesson</b> How the Sharpe ratio works →</a>
-      <h1 >See how your investments <span class="grad-text">really did</span></h1>
+      <span class="eyebrow">Free, private, in your browser</span>
+      <h1>See how your investments <span class="grad-text">really did</span></h1>
       <p class="sub">Put in a mix of funds and compare it with the market, in plain language. Everything is worked out in your browser.</p>
       <div class="hero-actions">
         <a class="btn big" href="try/?sample=1">Try the sample portfolio <span class="arr" aria-hidden="true">→</span></a>
-        <a class="btn big ghost" href="#how">How it works</a>
+        <a class="btn big ghost" href="#plus">See what Plus looks like</a>
       </div>
       <ul class="trust-row" aria-label="At a glance">
         <li><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5" stroke-width="1.8"/><path d="M8 12.4l2.7 2.7L16 9.6"/></svg>No account needed</li><li><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5" stroke-width="1.8"/><path d="M8 12.4l2.7 2.7L16 9.6"/></svg>Nothing is uploaded</li><li><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5" stroke-width="1.8"/><path d="M8 12.4l2.7 2.7L16 9.6"/></svg>Free to use</li>
       </ul>
+      <p class="hero-lesson">New to this? <a href="learn/sharpe/">What a Sharpe ratio is, in five steps →</a></p>
     </div>
-    <div class="stage" aria-label="Example of a result, with an invented portfolio" role="img">
+    <div class="stage">
       <div class="orbit" aria-hidden="true"></div>
-      <div class="preview glass" aria-hidden="true">
-        <div class="pv-top"><span class="pv-label">Example · invented portfolio</span><span class="pv-chip">5 years</span></div>
-        <p class="pv-headline">Sample mix <span class="m">+8.4%</span> vs SPY <span class="b">+7.1%</span> a year</p>
-        <p class="pv-sub">Before taxes and costs. Past results don’t predict future ones.</p>
-        <svg class="pv-chart" viewBox="0 0 480 190" aria-hidden="true">
-        <defs><linearGradient id="pvg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--mix)" stop-opacity=".28"/><stop offset="1" stop-color="var(--mix)" stop-opacity="0"/></linearGradient></defs>
-        <line class="g" x1="0" x2="480" y1="48" y2="48"/><line class="g" x1="0" x2="480" y1="95" y2="95"/><line class="g" x1="0" x2="480" y1="142" y2="142"/>
-        <path d="M0,176 C30,170 52,160 80,158 S124,146 150,150 S196,128 226,124 S272,114 300,98 S352,96 380,76 S436,54 480,34 L480,190 L0,190 Z" fill="url(#pvg)"/>
-        <path d="M0,180 L480,132" fill="none" stroke="var(--put)" stroke-width="2" stroke-dasharray="5 5"/>
-        <path class="draw" pathLength="1" d="M0,176 C30,172 52,166 80,164 S124,156 150,158 S196,142 226,138 S272,128 300,118 S352,112 380,98 S436,82 480,70" fill="none" stroke="var(--bench)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <path class="draw" pathLength="1" d="M0,176 C30,170 52,160 80,158 S124,146 150,150 S196,128 226,124 S272,114 300,98 S352,96 380,76 S436,54 480,34" fill="none" stroke="var(--mix)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-        <div class="pv-legend"><span><i style="background:var(--mix)"></i>Sample mix</span><span><i style="background:var(--bench)"></i>SPY</span><span><i style="background:var(--put)"></i>Put in</span></div>
-      </div>
-      <div class="float-card glass float-b" aria-hidden="true"><div class="ic"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l5-5 4 3 7-8"/><path d="M15 7h5v5"/></svg></div><div><b>Sharpe 0.74</b><span>Return per unit of risk</span></div></div>
+      <a class="preview glass" id="pv" href="try/?sample=1" aria-describedby="pv-sr">
+        <div class="pv-top"><span class="pv-label">Sample · invented person, real prices</span><span class="pv-chip" id="pv-chip">5 years</span></div>
+        <p class="pv-headline" id="pv-headline"><span id="pv-name">Sample MBA student</span> <span class="m" id="pv-m">…</span> vs <span id="pv-bench">SPY</span> <span class="b" id="pv-b">…</span> a year</p>
+        <p class="pv-sub" id="pv-sub">The same sample you will see on Try. Before taxes and costs; past results don’t predict future ones.</p>
+        <svg class="pv-chart" id="pv-chart" viewBox="0 0 480 190" aria-hidden="true">
+          <defs><linearGradient id="pvg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--mix)" stop-opacity=".28"/><stop offset="1" stop-color="var(--mix)" stop-opacity="0"/></linearGradient></defs>
+          <line class="g" x1="0" x2="480" y1="48" y2="48"/><line class="g" x1="0" x2="480" y1="95" y2="95"/><line class="g" x1="0" x2="480" y1="142" y2="142"/>
+          <path id="pv-fill" d="" fill="url(#pvg)"/>
+          <path id="pv-put" d="" fill="none" stroke="var(--put)" stroke-width="2" stroke-dasharray="5 5"/>
+          <path id="pv-bline" class="draw" pathLength="1" d="" fill="none" stroke="var(--bench)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path id="pv-mline" class="draw" pathLength="1" d="" fill="none" stroke="var(--mix)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div class="pv-legend" aria-hidden="true"><span><i style="background:var(--mix)"></i>Sample mix</span><span><i style="background:var(--bench)"></i><span id="pv-bench2">SPY</span></span><span><i style="background:var(--put)"></i>What you put in</span></div>
+        <span class="sr-only" id="pv-sr">Opens the sample on the Try page.</span>
+      </a>
+      <div class="float-card glass float-b" aria-hidden="true"><div class="ic"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l5-5 4 3 7-8"/><path d="M15 7h5v5"/></svg></div><div><b id="pv-sharpe">Sharpe …</b><span id="pv-sharpe-sub">Return per unit of risk</span></div></div>
       <div class="float-card glass float-a" aria-hidden="true"><div class="ic"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="3"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div><div><b>Nothing uploaded</b><span>Runs in your browser</span></div></div>
     </div>
   </div>
 </section>
 
-<section class="section" id="how" aria-labelledby="how-h">
-  <div class="wrap">
-    <div class="section-head center reveal"><span class="eyebrow">How it works</span><h2 id="how-h">Three steps, about a minute</h2><p>No sign-in and no spreadsheets. Type a mix, pick a yardstick, read the answer.</p></div>
-    <ol class="steps" role="list" style="list-style:none;margin:0;padding:0">
-      <li class="step reveal"><div class="step-visual" aria-hidden="true"><div class="chips"><span class="chip"><i></i>VTI <small>50%</small></span><span class="chip"><i style="background:#2f9fd8"></i>VXUS <small>20%</small></span><span class="chip"><i style="background:#c04ad8"></i>BND <small>20%</small></span><span class="chip"><i style="background:var(--good)"></i>QQQ <small>10%</small></span></div></div>
-        <span class="step-num">1</span><h3>Enter a mix of funds</h3><p>Type tickers and weights, start from a preset, or drop in a positions file.</p></li>
-      <li class="step reveal"><div class="step-visual" aria-hidden="true"><div class="vs"><span class="chip big"><i></i>Your mix</span><span class="x">VS</span><span class="chip big"><i style="background:var(--bench)"></i>SPY</span></div></div>
-        <span class="step-num">2</span><h3>Pick a yardstick</h3><p>Compare with a simple index fund, like SPY, over the same months and the same deposits.</p></li>
-      <li class="step reveal"><div class="step-visual" aria-hidden="true"><div class="mini-bars"><div style="height:78%;background:linear-gradient(var(--mix),color-mix(in srgb,var(--mix) 55%,transparent))"><span style="color:var(--mix)">+8.4%</span></div><div style="height:64%;background:linear-gradient(var(--bench),color-mix(in srgb,var(--bench) 55%,transparent))"><span style="color:var(--bench)">+7.1%</span></div><div style="height:44%;background:linear-gradient(var(--put),color-mix(in srgb,var(--put) 45%,transparent))"><span style="color:var(--ink-2)">0.74</span></div></div></div>
-        <span class="step-num">3</span><h3>Read it in plain words</h3><p>One headline, one chart, and the risk behind the return, with every term explained.</p></li>
-    </ol>
-  </div>
-</section>
-
-<section class="section alt" aria-labelledby="pv-h">
-  <div class="wrap showcase">
-    <div class="window reveal" role="img" aria-label="Example of the Try page with an invented portfolio">
-      <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i><span>Try it · Example, invented data</span></div>
-      <div class="window-body" aria-hidden="true">
-        <span class="eyebrow">Sample MBA student vs SPY</span>
-        <p class="pv-headline" style="margin-top:10px">Ahead by <span class="m">$3,180</span> after five years</p>
-        <p class="pv-sub">$2,000 to start, then $500 a month. Before taxes and costs.</p>
-        <svg class="pv-chart" viewBox="0 0 640 250" aria-hidden="true">
-        <defs><linearGradient id="pvg2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--mix)" stop-opacity=".28"/><stop offset="1" stop-color="var(--mix)" stop-opacity="0"/></linearGradient></defs>
-        <line class="g" x1="0" x2="640" y1="62" y2="62"/><line class="g" x1="0" x2="640" y1="125" y2="125"/><line class="g" x1="0" x2="640" y1="188" y2="188"/>
-        <path d="M0,236 C40,228 70,214 110,212 S170,196 205,202 S265,172 305,166 S365,152 400,132 S470,128 510,102 S590,72 640,46 L640,250 L0,250 Z" fill="url(#pvg2)"/>
-        <path d="M0,242 L640,176" fill="none" stroke="var(--put)" stroke-width="2" stroke-dasharray="5 5"/>
-        <path class="draw" pathLength="1" d="M0,236 C40,231 70,222 110,220 S170,210 205,212 S265,190 305,184 S365,172 400,158 S470,150 510,132 S590,110 640,94" fill="none" stroke="var(--bench)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <path class="draw" pathLength="1" d="M0,236 C40,228 70,214 110,212 S170,196 205,202 S265,172 305,166 S365,152 400,132 S470,128 510,102 S590,72 640,46" fill="none" stroke="var(--mix)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-        <div class="stat-row"><div class="stat"><span>Return a year</span><b>+8.4%</b></div><div class="stat"><span>Sharpe</span><b>0.74</b></div><div class="stat"><span>Worst drop</span><b>−17%</b></div></div>
-      </div>
+<section class="section plus-band" id="plus" aria-labelledby="plus-h">
+  <div class="wrap plus-grid">
+    <div class="plus-head reveal">
+      <span class="eyebrow">Plus</span>
+      <h2 id="plus-h">Your whole portfolio, <span class="grad-text">from above</span></h2>
+      <p class="lead">Every account you own, measured the same way, side by side. Then test a change before you make it.</p>
     </div>
-    <div class="reveal">
-      <span class="eyebrow">The product</span>
-      <h2 id="pv-h" style="margin:12px 0 14px">A clear answer first, the detail when you want it</h2>
-      <p class="muted" style="font-size:1.1rem">The result reads like a sentence. Open the details for the full metrics, the month-by-month table and the maths behind each number.</p>
-      <ul class="checks">
-        <li><div><b>Return and risk, side by side</b><span>Yearly return, ups and downs, worst drop and the Sharpe ratio.</span></div></li>
-        <li><div><b>Save, share and start from your holdings</b><span>Saved in your browser. Shared links carry percentages, never dollars.</span></div></li>
-        <li><div><b>A lesson on your own numbers</b><span>Step through how the Sharpe ratio is worked out, one card at a time.</span></div></li>
-      </ul>
-      <a class="btn" href="try/?sample=1">Open the sample <span class="arr" aria-hidden="true">→</span></a>
-    </div>
-  </div>
-</section>
-
-<section class="section" aria-labelledby="teach-h">
-  <div class="wrap">
-    <div class="teach-card reveal">
-      <div>
-        <span class="eyebrow">For instructors</span>
-        <h2 id="teach-h">A ready 45-minute class on risk and return</h2>
-        <p class="muted" style="font-size:1.1rem">Students need a browser and nothing else. They see why two portfolios with the same return are not equal, then test their own ideas.</p>
-        <div class="hero-actions" style="margin-top:24px"><a class="btn" href="teach/">See the session plan</a><a class="arrow" href="signup/?role=instructor">Request a class pilot →</a></div>
+    <figure class="phone-wrap reveal" aria-labelledby="ph-cap">
+      <div class="phone">
+        <div class="phone-screen">
+          <div class="ph-status" aria-hidden="true"><span>9:41</span><i class="ph-island"></i><span class="ph-sig"><i></i><i></i><i></i></span></div>
+          <div class="ph-head"><img src="img/logo.svg" alt="" width="26" height="26"><div><b>All accounts</b><span>5 years · vs total market</span></div><span class="ph-badge">Illustrative</span></div>
+          <div class="ph-total">
+            <div><span class="k">Combined</span><b class="v" id="ph-ret">+7.9%</b><span class="k">a year</span></div>
+            <div><span class="k">Sharpe</span><b class="v" id="ph-sh">0.71</b><span class="k">bench 0.78</span></div>
+            <div><span class="k">Risk</span><b class="v" id="ph-risk">14.2%</b><span class="k">ups and downs</span></div>
+          </div>
+          <ul class="ph-accts" aria-label="Invented accounts">
+            <li><i class="n">1</i><span class="nm">401(k)</span><span class="r">+9.1%</span><span class="s">0.82</span></li>
+            <li><i class="n">2</i><span class="nm">Roth IRA</span><span class="r">+11.4%</span><span class="s">0.74</span></li>
+            <li class="drag"><i class="n">3</i><span class="nm">Brokerage <em>drags</em></span><span class="r">+5.2%</span><span class="s">0.41</span></li>
+            <li><i class="n">4</i><span class="nm">HSA</span><span class="r">+6.3%</span><span class="s">0.66</span></li>
+          </ul>
+          <div class="ph-chart">
+            <svg viewBox="0 0 260 120" aria-label="Risk against return for the four invented accounts and the benchmark" role="img">
+              <line class="ax" x1="24" y1="104" x2="252" y2="104"/><line class="ax" x1="24" y1="8" x2="24" y2="104"/>
+              <text x="252" y="117" text-anchor="end">risk →</text><text x="4" y="12">return</text>
+              <g class="dot d4"><circle cx="70" cy="70" r="8"/><text x="70" y="74">4</text></g>
+              <g class="dot d1"><circle cx="128" cy="42" r="8"/><text x="128" y="46">1</text></g>
+              <g class="bm"><rect x="166.5" y="26.5" width="9" height="9" transform="rotate(45 171 31)"/></g>
+              <g class="dot d3 bad"><circle cx="196" cy="80" r="8"/><text x="196" y="84">3</text></g>
+              <g class="dot d2"><circle cx="230" cy="20" r="8"/><text x="230" y="24">2</text></g>
+              <g class="dot all"><circle cx="160" cy="56" r="6"/></g>
+              <g class="key"><circle cx="34" cy="96" r="3.5"/><text x="41" y="99">all accounts</text><rect x="100" y="92.5" width="7" height="7" transform="rotate(45 103.5 96)"/><text x="111" y="99">benchmark</text></g>
+            </svg>
+          </div>
+          <div class="ph-whatif">
+            <button type="button" id="whatif" class="ph-toggle" aria-pressed="false"><span class="sw" aria-hidden="true"><i></i></span>What if: move 10% to bonds</button>
+            <p class="ph-delta" id="whatif-out" aria-live="polite">Tap to compare. Illustrative.</p>
+          </div>
+        </div>
       </div>
-      <ol class="timeline" aria-label="Session outline">
-        <li><span>0–5 min</span>Frame: are two 8% returns equal?</li>
-        <li><span>5–15 min</span>Explore the sample portfolio</li>
-        <li><span>15–30 min</span>Step through the Sharpe lesson</li>
-        <li><span>30–40 min</span>Change the mix, predict, check</li>
-        <li><span>40–45 min</span>Debrief: what did the return hide?</li>
+      <figcaption id="ph-cap" class="muted small">A mock-up of Plus with invented accounts and illustrative numbers. Not real results.</figcaption>
+    </figure>
+    <div class="plus-copy reveal">
+      <ol class="benefits3">
+        <li><span class="b-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="16" rx="2"/><rect x="14" y="4" width="7" height="16" rx="2"/></svg></span><div><b>See every account side by side</b><span>401(k), IRA, brokerage, HSA: return, risk and Sharpe on one screen, against one benchmark.</span></div></li>
+        <li><span class="b-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/><path d="M8.5 12.5l2-2 1.5 1.5 2-2.5"/></svg></span><div><b>Find what drags your returns</b><span>Spot the account that takes risk without being paid for it.</span></div></li>
+        <li><span class="b-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M4 17h6"/><circle cx="17" cy="7" r="2.5"/><circle cx="13" cy="17" r="2.5"/><path d="M19.5 7H20M15.5 17H20"/></svg></span><div><b>Test changes before you make them</b><span>See how a what-if moves risk and return, before any money moves.</span></div></li>
       </ol>
+      <div class="hero-actions"><a class="btn big" href="signup/?plan=plus">Join the Plus list <span class="arr" aria-hidden="true">→</span></a><a class="arrow" href="pricing/">See pricing</a></div>
+      <p class="muted small plus-note">Joining the list is free and is not a purchase. Information, not investment advice.</p>
     </div>
   </div>
 </section>
 
-<section class="section" style="padding-top:0" aria-labelledby="priv-h">
+<section class="section" aria-labelledby="priv-h">
   <div class="wrap">
     <div class="promise reveal">
       <span class="eyebrow">Our privacy promise</span>
@@ -134,8 +125,13 @@
         <div class="reveal"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.1A9.9 9.9 0 0 1 12 5c5 0 8.5 4.5 9.5 7a13 13 0 0 1-2.6 3.8M6.6 6.6C4.4 8 3 10.2 2.5 12c1 2.5 4.5 7 9.5 7 1.6 0 3.1-.4 4.4-1.1"/></svg><b>No trackers, no cookies</b><span>No analytics and no third-party scripts, fonts or images.</span></div>
         <div class="reveal"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg><b>You decide what to share</b><span>A shared link holds percentages only. <a href="privacy/">Read the privacy page</a>.</span></div>
       </div>
+      <a class="founder-line" href="about/#founder"><img src="img/founder.jpg" alt="" width="44" height="44"><span><b>Built by Simmy Hundal</b>, an MBA student who wanted to know if his own investments were really doing well. <u>Why I built this</u></span></a>
     </div>
   </div>
+</section>
+
+<section class="section teach-line-wrap" style="padding-top:0" aria-label="For instructors">
+  <div class="wrap"><p class="teach-line reveal"><span class="tag">Instructors</span> A ready 45-minute class on risk and return, browser only. <a href="teach/">See the session plan →</a></p></div>
 </section>
 
 <section class="section" style="padding-top:0" aria-labelledby="cta-h">
@@ -143,7 +139,7 @@
     <div class="final-cta mesh card-surface reveal">
       <img src="img/logo.svg" alt="" width="64" height="64">
       <h2 id="cta-h">See how a mix of funds really did</h2>
-      <p>Start with the sample portfolio, then make it yours. It takes about a minute.</p>
+      <p>Start with the sample portfolio, then make it yours.</p>
       <div class="hero-actions"><a class="btn big" href="try/?sample=1">Try the sample portfolio <span class="arr" aria-hidden="true">→</span></a><a class="btn big ghost" href="learn/">Learn the ideas</a></div>
     </div>
   </div>
@@ -151,15 +147,16 @@
 </main>
 <footer class="site-foot"><div class="wrap foot-grid">
   <div class="foot-brand"><a class="brand" href=""><img class="brand-mark" src="img/logo.svg" alt="" width="32" height="32"><span class="brand-name">UFO</span></a>
-    <p>Out of this world possibilities. Compare a mix of funds with the market, privately, in your browser.</p></div>
+    <p>A higher view of your money. Compare a mix of funds with the market, privately, in your browser.</p></div>
   <nav class="foot-col" aria-label="Product"><h2>Product</h2><a href="try/">Try it</a><a href="learn/">Learn</a><a href="teach/">For instructors</a><a href="pricing/">Pricing</a></nav>
   <nav class="foot-col" aria-label="Company"><h2>Company</h2><a href="about/">About</a><a href="privacy/">Privacy</a><a href="terms/">Terms</a><a href="signup/">Sign up</a></nav>
 </div>
 <div class="wrap foot-legal">
   <p><b>Information, not investment advice.</b> Results are before taxes and trading costs, and past results don’t predict future ones.</p>
-  <p>Prices: month-end adjusted closes, refreshed on weekdays. Cash rate: 3-month Treasury bills from FRED.</p>
+  <p>Prices: month-end adjusted closes, completed months only. Cash rate: 3-month Treasury bills from FRED.</p>
+  <p class="copy">© 2026 Mycorrhiza Partners LLC DBA Ur Family Office</p>
 </div></footer>
-<script type="module">import { revealOnScroll } from "./js/util.mjs"; revealOnScroll();</script>
+<script type="module" src="js/home.mjs"></script>
 <script type="module" src="js/chrome.mjs"></script>
 </body>
 </html>

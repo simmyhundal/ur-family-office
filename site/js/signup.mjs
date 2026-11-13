@@ -40,3 +40,10 @@ export async function submitSignup(payload, endpoint, fetchFn = globalThis.fetch
   if (!res.ok) return { sent: false, reason: "http-" + res.status };
   return { sent: true };
 }
+
+// While the form has no endpoint, a mailto link to the site's contact address (only when one is set). Nothing is sent by the page.
+export function mailtoJoin(email, plan = "") {
+  if (typeof email !== "string" || !/^[^\s@?&]+@[^\s@?&]+\.[^\s@?&]+$/.test(email.trim())) return "";
+  const what = PLANS.includes(plan) && plan !== "free" ? `the ${plan[0].toUpperCase()}${plan.slice(1)} list` : "the list";
+  return `mailto:${email.trim()}?subject=${encodeURIComponent("Join " + what)}`;
+}

@@ -30,9 +30,3 @@ const KEY = "ufo-mix";
 export const saveMix = (m) => { try { sessionStorage.setItem(KEY, JSON.stringify(m)); } catch { /* private mode: fine */ } };
 export const loadMix = () => { try { return JSON.parse(sessionStorage.getItem(KEY) || "null"); } catch { return null; } };
 
-// The invented sample person. The prices are real (bundled); the person is not.
-export const SAMPLE = {
-  real: { weights: { VTI: 50, VXUS: 20, BND: 20, QQQ: 10 } },
-  demo: { weights: { DEMOUS: 60, DEMOBD: 30, DEMOGD: 10 } },
-  initial: 2000, monthly: 500, name: "Sample MBA student",
-};

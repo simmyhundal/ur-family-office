@@ -1,15 +1,16 @@
-// The Sharpe lesson: one card per step, Back and Next. Runs on the mix loaded on the Try page (this tab), else the sample.
-import { compare, sliceFor } from "./calc.mjs";
-import { $, revealOnScroll, loadMix, SAMPLE } from "./util.mjs";
+// The Sharpe lesson: one card per step, Back and Next. Runs on the mix loaded on the Try page (this tab), else the sample,
+// through the same runResult() as Try, so the two numbers on the first card are the ones Try shows.
+import { $, revealOnScroll, loadMix } from "./util.mjs";
 import { loadPrices } from "./data.mjs";
+import { runResult, sampleConfig } from "./result.mjs";
 import { lessonSteps } from "./lesson.mjs";
 
-let steps = [], at = 0;
+let steps = [], extra = [], at = 0;
 
 function show(i, focus = true) {
   at = Math.max(0, Math.min(steps.length - 1, i));
   const s = steps[at];
-  $("step-count").textContent = `Step ${at + 1} of ${steps.length}`;
+  $("step-count").textContent = `${at + 1} of ${steps.length}`;
   $("progress").style.width = `${((at + 1) / steps.length) * 100}%`;
   $("progress-bar").setAttribute("aria-valuenow", String(at + 1));
   $("progress-bar").setAttribute("aria-valuemax", String(steps.length));
@@ -17,39 +18,39 @@ function show(i, focus = true) {
   $("step-title").textContent = s.title;
   $("step-body").replaceChildren(...s.body);
   $("back").disabled = at === 0;
-  $("next").hidden = at === steps.length - 1;
-  $("done").hidden = at !== steps.length - 1;
+  const last = at === steps.length - 1;
+  const unextended = steps.length === mainLength;
+  $("next").hidden = last || (s.end && unextended);
+  $("done").hidden = !(last || s.end);
+  $("further").hidden = !(s.end && steps.length === mainLength && extra.length);
   const card = $("step-card");
   card.classList.remove("swap"); void card.offsetWidth; card.classList.add("swap");
   if (focus) $("step-title").focus();
 }
 
+let mainLength = 0;
 function build(p) {
   const saved = loadMix();
   const has = (x) => x in p.data.series;
-  const real = Object.keys(SAMPLE.real.weights).every(has);
-  let cfg = saved && saved.rows.every((r) => has(r.sym)) && has(saved.benchmark) ? saved : null;
-  if (!cfg) {
-    const w = real ? SAMPLE.real.weights : SAMPLE.demo.weights;
-    cfg = { rows: Object.entries(w).map(([sym, w]) => ({ sym, w })), benchmark: has("SPY") ? "SPY" : Object.keys(p.data.series)[0],
-      initial: SAMPLE.initial, monthly: SAMPLE.monthly, strategy: "hold", years: 5, name: SAMPLE.name, sample: true };
+  let cfg = null;
+  if (saved && saved.rows?.length && saved.rows.every((r) => has(r.sym)) && has(saved.benchmark)) {
+    const weights = {};
+    for (const r of saved.rows) if (r.w > 0) weights[r.sym] = (weights[r.sym] || 0) + r.w;
+    cfg = { weights, benchmark: saved.benchmark, initial: saved.initial, monthly: saved.monthly, strategy: saved.strategy, years: saved.years, name: saved.name };
   }
-  const mix = {};
-  for (const r of cfg.rows) if (r.w > 0) mix[r.sym] = (mix[r.sym] || 0) + r.w;
-  const data = sliceFor(p.data, [...new Set([...Object.keys(mix), cfg.benchmark])], cfg.years);
-  const r = compare({ prices: data.series, mix, benchmark: cfg.benchmark, initial: cfg.initial, monthly: cfg.monthly, strategy: cfg.strategy, rf: data.rf });
-  $("which").textContent = cfg.sample
-    ? `Running on a sample portfolio: an invented person who starts with $${SAMPLE.initial.toLocaleString("en-US")} and adds $${SAMPLE.monthly} a month. The prices are real; the person is not.`
-    : `Running on the mix you loaded on the Try page (${cfg.name}) against ${cfg.benchmark}.`;
-  steps = lessonSteps({ r, data, mix, bench: cfg.benchmark, monthly: cfg.monthly, name: cfg.name });
+  if (!cfg) cfg = sampleConfig(p.data);
+  const res = runResult(p.data, cfg);
+  ({ steps, extra } = lessonSteps({ r: res.r, data: res.slice, mix: res.mix, bench: res.bench, monthly: cfg.monthly, name: cfg.name }));
+  mainLength = steps.length;
 }
 
 $("back").addEventListener("click", () => show(at - 1));
 $("next").addEventListener("click", () => show(at + 1));
+$("further").addEventListener("click", () => { steps = steps.concat(extra); show(at + 1); });
 document.addEventListener("keydown", (e) => {
   if (e.target.closest("input,select,textarea,summary") || !steps.length) return;
-  if (e.key === "ArrowRight") show(at + 1); else if (e.key === "ArrowLeft") show(at - 1);
+  if (e.key === "ArrowRight" && !$("next").hidden) show(at + 1); else if (e.key === "ArrowLeft") show(at - 1);
 });
 revealOnScroll();
-loadPrices().then((p) => { build(p); show(0, false); $("lesson").hidden = false; })
-  .catch((e) => { $("which").textContent = "Could not load prices: " + e.message; });
+loadPrices().then((p) => { build(p); show(0, false); $("lesson").hidden = false; $("loading").hidden = true; })
+  .catch((e) => { $("loading").textContent = "Could not load prices: " + e.message; });

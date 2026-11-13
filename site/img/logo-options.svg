@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 960 620" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif">
+  <title>UFO logo options (issue 174)</title>
+  <defs>
+    <!-- Option A: a saucer whose beam lifts three rising bars -->
+    <linearGradient id="a-bg" x1="6" y1="2" x2="58" y2="62" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#6d4dff"/><stop offset="1" stop-color="#2e1a9e"/></linearGradient>
+    <linearGradient id="a-beam" x1="32" y1="24" x2="32" y2="56" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff" stop-opacity=".34"/><stop offset="1" stop-color="#fff" stop-opacity=".04"/></linearGradient>
+    <symbol id="opt-a" viewBox="0 0 64 64">
+      <rect width="64" height="64" rx="15" fill="url(#a-bg)"/>
+      <path d="M22 22h20l10 33H12z" fill="url(#a-beam)"/>
+      <rect x="16" y="43" width="8" height="12" rx="2" fill="#fff"/>
+      <rect x="28" y="36" width="8" height="19" rx="2" fill="#fff"/>
+      <rect x="40" y="28" width="8" height="27" rx="2" fill="#fff"/>
+      <path d="M23.5 17.5a8.5 8.5 0 0 1 17 0z" fill="#cfc4ff"/>
+      <ellipse cx="32" cy="19" rx="19" ry="5.5" fill="#fff"/>
+    </symbol>
+    <!-- Option B: a saucer whose dome is an allocation (pie) chart -->
+    <linearGradient id="b-bg" x1="6" y1="2" x2="58" y2="62" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#6d4dff"/><stop offset="1" stop-color="#2e1a9e"/></linearGradient>
+    <symbol id="opt-b" viewBox="0 0 64 64">
+      <rect width="64" height="64" rx="15" fill="url(#b-bg)"/>
+      <path d="M17 36a15 15 0 0 1 30 0z" fill="#fff" opacity=".45"/>
+      <path d="M32 36V21a15 15 0 0 1 15 15z" fill="#fff"/>
+      <path d="M32 36L19 28.5A15 15 0 0 1 32 21z" fill="#fff" opacity=".75"/>
+      <ellipse cx="32" cy="38" rx="24" ry="6.5" fill="#fff"/>
+      <path d="M26 46h12l4 10H22z" fill="#fff" opacity=".22"/>
+    </symbol>
+    <!-- Option C: a rising chart line that ends in a small saucer -->
+    <linearGradient id="c-bg" x1="6" y1="2" x2="58" y2="62" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#6d4dff"/><stop offset="1" stop-color="#2e1a9e"/></linearGradient>
+    <symbol id="opt-c" viewBox="0 0 64 64">
+      <rect width="64" height="64" rx="15" fill="url(#c-bg)"/>
+      <path d="M11 50L24 38l8 6 12-14" fill="none" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M41 19.5a6.5 6.5 0 0 1 13 0z" fill="#cfc4ff"/>
+      <ellipse cx="47.5" cy="21" rx="12" ry="4.2" fill="#fff"/>
+    </symbol>
+  </defs>
+  <rect width="960" height="620" fill="#f7f7fc"/>
+  <rect x="0" y="330" width="960" height="290" fill="#0a0b1c"/>
+  <text x="32" y="44" font-size="22" font-weight="700" fill="#13132b">UFO logo options</text>
+  <text x="32" y="70" font-size="14" fill="#54577a">Each mark at 128, 32 and 16 px, on light (top) and dark (bottom). One accent colour. Original work.</text>
+
+  <g transform="translate(32 96)">
+    <text x="0" y="0" font-size="15" font-weight="700" fill="#13132b">A. Beam lifts the bars (chosen)</text>
+    <use href="#opt-a" x="0" y="16" width="128" height="128"/>
+    <use href="#opt-a" x="148" y="64" width="32" height="32"/>
+    <use href="#opt-a" x="196" y="72" width="16" height="16"/>
+    <text x="0" y="174" font-size="12" fill="#54577a">Money first: rising bars. UFO second: the</text>
+    <text x="0" y="190" font-size="12" fill="#54577a">saucer and its beam. Bars stay crisp at 16 px.</text>
+  </g>
+  <g transform="translate(340 96)">
+    <text x="0" y="0" font-size="15" font-weight="700" fill="#13132b">B. Allocation dome</text>
+    <use href="#opt-b" x="0" y="16" width="128" height="128"/>
+    <use href="#opt-b" x="148" y="64" width="32" height="32"/>
+    <use href="#opt-b" x="196" y="72" width="16" height="16"/>
+    <text x="0" y="174" font-size="12" fill="#54577a">The dome is a pie chart. Reads as a saucer</text>
+    <text x="0" y="190" font-size="12" fill="#54577a">first; wedges blur together at 16 px.</text>
+  </g>
+  <g transform="translate(648 96)">
+    <text x="0" y="0" font-size="15" font-weight="700" fill="#13132b">C. Chart line to a saucer</text>
+    <use href="#opt-c" x="0" y="16" width="128" height="128"/>
+    <use href="#opt-c" x="148" y="64" width="32" height="32"/>
+    <use href="#opt-c" x="196" y="72" width="16" height="16"/>
+    <text x="0" y="174" font-size="12" fill="#54577a">Strong finance read; at 16 px the saucer</text>
+    <text x="0" y="190" font-size="12" fill="#54577a">shrinks to a dot and the twist is lost.</text>
+  </g>
+
+  <g transform="translate(32 370)">
+    <use href="#opt-a" x="0" y="0" width="128" height="128"/>
+    <use href="#opt-a" x="148" y="48" width="32" height="32"/>
+    <use href="#opt-a" x="196" y="56" width="16" height="16"/>
+  </g>
+  <g transform="translate(340 370)">
+    <use href="#opt-b" x="0" y="0" width="128" height="128"/>
+    <use href="#opt-b" x="148" y="48" width="32" height="32"/>
+    <use href="#opt-b" x="196" y="56" width="16" height="16"/>
+  </g>
+  <g transform="translate(648 370)">
+    <use href="#opt-c" x="0" y="0" width="128" height="128"/>
+    <use href="#opt-c" x="148" y="48" width="32" height="32"/>
+    <use href="#opt-c" x="196" y="56" width="16" height="16"/>
+  </g>
+  <text x="32" y="580" font-size="13" fill="#b0b2d0">Shipped: option A as img/logo.svg (header, footer) and img/favicon.svg (browser tab).</text>
+</svg>
