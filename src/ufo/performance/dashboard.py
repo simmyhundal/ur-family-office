@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from ufo.performance import metrics as M
@@ -18,6 +18,7 @@ from ufo.performance.holdings import CLASSES, summarize
 from ufo.performance.report_html import CSS
 from ufo.providers.prices import Series
 
+MAX_PLAUSIBLE_VOL = 10.0  # annualised; above this a risk figure says more about tiny balances than about risk
 WINDOWS = [("ytd", "YTD"), ("1y", "1 year"), ("3y", "3 years"), ("5y", "5 years"), ("inception", "Since inception")]
 
 
@@ -82,8 +83,67 @@ def _stats(flows, report, end, end_value, index: Series, start: date | None, ext
     return out
 
 
+def _basket_risk(weights: dict[str, float], series: Series | dict, months: list[date], rf: Series | None) -> dict | None:
+    """Annualised return, volatility and Sharpe of a fixed-weight mix (rebalanced monthly) over the given month-ends."""
+    if len(months) < 12:
+        return None
+    total = sum(weights.values())
+    rets, ex = [], []
+    for i, m in enumerate(months):
+        prev = months[i - 1] if i else date(m.year, m.month, 1) - timedelta(days=1)
+        r = 0.0
+        for sym, w in weights.items():
+            sr = series[sym] if isinstance(series, dict) else series
+            a, b = sr.on_or_before(prev), sr.on_or_before(m)
+            r += (w / total) * ((b / a - 1) if a and b else 0.0)
+        rets.append(r)
+        ex.append(r - (M.monthly_rf(rf, prev) if rf is not None else 0.0))
+    g = M.growth_index(rets)
+    return {"vol": M.volatility(rets), "ret": M.annualize(g[-1], len(g)), "sharpe": M.sharpe(ex) if rf is not None else None}
+
+
+def risk_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, index: Series,
+              extras: dict[str, tuple[dict, Series]], rf: Series | None) -> dict:
+    """Points for the risk-vs-return scatter (issue 129), since inception. Entities with no volatility are listed, not plotted."""
+    pts, left = [], []
+
+    def add(label, kind, rep, quality):
+        if rep is None or rep.volatility is None or rep.twr_annual is None:
+            left.append([label, "fewer than 12 months of history"])
+            return
+        if rep.volatility > MAX_PLAUSIBLE_VOL:  # early months with almost no capital make monthly returns explode
+            left.append([label, "figures not meaningful: very little capital in the early months"])
+            return
+        pts.append({"label": label, "kind": kind, "vol": rep.volatility, "ret": rep.twr_annual, "sharpe": rep.sharpe, "exact": quality == "exact"})
+
+    for r in runs:
+        if r.error or r.result is None:
+            continue
+        if not r.market:
+            left.append([r.account.label, "non-market account: no volatility"])
+            continue
+        add(r.account.label, "account", r.result.report, r.quality)
+    ref = None
+    for g in groups:
+        if g.error or g.report is None:
+            continue
+        kind = "all" if g.kind == "all" else "group"
+        add(g.name, kind, g.report, g.quality)
+        if g.kind == "all":
+            ref = g.report
+    ref = ref or max((r.result.report for r in runs if r.result and r.market), key=lambda x: len(x.months), default=None)
+    if ref is not None and ref.index_volatility is not None and ref.index_twr_annual is not None:
+        pts.append({"label": benchmark, "kind": "benchmark", "vol": ref.index_volatility, "ret": ref.index_twr_annual,
+                    "sharpe": ref.index_sharpe, "exact": True})
+        for name, (w, series) in extras.items():
+            b = _basket_risk(w, series, list(ref.months), rf)
+            if b and b["vol"] is not None and b["ret"] is not None:
+                pts.append({"label": name, "kind": "benchmark", "exact": True, **b})
+    return {"points": pts, "left_off": left}
+
+
 def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, index: Series,
-               extras: dict[str, tuple[dict, Series]], asof: date, classes: dict[str, str] | None = None) -> dict:
+               extras: dict[str, tuple[dict, Series]], asof: date, classes: dict[str, str] | None = None, rf: Series | None = None) -> dict:
     ents = []
     notes_ = {g.name: g.note for g in groups}
     pairs = [(r.account.label, "account", "", r.account, r.events and [(e.when, e.external_flow) for e in r.events if e.external_flow],
@@ -112,7 +172,8 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
                  bench=([round(v, 2) for v in rep.index_values] + ([round(rep.index_end_value, 2)] if end not in rep.months else [])) if market else [], note=note)
         ents.append(e)
     return {"benchmark": benchmark, "asof": str(asof), "windows": WINDOWS, "extras": list(extras), "entities": ents,
-            "classes": [[k, v] for k, v in CLASSES.items()]}
+            "classes": [[k, v] for k, v in CLASSES.items()],
+            "risk": risk_data(runs, groups, benchmark, index, extras, rf)}
 
 
 PAGE_CSS = """
@@ -123,6 +184,8 @@ main{max-width:1100px}
 .seg button:last-child{border-right:0}.seg button[aria-pressed=true]{background:var(--port);color:var(--bg)}
 .total td{font-weight:700;border-top:2px solid var(--line)}.sub td{font-weight:600}.exact{color:var(--good)}.est{color:var(--warn)}.na{color:var(--muted)}.err{color:var(--bad)}
 svg .bar-pos{fill:var(--good)}svg .bar-neg{fill:var(--bad)}svg text{font-family:var(--body)}
+svg .pt-account{--pc:var(--c0)}svg .pt-group{--pc:var(--c1)}svg .pt-all{--pc:var(--c2)}svg .pt-benchmark{--pc:var(--c7)}
+svg .pt circle{stroke:var(--pc);stroke-width:2.2}svg .pt circle.solid{fill:var(--pc)}svg .pt circle.hollow{fill:none}svg .pt text{fill:var(--ink)}
 :root{--c0:#1d6f5b;--c1:#4a55c4;--c2:#b13b86;--c3:#2a7fa8;--c4:#8a7a14;--c5:#7a4a2a;--c6:#c25a1b;--c7:#5d6862}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--c0:#4fc3a3;--c1:#9ba6ff;--c2:#ef8fcb;--c3:#7cc4e8;--c4:#d8c25a;--c5:#c9a27a;--c6:#f0925a;--c7:#9aa8a0}}
 :root[data-theme="dark"]{--c0:#4fc3a3;--c1:#9ba6ff;--c2:#ef8fcb;--c3:#7cc4e8;--c4:#d8c25a;--c5:#c9a27a;--c6:#f0925a;--c7:#9aa8a0}
@@ -189,6 +252,23 @@ function lines(rs){
   s+=`<polyline fill="none" stroke="${c}" stroke-width="2.4" stroke-linejoin="round" points="${pts(e.values)}"/>`;});
  $('#lines').innerHTML=s+'</svg>';
  $('#key').innerHTML=es.map((e,i)=>`<span><i style="background:${COLORS[i%8]}"></i>${esc(e.label)}</span>`).join('')+(showBench?`<span class="small">dashed: same deposits and withdrawals in ${esc(D.benchmark)}</span>`:'');}
+function scatter(){
+ const R=D.risk,P=R.points;
+ if(P.length<2){$('#risk').innerHTML='<p class="na">Not enough history (12 months) for a risk and return chart.</p>';}
+ else{
+  const W=860,H=380,L=64,Rr=40,T=14,B=44,xm=Math.max(...P.map(p=>p.vol))*1.15,ys=P.map(p=>p.ret),y0=Math.min(0,...ys),y1=Math.max(...ys,0.01)*1.15;
+  const X=v=>L+v/xm*(W-L-Rr),Y=v=>T+(H-T-B)*(1-(v-y0)/((y1-y0)||1));
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Risk versus return">`;
+  for(let i=0;i<=4;i++){const v=y0+(y1-y0)*i/4,u=xm*i/4;
+   s+=`<line class="grid" x1="${L}" x2="${W-Rr}" y1="${Y(v)}" y2="${Y(v)}"/><text class="axis" x="${L-6}" y="${Y(v)+4}" text-anchor="end">${pct(v)}</text>`+
+      `<text class="axis" x="${X(u)}" y="${H-24}" text-anchor="middle">${pct(u)}</text>`;}
+  s+=`<text class="axis" x="${(L+W-Rr)/2}" y="${H-6}" text-anchor="middle">Volatility (annual, lower is calmer)</text><text class="axis" x="14" y="${(T+H-B)/2}" text-anchor="middle" transform="rotate(-90 14 ${(T+H-B)/2})">Return per year</text>`;
+  const ly={};let last=-99;[...P].sort((a,b)=>Y(a.ret)-Y(b.ret)).forEach(p=>{last=Math.max(Y(p.ret),last+12);ly[p.label+p.kind]=last;});
+  for(const p of P){const tip=`${p.label}: return ${pct(p.ret)}, volatility ${pct(p.vol)}, Sharpe ${num(p.sharpe)}${p.exact?'':' (estimated)'}`;
+   s+=`<g class="pt pt-${p.kind}"><title>${esc(tip)}</title><circle class="${p.exact?'solid':'hollow'}" cx="${X(p.vol)}" cy="${Y(p.ret)}" r="${p.kind==='all'?9:6}"/>`+
+      `<text class="axis" x="${X(p.vol)+11}" y="${ly[p.label+p.kind]+4}">${esc(p.label)} · S ${num(p.sharpe)}</text></g>`;}
+  $('#risk').innerHTML=s+'</svg>';}
+ $('#riskleft').textContent=R.left_off.length?'Not on the chart: '+R.left_off.map(([l,w])=>l+' ('+w+')').join('; ')+'.':'';}
 function holdings(){
  const es=D.entities.filter(e=>e.kind==='account'&&e.holdings);
  if(!es.length){$('#hold').innerHTML='';return;}
@@ -203,7 +283,7 @@ function holdings(){
  $('#hold').innerHTML=h+'<p class="small">Classes come from your local file .data/asset_classes.json; tickers missing from it show as Unclassified. Global and balanced funds are filed under Other.</p>';}
 function draw(){
  seg($('#wins'),D.windows,()=>win,k=>win=k);seg($('#grps'),GROUPS,()=>grp,k=>grp=k);
- const rs=rows();table(rs);bars(rs);lines(rs);holdings();
+ const rs=rows();table(rs);bars(rs);lines(rs);holdings();scatter();
  $('#winnote').textContent=win==='inception'?'Since inception: IRR uses exact dated flows plus the ending value.':
   'Windowed figures are estimated: they start from a reconstructed month-end value. Accounts that do not cover the window show n/a. Sharpe is shown since inception only.';
  $('#empty').hidden=rs.length>0;}
@@ -228,6 +308,7 @@ def render(data: dict) -> str:
 <section><div class="scroll"><table id="tbl"></table></div></section>
 <figure><h2>Excess IRR per account</h2><div id="bars"></div><figcaption>IRR of the real flows minus the IRR of the same deposits and withdrawals put into {data['benchmark']}. Sorted best first.</figcaption></figure>
 <figure><h2>Value over time</h2><div class="key" id="key"></div><div id="lines"></div><figcaption>Month-end values are estimated; the endpoints are exact.</figcaption></figure>
+<figure><h2>Risk versus return</h2><div id="risk"></div><figcaption>Each point is one account, group, your whole portfolio (large) or a benchmark (grey): time-weighted return per year against how much it swings, with its Sharpe ratio (S, return above the T-bill rate per unit of risk) in the label. Since each one's start; benchmarks cover the whole-portfolio period. Hollow points are estimated from reconstructed month-end values (decision 0011). Hover for the figures.</figcaption><p class="small" id="riskleft"></p></figure>
 <section id="hold"></section>
 <section class="small">
 <p>All figures are before tax. A taxable account's number is not comparable with an IRA or Roth on an after-tax basis. Transfers between your own accounts are external for each account alone and net out in combined lines. See decision 0011.</p></section>
