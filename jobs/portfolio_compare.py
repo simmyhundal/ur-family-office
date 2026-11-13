@@ -61,7 +61,7 @@ def main(argv: list[str] | None = None, store: PriceStore | None = None, today: 
         try:
             series, _ = store.report([a.benchmark] + [s for w in extras_spec.values() for s in w], start, asof)
             extras = {n: (w, series) for n, w in extras_spec.items() if all(k in series for k in w)}
-            data = build_data(done, combine_all(done, store, a.benchmark, singletons=True), a.benchmark, series[a.benchmark], extras, asof, classes)
+            data = build_data(done, combine_all(done, store, a.benchmark, singletons=True), a.benchmark, series[a.benchmark], extras, asof, classes, store.risk_free(start, asof))
         except (PriceError, KeyError) as e:
             con.print(f"[red]Could not build the dashboard: {e}[/red]")
             return 1
