@@ -192,15 +192,28 @@ def print_table(runs: list[AccountRun], benchmark: str, console: Console | None 
         rep = r.result.report
         t.add_row(a.label, a.wrapper.value, money(r.end_value), ("-" if r.net_contributions < 0 else "") + money(abs(r.net_contributions)), pct(rep.irr),
                   "n/a" if not r.market else spct(rep.excess_irr), r.quality, ", ".join(r.flags + (["no market prices"] if not r.market else [])))
+    first = True
     for g in groups or []:
+        total = g.kind == "all"
+        name = "Total, all accounts" if total else g.name
         if g.error or g.report is None:
-            t.add_row(f"[bold]{g.name}[/bold]", "combined", "", "", "", "", "[red]not computed[/red]", g.error)
+            t.add_row(f"[bold]{name}[/bold]", "total" if total else "combined", "", "", "", "", "[red]not computed[/red]", g.error)
             continue
         rep = g.report
         net = rep.contributed - rep.withdrawn
-        t.add_row(f"[bold]{g.name}[/bold]", "combined", money(g.end_value), ("-" if net < 0 else "") + money(abs(net)), pct(rep.irr),
-                  spct(rep.excess_irr), g.quality, ", ".join([f"{len(g.transfers)} netted"] + ([g.note] if g.note else [])))
+        t.add_row(f"[bold]{name}[/bold]", "total" if total else "combined", money(g.end_value), ("-" if net < 0 else "") + money(abs(net)),
+                  pct(rep.irr), spct(rep.excess_irr), f"{g.quality}, as of {g.end}",
+                  ", ".join([f"{len(g.transfers)} netted"] + ([g.note] if g.note else [])), end_section=first and not total)
+        first = False
+        if total:
+            t.rows[-1].end_section = True
         notes = list(notes or []) + g.unmatched
+    tot = next((g for g in groups or [] if g.kind == "all" and g.report is not None), None)
+    if tot is not None:
+        notes = list(notes or []) + [
+            f"Totals are valued on {tot.end}, the latest month-end every account covers; the account rows above use each account's own "
+            "latest date, so the sums can differ. Non-market accounts (a fixed annuity) count in value and net in. Transfers between "
+            "your own accounts net out of the total, so its Net in can differ from the sum of the rows."]
     c.print(t)
     for n in dict.fromkeys(notes or []):
         c.print(f"[dim]- {n}[/dim]")

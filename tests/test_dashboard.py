@@ -78,3 +78,29 @@ console.log(els['#tbl'].innerHTML.includes('<td>A</td>'), els['#bars'].innerHTML
     r = subprocess.run([NODE, str(f)], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     assert r.stdout.strip() == "true true true"
+
+
+def test_total_row_and_subtotals_in_page_script(tmp_path):
+    _, out = make(tmp_path)
+    page = out.read_text()
+    script = page.split("<script>")[1].split("</script>")[0]
+    blob = re.search(r'<script id="data" type="application/json">(.*?)</script>', page, re.S).group(1)
+    harness = f"""
+const els = {{}};
+const el = id => els[id] || (els[id] = {{innerHTML:'', textContent:'', hidden:false, querySelectorAll:()=>[], set onchange(f){{}}}});
+global.document = {{getElementById: id => id==='data' ? {{textContent: {json.dumps(blob)}}} : el(id),
+  querySelector: s => el(s), querySelectorAll: () => [], documentElement: {{}}}};
+{script}
+const out = {{}};
+for (const g of ['accounts','owner','all']) {{ grp=g; win='inception'; draw();
+  out[g] = [(els['#tbl'].innerHTML.match(/class="total"/g)||[]).length, (els['#tbl'].innerHTML.match(/class="sub"/g)||[]).length, els['#totnote'].textContent]; }}
+console.log(JSON.stringify(out));
+"""
+    f = tmp_path / "h2.js"
+    f.write_text(harness)
+    r = subprocess.run([NODE, str(f)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    o = json.loads(r.stdout)
+    assert o["accounts"][:2] == [1, 0] and o["owner"][0] == 1 and o["owner"][1] >= 1 and o["all"][0] == 0
+    assert "The total is valued on" in o["accounts"][2] and "Non-market" in o["accounts"][2]
+    assert "subtotal" in o["owner"][2]

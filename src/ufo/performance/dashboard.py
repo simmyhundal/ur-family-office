@@ -121,7 +121,7 @@ main{max-width:1100px}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .seg button{background:var(--card);color:var(--ink);border:0;border-right:1px solid var(--line);padding:6px 12px;font:inherit;cursor:pointer}
 .seg button:last-child{border-right:0}.seg button[aria-pressed=true]{background:var(--port);color:var(--bg)}
-.exact{color:var(--good)}.est{color:var(--warn)}.na{color:var(--muted)}.err{color:var(--bad)}
+.total td{font-weight:700;border-top:2px solid var(--line)}.sub td{font-weight:600}.exact{color:var(--good)}.est{color:var(--warn)}.na{color:var(--muted)}.err{color:var(--bad)}
 svg .bar-pos{fill:var(--good)}svg .bar-neg{fill:var(--bad)}svg text{font-family:var(--body)}
 :root{--c0:#1d6f5b;--c1:#4a55c4;--c2:#b13b86;--c3:#2a7fa8;--c4:#8a7a14;--c5:#7a4a2a;--c6:#c25a1b;--c7:#5d6862}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--c0:#4fc3a3;--c1:#9ba6ff;--c2:#ef8fcb;--c3:#7cc4e8;--c4:#d8c25a;--c5:#c9a27a;--c6:#f0925a;--c7:#9aa8a0}}
@@ -142,19 +142,29 @@ const GROUPS=[['accounts','Accounts'],['all','All combined'],['brokerage','By br
 function seg(el,items,get,set){el.innerHTML=items.map(([k,l])=>`<button type="button" aria-pressed="${get()===k}" data-k="${k}">${esc(l)}</button>`).join('');
  el.querySelectorAll('button').forEach(b=>b.onclick=()=>{set(b.dataset.k);draw();});}
 function rows(){return D.entities.filter(e=>grp==='accounts'?e.kind==='account':(e.kind==='group'&&e.groupKind===grp));}
+function trow(e,label,cls){
+  if(e.error||!e.windows)return `<tr class="${cls}"><td>${label}</td><td>${esc(e.type||'')}</td><td colspan="${NCOLS-2}" class="err">not computed: ${esc(e.error)}</td></tr>`;
+  const w=e.windows[win];
+  if(!w)return `<tr class="${cls}"><td>${label}</td><td>${esc(e.type)}</td><td>${e.start}</td><td colspan="${NCOLS-3}" class="na">n/a: does not cover this window</td></tr>`;
+  const q=w.exact&&e.quality==='exact'?'exact':'estimated';
+  return `<tr class="${cls}"><td>${label}${e.closed?' <span class="small">(closed)</span>':''}</td><td>${esc(e.type)}</td><td>${e.start}</td><td>${money(w.value)}</td><td>${money(w.net_in)}</td>`+
+   `<td>${pct(w.irr)}</td><td>${spct(w.excess)}</td><td>${money(w.bench_end)}</td><td>${pct(w.twr)}</td><td>${num(w.sharpe)}</td><td>${pct(w.dd)}</td>`+
+   `<td class="${q==='exact'?'exact':'est'}">${q}, as of ${e.as_of}${e.note?' (common month-end)':''}</td>`+D.extras.map(n=>`<td>${spct(w.extras[n]&&w.extras[n].excess)}</td>`).join('')+'</tr>';}
+let NCOLS=12;
 function table(rs){
  const head=['Account','Type','Started','Value','Net in','IRR','Excess IRR vs '+D.benchmark,'Worth today in '+D.benchmark,'Time-weighted /yr (est.)','Sharpe (est.)','Worst fall','Data']
   .concat(D.extras.map(n=>'Excess vs '+n));
+ NCOLS=head.length;
  let h='<tr>'+head.map(x=>`<th>${esc(x)}</th>`).join('')+'</tr>';
- for(const e of rs){
-  if(e.error||!e.windows){h+=`<tr><td>${esc(e.label)}</td><td>${esc(e.type||'')}</td><td colspan="${head.length-2}" class="err">not computed: ${esc(e.error)}</td></tr>`;continue;}
-  const w=e.windows[win];
-  if(!w){h+=`<tr><td>${esc(e.label)}</td><td>${esc(e.type)}</td><td>${e.start}</td><td colspan="${head.length-3}" class="na">n/a: does not cover this window</td></tr>`;continue;}
-  const q=w.exact&&e.quality==='exact'?'exact':'estimated';
-  h+=`<tr><td>${esc(e.label)}${e.closed?' <span class="small">(closed)</span>':''}</td><td>${esc(e.type)}</td><td>${e.start}</td><td>${money(w.value)}</td><td>${money(w.net_in)}</td>`+
-   `<td>${pct(w.irr)}</td><td>${spct(w.excess)}</td><td>${money(w.bench_end)}</td><td>${pct(w.twr)}</td><td>${num(w.sharpe)}</td><td>${pct(w.dd)}</td>`+
-   `<td class="${q==='exact'?'exact':'est'}">${q}, as of ${e.as_of}${e.note?' (common month-end)':''}</td>`+D.extras.map(n=>`<td>${spct(w.extras[n]&&w.extras[n].excess)}</td>`).join('')+'</tr>';}
- $('#tbl').innerHTML=h;}
+ for(const e of rs)h+=trow(e,esc(e.label),grp==='accounts'||e.kind==='account'?'':'sub');
+ const tot=D.entities.find(e=>e.kind==='group'&&e.groupKind==='all');
+ const showTot=tot&&grp!=='all';
+ if(showTot)h+=trow(tot,'Total, all accounts','total');
+ $('#tbl').innerHTML=h;
+ const t2=grp==='all'?rs[0]:tot;
+ $('#totnote').textContent=t2&&t2.as_of?`The total is valued on ${t2.as_of}${t2.note?', the latest month-end every account covers':''}; account rows use each account's own latest date, so the sums can differ. `+
+  'Non-market accounts (a fixed annuity) count in value and net in. Transfers between your own accounts net out of combined lines, so their Net in can differ from the sum of the rows.'+
+  (grp!=='accounts'&&grp!=='all'?' Each group row is a subtotal for its members, valued on that group\'s own common month-end.':''):'';}
 function bars(rs){
  const items=rs.filter(e=>e.windows&&e.windows[win]&&e.windows[win].excess!=null).map(e=>[e.label,e.windows[win].excess]).sort((a,b)=>b[1]-a[1]);
  if(!items.length){$('#bars').innerHTML='<p class="na">Nothing to chart for this window.</p>';return;}
@@ -214,7 +224,7 @@ def render(data: dict) -> str:
  · <span class="seg" aria-label="Theme"><button type="button" data-theme-set="auto">Auto</button><button type="button" data-theme-set="light">Light</button><button type="button" data-theme-set="dark">Dark</button></span></p></header>
 <section class="controls"><div class="seg" id="wins" aria-label="Window"></div><div class="seg" id="grps" aria-label="Grouping"></div>
 <label><input type="checkbox" id="bench" checked> show the same flows in the benchmark</label></section>
-<p class="small" id="winnote"></p><p id="empty" hidden class="na">No accounts to show for this grouping.</p>
+<p class="small" id="winnote"></p><p class="small" id="totnote"></p><p id="empty" hidden class="na">No accounts to show for this grouping.</p>
 <section><div class="scroll"><table id="tbl"></table></div></section>
 <figure><h2>Excess IRR per account</h2><div id="bars"></div><figcaption>IRR of the real flows minus the IRR of the same deposits and withdrawals put into {data['benchmark']}. Sorted best first.</figcaption></figure>
 <figure><h2>Value over time</h2><div class="key" id="key"></div><div id="lines"></div><figcaption>Month-end values are estimated; the endpoints are exact.</figcaption></figure>
