@@ -171,3 +171,22 @@ th:last-child .tip::after, th:nth-last-child(2) .tip::after { left: auto; right:
 .lesson-table thead th { font-weight: 650; border-bottom: 1px solid var(--line); }
 .step-card .slope { width: 100%; max-width: 520px; height: auto; }
 .step-card .chart-fig { box-shadow: none; padding: 0; background: none; }
+
+/* M13: nav call to action, pricing, forms */
+.site-head nav a.nav-cta { background: var(--accent); color: var(--accent-ink); margin-left: 6px; }
+.site-head nav a.nav-cta:hover { background: var(--accent); box-shadow: var(--shadow-up); }
+.site-head nav a.nav-cta[aria-current="page"] { background: var(--accent); color: var(--accent-ink); }
+@media (max-width: 640px) { .site-head .wrap { flex-wrap: wrap; padding-bottom: 8px; } .site-head nav { flex-wrap: wrap; } }
+.foot-links a { margin: 0 2px; }
+.plans { display: grid; gap: 20px; grid-template-columns: 1fr; padding-bottom: 24px; }
+@media (min-width: 760px) { .plans { grid-template-columns: repeat(3, 1fr); } }
+.plan { background: var(--surface); border-radius: var(--r); box-shadow: var(--shadow); padding: 28px 24px; display: flex; flex-direction: column; gap: 4px; border-top: 4px solid var(--line); }
+.plan.featured { border-top-color: var(--accent); }
+.plan h2 { font-size: 1.3rem; } .plan .price { font-size: 1.5rem; font-weight: 750; margin: 6px 0 0; }
+.plan ul { padding-left: 1.2em; margin: 8px 0 20px; flex: 1; } .plan li { margin-bottom: .4em; }
+.form { display: flex; flex-direction: column; gap: 12px; }
+.field-error { color: var(--err); font-weight: 650; font-size: .9rem; margin: -6px 0 0; min-height: 0; }
+.field-error:empty { display: none; }
+label.check { align-items: flex-start; } label.check input { width: 22px; height: 22px; margin-top: 2px; flex: none; }
+.form select { width: 100%; } .form input[type=email], .form input[type=text] { width: 100%; }
+[hidden] { display: none !important; }
