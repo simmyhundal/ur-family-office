@@ -16,6 +16,7 @@ from ufo.performance.combine import GroupRun
 from ufo.performance.compare import AccountRun
 from ufo.performance.holdings import CLASSES, summarize
 from ufo.performance.report_html import CSS
+from ufo.performance.sharpe_lesson import build_lesson
 from ufo.providers.prices import Series
 
 MAX_PLAUSIBLE_VOL = 10.0  # annualised; above this a risk figure says more about tiny balances than about risk
@@ -234,11 +235,13 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
         ents.append(e)
     return {"benchmark": benchmark, "asof": str(asof), "windows": WINDOWS, "extras": list(extras), "entities": ents,
             "classes": [[k, v] for k, v in CLASSES.items()],
-            "risk": risk_data(ents, runs, groups, benchmark, extras, rf, asof)}
+            "risk": risk_data(ents, runs, groups, benchmark, extras, rf, asof),
+            "lesson": build_lesson(runs, groups, benchmark, rf)}
 
 
 PAGE_CSS = """
 main{max-width:1100px}
+.lesson{max-width:780px}.lesson h2{margin-top:1.6em}.lesson table{margin:.6em 0}.lesson ul{margin:.4em 0 .8em 1.2em}.lesson p{line-height:1.55}
 .controls{display:flex;gap:18px;flex-wrap:wrap;align-items:center}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .seg button{background:var(--card);color:var(--ink);border:0;border-right:1px solid var(--line);padding:6px 12px;font:inherit;cursor:pointer}
@@ -254,7 +257,7 @@ svg .pt circle{stroke:var(--pc);stroke-width:2.2}svg .pt circle.solid{fill:var(-
 
 JS = r"""
 const D=JSON.parse(document.getElementById('data').textContent);
-let win='inception',grp='accounts',showBench=true;
+let win='inception',grp='accounts',showBench=true,tab='main';
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const pct=x=>x==null?'n/a':(x*100).toFixed(1)+'%';
@@ -363,7 +366,28 @@ function holdings(){
   h+=`<details><summary>${esc(e.label)}: ${money(e.holdings.total)} as of ${esc(e.holdings.as_of)}</summary><div class="scroll"><table><tr><th>Fund</th><th>Class</th><th>Value</th><th>Weight</th></tr>`+
    e.holdings.rows.map(r=>`<tr><td>${esc(r.symbol)}${r.name?' <span class="small">'+esc(r.name)+'</span>':''}</td><td>${esc(names[r.cls])}</td><td>${money(r.value)}</td><td>${pct(r.weight)}</td></tr>`).join('')+'</table></div></details>';}
  $('#hold').innerHTML=h+'<p class="small">Classes come from your local file .data/asset_classes.json; tickers missing from it show as Unclassified. Global and balanced funds are filed under Other.</p>';}
+function sharpeTab(){
+ const L=D.lesson;$('#lesson').innerHTML=L.html;
+ const P=L.points,c=$('#sharpechart');if(!c)return;
+ if(!P){c.innerHTML='<p class="na">n/a: the chart needs the T-bill rate and at least two months of returns.</p>';return;}
+ const pts=[{k:'portfolio',label:'Your portfolio',...P.portfolio},{k:'benchmark',label:D.benchmark,...P.benchmark}].filter(p=>p.ret!=null&&p.vol!=null);
+ const W=860,H=340,Lm=64,Rm=40,T=14,B=44,PS=PCT_STEPS.map(m=>m/100),
+  xt=niceTicks(0,Math.max(...pts.map(p=>p.vol),0.01),PS,6),xm=xt.hi,
+  yt=niceTicks(Math.min(0,P.rf,...pts.map(p=>p.ret)),Math.max(0.01,P.rf,...pts.map(p=>p.ret)),PS,6),y0=yt.lo,y1=yt.hi;
+ const X=v=>Lm+v/xm*(W-Lm-Rm),Y=v=>T+(H-T-B)*(1-(v-y0)/((y1-y0)||1));
+ let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Sharpe ratio as the slope of a line from the risk-free point">`;
+ for(const v of yt.ticks)s+=`<line class="${v===0?'zero':'grid'}" x1="${Lm}" x2="${W-Rm}" y1="${Y(v)}" y2="${Y(v)}"/><text class="axis" x="${Lm-6}" y="${Y(v)+4}" text-anchor="end">${pct(v)}</text>`;
+ for(const u of xt.ticks)s+=`<line class="grid" x1="${X(u)}" x2="${X(u)}" y1="${T}" y2="${H-B}"/><text class="axis" x="${X(u)}" y="${H-24}" text-anchor="middle">${pct(u)}</text>`;
+ s+=`<text class="axis" x="${(Lm+W-Rm)/2}" y="${H-6}" text-anchor="middle">Volatility (annual)</text>`;
+ pts.forEach((p,i)=>{const col=p.k==='portfolio'?'var(--c2)':'var(--c7)';
+  s+=`<g class="pt"><title>${esc(p.label)}: return ${pct(p.ret)}, volatility ${pct(p.vol)}, Sharpe ${num(p.sharpe)}</title><line x1="${X(0)}" y1="${Y(P.rf)}" x2="${X(p.vol)}" y2="${Y(p.ret)}" stroke="${col}" stroke-width="2" stroke-dasharray="${p.k==='portfolio'?'0':'6 4'}"/>`+
+   `<circle cx="${X(p.vol)}" cy="${Y(p.ret)}" r="6" fill="${col}"/><text class="axis" x="${X(p.vol)>W*0.7?X(p.vol)-10:X(p.vol)+10}" text-anchor="${X(p.vol)>W*0.7?'end':'start'}" y="${Y(p.ret)+(i?16:-8)}">${esc(p.label)} · slope ${num(p.sharpe)}</text></g>`;});
+ s+=`<circle cx="${X(0)}" cy="${Y(P.rf)}" r="5" fill="none" stroke="var(--ink)" stroke-width="2"/><text class="axis" x="${X(0)+10}" y="${Y(P.rf)-8}">Risk-free (T-bill) ${pct(P.rf)}</text>`;
+ c.innerHTML=s+'</svg>';
+ $('#sharpecap').textContent='Each line starts at the risk-free point (zero risk, the T-bill return) and ends at a portfolio. The steeper the line, the higher the Sharpe ratio: its slope is the Sharpe ratio. Returns here are the average month times 12, so they differ slightly from the compounded figures in the Risk versus return chart.';}
+function showTab(){$('#tab-main').hidden=tab!=='main';$('#tab-sharpe').hidden=tab!=='sharpe';if(tab==='sharpe')sharpeTab();}
 function draw(){
+ seg($('#tabs'),[['main','Dashboard'],['sharpe','How Sharpe works']],()=>tab,k=>{tab=k;});showTab();
  seg($('#wins'),D.windows,()=>win,k=>win=k);seg($('#grps'),GROUPS,()=>grp,k=>grp=k);
  const rs=rows();table(rs);bars(rs);lines(rs);holdings();scatter();
  $('#winnote').textContent=win==='inception'?'Since inception: IRR uses exact dated flows plus the ending value.':
@@ -384,6 +408,8 @@ def render(data: dict) -> str:
 <header><h1>All investments side by side</h1>
 <p class="muted">As of {data['asof']} · benchmark {data['benchmark']} · local only, never sent anywhere
  · <span class="seg" aria-label="Theme"><button type="button" data-theme-set="auto">Auto</button><button type="button" data-theme-set="light">Light</button><button type="button" data-theme-set="dark">Dark</button></span></p></header>
+<nav class="controls"><div class="seg" id="tabs" aria-label="View"></div></nav>
+<div id="tab-main">
 <section class="controls"><div class="seg" id="wins" aria-label="Window"></div><div class="seg" id="grps" aria-label="Grouping"></div>
 <label><input type="checkbox" id="bench" checked> show the same flows in the benchmark</label></section>
 <p class="small" id="winnote"></p><p class="small" id="totnote"></p><p id="empty" hidden class="na">No accounts to show for this grouping.</p>
@@ -392,6 +418,8 @@ def render(data: dict) -> str:
 <figure><h2>Value over time</h2><div class="key" id="key"></div><div id="lines"></div><figcaption>Month-end values are estimated; the endpoints are exact.</figcaption></figure>
 <figure><h2>Risk versus return</h2><div id="risk"></div><figcaption>Each point is one account, group, your whole portfolio (large) or a benchmark (grey): time-weighted return per year against how much it swings, with its Sharpe ratio (S, return above the T-bill rate per unit of risk) in the label. Since each one's start; benchmarks cover the whole-portfolio period. Hollow points are estimated from reconstructed month-end values (decision 0011). Hover for the figures.</figcaption><p class="small" id="riskleft"></p></figure>
 <section id="hold"></section>
+</div>
+<div id="tab-sharpe" hidden><article id="lesson" class="lesson"></article></div>
 <section class="small">
 <p>All figures are before tax. A taxable account's number is not comparable with an IRA or Roth on an after-tax basis. Transfers between your own accounts are external for each account alone and net out in combined lines. See decision 0011.</p></section>
 <p class="small">Information, not investment advice. Past performance does not predict future results.</p>
