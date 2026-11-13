@@ -349,7 +349,7 @@ p{margin:0}.small,small{font-size:13.5px;color:var(--ink-3);line-height:1.45}.mu
 .card{--pad:20px;background:var(--surface);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--pad)}
 .sec-h{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:2px 4px 12px}
 .eyebrow{font-size:14px;font-weight:600;color:var(--ink-2);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.bal{font-size:clamp(34px,11.5vw,56px);font-weight:750;letter-spacing:-.035em;line-height:1.05;height:1.05em;margin:6px 0 2px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.bal{font-size:clamp(32px,11vw,56px);font-weight:750;letter-spacing:-.035em;line-height:1.05;height:1.05em;margin:6px 0 2px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .balsub{font-size:13.5px;color:var(--ink-3);line-height:20px;height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
 .say{font-size:17px;line-height:1.4;margin-top:14px;font-weight:500;color:var(--ink-2)}.say b{font-weight:750}
 .rate{font-size:14px;color:var(--ink-3);margin-top:6px;line-height:1.45}
@@ -451,10 +451,10 @@ details:not(.demo)>summary::after{content:"";width:8px;height:8px;border-right:2
 .tblwrap.more-l #tbl th:first-child,.tblwrap.more-l #tbl td:first-child{box-shadow:8px 0 10px -8px color-mix(in srgb,var(--ink) 30%,transparent)}
 #tbl tbody tr:hover td{background:var(--surface-2)}
 #tbl tr.sub td{font-weight:600}#tbl tr.total td{font-weight:750;border-top:2px solid var(--line-2)}
-#tbl .dq small{font-size:12.5px;margin-left:8px}#tbl .dq .chip{min-height:28px}
+#tbl .dq small{font-size:12.5px;margin-left:8px}#tbl .dq .chip{min-height:30px}#tbl .dq .chip+.chip{margin-left:6px}#tbl .dq button.chip::after{inset:-7px -4px}
 #tbl .lt{white-space:normal;min-width:240px}
 .fnm{border:0;background:var(--surface-2);color:var(--ink-2);font-size:11px;font-weight:700;min-width:20px;height:20px;padding:0 5px;border-radius:999px;margin-left:5px;vertical-align:2px;position:relative;line-height:20px}
-.fnm::after{content:"";position:absolute;inset:-12px -8px}
+.fnm::after{content:"";position:absolute;inset:-12px}
 .chip sup{font-size:10px;margin-left:1px;vertical-align:4px;line-height:0}
 .fine{margin-top:18px;font-size:13.5px;color:var(--ink-2);line-height:1.5}.fine h3{font-size:14px;color:var(--ink-3);font-weight:650;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
 .fine dl{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;margin:0 0 12px}.fine dd{margin:0 0 8px}
@@ -566,6 +566,7 @@ function trow(e,label,cls){
   let chip=`<span class="chip ${q[0]}">${q[1]}</span>`;
   if(own.length){const m=fn(plain(e.label,e.kind==='group'?e.groupKind:'')+': '+own.join('; ')+'.'),n=m.match(/data-k="(\d+)"/)[1];
    chip=`<button type="button" class="chip ${q[0]}" data-act="fn" data-k="${n}" aria-label="${q[1]}, see note ${n}">${q[1]}<sup>${n}</sup></button>`;}
+  if(e.excluded&&e.excluded.length)chip+='<span class="chip bad">Partial</span>';// a total that leaves an account out says so on screen
   const star=(e.flags||[]).some(f=>f.startsWith('history ends'))?' *':'';
   return `<tr class="${cls}"><td>${label}${e.closed?' <span class="small">(closed)</span>':''}</td>${ty}<td>${esc(fmtMon(e.start))}</td><td>${money(w.value)}</td><td>${money(w.net_in)}</td>`+
    c(pct,w.irr,'irr')+(w.twr_thru&&w.twr!=null&&w.twr_thru!==w.thru?`<td>${pct(w.twr)}${fn('time-weighted return runs through '+w.twr_thru+', the last month-end the history covers.')}</td>`:c(pct,w.twr,'twr'))+c(spct,w.excess,'excess')+c(money,w.bench_end,'bench')+c(num,w.sharpe,'sharpe')+c(pct,w.dd,'dd')+
@@ -717,7 +718,7 @@ function hero(){// the first thing on a phone: what it is worth, and the same mo
  let s=`<h1 class="eyebrow">All investments ${est?'<button type="button" class="chip est" data-act="info" data-k="est">Estimated</button>':'<span class="chip ok">Exact</span>'}</h1>`+
   `<p class="bal" id="val-hero" data-d="${money(wi.value)}">${money(wi.value)}</p><p class="balsub" id="sub-hero" data-d="${esc(sub)}">${esc(sub)}</p>`;
  if(ex.length)s+=`<p class="small"><span class="chip bad">Partial</span> Left out of this total because their history does not match their statements yet: ${esc(ex.join(', '))}.</p>`;
- if(t.note)s+=`<p class="small">The total is ${esc(t.note)}${/non-market/.test(t.note)?' (a fixed annuity counts in value and deposits; it has no market prices)':''}.</p>`;
+ if(t.note)s+=`<p class="small">The total is ${esc(isoD(t.note))}${/non-market/.test(t.note)?' (a fixed annuity counts in value and deposits; it has no market prices)':''}.</p>`;
  if(!w)s+=`<p class="say">Your accounts do not go back ${({ytd:'to the start of the year','1y':'a full year','3y':'3 years','5y':'5 years'})[win]||'that far'} yet. Pick a shorter period.</p>`;
  else{const v=verdict(w),pd=period(w);
   s+=`<p class="say">${v?(pd?capS(pd)+', ':'')+v+(pd?'.':' since '+esc(fmtMon(t.start))+'.'):'No benchmark comparison for this period.'}</p>`;
@@ -923,6 +924,7 @@ def render(data: dict) -> str:
 <dl><dt><span class="chip ok">Exact</span></dt><dd>Rests only on today's value and the dated deposits and withdrawals in your files.</dd>
 <dt><span class="chip est">Estimated</span></dt><dd>Needs month-end values, which are rebuilt from your history (or taken from a statement where there is one), so it can be a little off.</dd>
 <dt><span class="chip bad">Does not reconcile</span></dt><dd>Rebuilt month-end values differ from the account's own statements or snapshots, so it is left out of shorter periods and combined lines rather than shown wrong.</dd>
+<dt><span class="chip bad">Partial</span></dt><dd>A combined line that leaves out an account that does not reconcile; the note names it.</dd>
 <dt><b>*</b></dt><dd>The history ends before the ending value: the IRR reaches that later date while the time-weighted return stops at the last month-end.</dd></dl>
 <ol class="fine-notes" id="tblnotes"></ol>
 <p id="winnote"></p><p id="totnote"></p></div></section>

@@ -69,8 +69,13 @@ def test_details_table_has_no_machine_keys_or_iso_dates_and_explains_every_na(tm
 const res = {};
 for (const g of ['accounts','all','brokerage','owner','wrapper']) for (const [w] of D.windows) {
   grp=g; win=w; draw(); res[g+'/'+w] = [els['#tbl'].innerHTML, els['#tblnotes'].innerHTML, els['#totnote'].textContent, els['#wins2'].innerHTML]; }
+grp='accounts'; win='inception'; const tot = D.entities.find(e => e.kind==='group' && e.groupKind==='all');
+tot.excluded = ['B']; draw(); res.partial = els['#tbl'].innerHTML + els['#tblnotes'].innerHTML;
 console.log(JSON.stringify(res));
 """)
+    partial = o.pop("partial")
+    total_row = partial[partial.index('class="total"'):]
+    assert "Partial" in total_row and "left out, does not reconcile: B" in partial  # visible chip, names in the fine print
     for k, (tbl, notes, tot, wins) in o.items():
         text = re.sub(r"<[^>]+>", " ", tbl)                 # visible text only; ISO dates may stay in attributes
         assert not re.search(r"\d{4}-\d{2}-\d{2}", text + tot + re.sub(r"<[^>]+>", " ", notes)), k
