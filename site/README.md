@@ -8,6 +8,8 @@ Each page is `folder/index.html` with relative links, so it works under `/ur-fam
 - `try/`: the tool. Headline result and one chart first; "Show details" (full metrics, month table), "Your mix and settings" (mix editor, benchmark, history, style, deposits) and "Use your own prices (CSV)" are disclosures. `?sample=1` loads the sample portfolio.
 - `learn/`: lesson index. `learn/sharpe/`: "How Sharpe works", one card per step with Back and Next (arrow keys too), including the portfolio-theory steps. It runs on the mix last loaded on Try in this tab (kept in `sessionStorage`), else the sample.
 - `about/`: how it works, limits, not advice.
+- `teach/` (instructor session plan, pilot request), `pricing/` (from `data/plans.json`), `signup/` (waitlist form), `privacy/`, `terms/` (both drafts pending legal review).
+- **Config (M13):** `data/site.json` (name, wordmark, tagline, contact email, `signup_endpoint`, `checkout_urls`). `js/chrome.mjs` renders the header and footer on every page from it; `js/config.mjs`, `js/plans.mjs`, `js/signup.mjs` hold the testable logic (`tests/site/config.test.mjs`). A plan's `checkout_url` (plans.json, or `checkout_urls` in site.json) turns its button into a payment link; the sign-up form sends nothing while `signup_endpoint` is empty. See decision 0012.
 - Shared: `style.css` (one accent, system fonts, light and dark, reduced-motion safe), `js/util.mjs` (helpers, sample, scroll reveal), `js/data.mjs` (loads `../data/*.json` relative to `js/`, so any page depth works), `js/app.js` (Try), `js/lesson.mjs` + `js/learn.mjs` (lesson), `js/calc.mjs` (the maths, unchanged).
 
 - `js/calc.mjs` is the maths, `js/app.js` the page. `data/universe.json` lists the tickers offered.

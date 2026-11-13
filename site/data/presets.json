@@ -1,13 +1,5 @@
 [
- {
-  "name": "Simmy's mix",
-  "weights": {
-   "IVV": 24,
-   "IWM": 24,
-   "SCHM": 24,
-   "VGT": 10,
-   "VXUS": 9,
-   "XBI": 9
-  }
- }
+ {"name": "Broad US stocks", "weights": {"VTI": 100}},
+ {"name": "Classic 60/40", "weights": {"VTI": 60, "BND": 40}},
+ {"name": "Global three-fund", "weights": {"VTI": 50, "VXUS": 30, "BND": 20}}
 ]

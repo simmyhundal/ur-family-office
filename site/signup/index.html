@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign up · UFO</title>
+<meta name="description" content="Join the list for early access.">
+<meta name="theme-color" content="#3643c4">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%233643c4'/%3E%3Ccircle cx='16' cy='16' r='6' fill='white'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="../style.css">
+<script>document.documentElement.className = "js";</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-head"><div class="wrap">
+  <a class="wordmark" href="../" aria-label="UFO, home">UFO<span>.</span></a>
+  <nav aria-label="Main"><a href="../try/">Try it</a><a href="../learn/">Learn</a><a href="../teach/">Teach</a><a href="../pricing/">Pricing</a><a href="../about/">About</a><a class="nav-cta" href="../signup/" aria-current="page">Sign up</a></nav>
+</div></header>
+<main id="main">
+<div class="wrap narrow">
+  <div class="page-head reveal"><h1>Get early access</h1><p class="sub">Join the list and we will email you when new features open. No payment, no portfolio data, no promises about returns.</p></div>
+  <form id="signup" class="card-surface form" novalidate>
+    <label>Email<input id="f-email" name="email" type="email" autocomplete="email" required></label><p class="field-error" id="e-email" role="alert"></p>
+    <label>I am a<select id="f-role" name="role"><option value="">Choose…</option><option value="student">Student</option><option value="instructor">Instructor</option><option value="other">Something else</option></select></label><p class="field-error" id="e-role" role="alert"></p>
+    <label>School <span class="muted">(optional)</span><input id="f-school" name="school" type="text" autocomplete="organization"></label>
+    <label>Plan I am interested in<select id="f-plan" name="plan"><option value="">Choose…</option><option value="free">Free</option><option value="plus">Plus (planned)</option><option value="scheduler">Scheduler (later)</option></select></label><p class="field-error" id="e-plan" role="alert"></p>
+    <label class="inline check"><input id="f-consent" name="consent" type="checkbox"> <span>I agree to be emailed about early access, and I have read the <a href="../privacy/">privacy page</a>.</span></label><p class="field-error" id="e-consent" role="alert"></p>
+    <button type="submit" id="go">Join the list</button>
+    <p id="status" class="muted" role="status"></p>
+  </form>
+  <div id="thanks" class="card-surface" hidden><h2>Thank you</h2><p>You are on the list. We will only email you about early access. Nothing has been charged.</p><p><a class="btn" href="../try/?sample=1">Try the sample portfolio</a></p></div>
+  <p class="muted small">Only your email, role, school, plan interest and consent are sent. Information, not investment advice.</p>
+</div>
+</main>
+<footer class="site-foot"><div class="wrap">
+  <p><b>Information, not investment advice.</b> Results are before taxes and trading costs, and past results don’t predict future ones.</p>
+  <p>Prices: month-end adjusted closes, refreshed on weekdays. Cash rate: 3-month Treasury bills from FRED.</p>
+  <p class="foot-links"><a href="../pricing/">Pricing</a> · <a href="../privacy/">Privacy</a> · <a href="../terms/">Terms</a> · <a href="../about/">About</a></p>
+</div></footer>
+<script type="module">import { revealOnScroll } from "../js/util.mjs"; revealOnScroll();</script>
+<script type="module" src="../js/chrome.mjs"></script>
+<script type="module">
+import { cfg } from "../js/chrome.mjs";
+import { parseParams, buildSignupPayload, validateSignup, submitSignup } from "../js/signup.mjs";
+const $ = (id) => document.getElementById(id);
+const pre = parseParams(location.search);
+if (pre.plan) $("f-plan").value = pre.plan;
+if (pre.role) $("f-role").value = pre.role;
+if (!cfg.signup_endpoint) { $("status").textContent = "Sign-ups open soon. Nothing is sent from this form yet."; $("go").disabled = true; }
+$("signup").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const p = buildSignupPayload({ email: $("f-email").value, role: $("f-role").value, school: $("f-school").value, plan: $("f-plan").value, consent: $("f-consent").checked });
+  const errs = validateSignup(p);
+  for (const k of ["email", "role", "plan", "consent"]) $("e-" + k).textContent = errs[k] || "";
+  if (Object.keys(errs).length) return;
+  $("go").disabled = true; $("status").textContent = "Sending…";
+  try {
+    const r = await submitSignup(p, cfg.signup_endpoint);
+    if (r.sent) { $("signup").hidden = true; $("thanks").hidden = false; $("thanks").scrollIntoView(); }
+    else { $("status").textContent = r.reason === "no-endpoint" ? "Sign-ups open soon. Nothing was sent." : "That did not go through. Please try again in a moment."; $("go").disabled = !cfg.signup_endpoint; }
+  } catch { $("status").textContent = "That did not go through. Please check your connection and try again."; $("go").disabled = false; }
+});
+</script>
+</body>
+</html>
