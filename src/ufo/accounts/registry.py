@@ -62,6 +62,7 @@ class Account(BaseModel):
     closed: date | None = None
     source: Source
     ending_value: EndValue | None = None
+    market: bool = True  # False for a fixed annuity or similar: no market prices, so no benchmark, Sharpe or volatility
 
     @field_validator("id")
     @classmethod

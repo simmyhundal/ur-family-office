@@ -6,7 +6,7 @@ rather than skipped silently. Prices come from one shared PriceStore (its disk c
 from __future__ import annotations
 
 import glob
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -16,6 +16,7 @@ from rich.table import Table
 from ufo import importers
 from ufo.accounts.registry import Account, Registry
 from ufo.performance.events import Event
+from ufo.performance import metrics as M
 from ufo.performance.holdings import Holding
 from ufo.performance.report_html import money, pct, spct
 from ufo.performance.run import Result, run_core
@@ -37,6 +38,10 @@ class AccountRun(BaseModel):
     holdings_as_of: date | None = None
     anchors: dict[date, tuple[float, str]] = {}  # dated values the account itself supplies: statement or snapshot
     error: str = ""
+
+    @property
+    def market(self) -> bool:
+        return self.account.market
 
     @property
     def net_contributions(self) -> float | None:
@@ -68,6 +73,36 @@ def ending(a: Account, snapshots, today: date, max_age: int) -> tuple[date, floa
     return d, v, stmt
 
 
+def _month_ends(first: date, end: date) -> list[date]:
+    out, d = [], date(first.year, first.month, 1)
+    while True:
+        nxt = date(d.year + (d.month == 12), d.month % 12 + 1, 1)
+        if nxt - timedelta(days=1) > end:
+            return out
+        out.append(nxt - timedelta(days=1))
+        d = nxt
+
+
+def nonmarket_result(hist, end: date, value: float) -> Result:
+    """A Result for an account with no market prices (a fixed annuity): IRR from the dated flows and the ending value only.
+    Month-end values are the flows grown at that IRR (an estimate; exact at the end). Every benchmark-based field is empty."""
+    flows = sorted((e.when, e.external_flow) for e in hist.events if e.external_flow)
+    if not flows:
+        raise ValueError("no deposits or withdrawals found for this account")
+    irr = M.xirr(M.investor_flows(flows, end, value))
+    months = _month_ends(flows[0][0], end)
+    r = irr or 0.0
+    values = [sum(a * (1 + r) ** ((m - d).days / 365) for d, a in flows if d <= m) for m in months]
+    rep = M.Report(start=flows[0][0], end=end, end_value=value, contributed=sum(a for _, a in flows if a > 0),
+                   withdrawn=-sum(a for _, a in flows if a < 0), irr=irr, index_irr=None, excess_irr=None, pme=None,
+                   twr_annual=None, index_twr_annual=None, sharpe=None, index_sharpe=None, sortino=None, volatility=None,
+                   index_volatility=None, max_drawdown=0.0, index_max_drawdown=0.0, beta=None, alpha=None,
+                   index_end_value=0.0, index_values=[], months=months, port_growth=[], index_growth=[], port_returns=[],
+                   index_returns=[], flows_by_month=[], values=values)
+    return Result(report=rep, reconciliation=[], warnings=list(hist.warnings), notes=[], benchmark="", income_credited=0.0,
+                  events=len(hist.events), first_trade=hist.first)
+
+
 def run_account(a: Account, root: Path, store: PriceStore, benchmark: str, today: date,
                 max_age: int = MAX_VALUE_AGE_DAYS) -> AccountRun:
     out = AccountRun(account=a)
@@ -85,6 +120,13 @@ def run_account(a: Account, root: Path, store: PriceStore, benchmark: str, today
         if a.source.snapshot_glob and hasattr(imp, "holdings"):
             out.holdings_as_of, out.holdings = imp.holdings(_files(root, a.source.snapshot_glob), a.last_digits)
         end, value, stmt = ending(a, snaps, today, max_age)
+        if not a.market:
+            out.result, out.events, out.end, out.end_value = nonmarket_result(hist, end, value), hist.events, end, value
+            out.quality = "exact" if stmt else "estimated"
+            out.holdings, out.holdings_as_of = [Holding(symbol="Fixed annuity", value=value, fixed_annuity=True)], end
+            if (end - out.result.first_trade).days < SHORT_HISTORY_DAYS:
+                out.flags.append("short history")
+            return out
         if hasattr(imp, "prices"):  # an importer that supplies its own unit prices (no tickers in the files)
             store.add_own(imp.prices(hist_files))
         stmts = imp.statement_values(_files(root, a.source.statement_glob)) if a.source.statement_glob and hasattr(imp, "statement_values") else []
@@ -148,8 +190,8 @@ def print_table(runs: list[AccountRun], benchmark: str, console: Console | None 
             t.add_row(a.label, a.wrapper.value, "", "", "", "", "[red]not computed[/red]", r.error)
             continue
         rep = r.result.report
-        t.add_row(a.label, a.wrapper.value, money(r.end_value), ("-" if r.net_contributions < 0 else "") + money(abs(r.net_contributions)), pct(rep.irr), spct(rep.excess_irr),
-                  r.quality, ", ".join(r.flags))
+        t.add_row(a.label, a.wrapper.value, money(r.end_value), ("-" if r.net_contributions < 0 else "") + money(abs(r.net_contributions)), pct(rep.irr),
+                  "n/a" if not r.market else spct(rep.excess_irr), r.quality, ", ".join(r.flags + (["no market prices"] if not r.market else [])))
     for g in groups or []:
         if g.error or g.report is None:
             t.add_row(f"[bold]{g.name}[/bold]", "combined", "", "", "", "", "[red]not computed[/red]", g.error)

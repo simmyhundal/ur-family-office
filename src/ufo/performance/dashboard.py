@@ -33,11 +33,16 @@ def window_start(key: str, asof: date) -> date | None:
         return asof.replace(year=asof.year - n, day=28)
 
 
-def _stats(flows, report, end, end_value, index: Series, start: date | None, extras: dict[str, tuple[dict, Series]]) -> dict | None:
+def _stats(flows, report, end, end_value, index: Series, start: date | None, extras: dict[str, tuple[dict, Series]], market: bool = True) -> dict | None:
     """Figures for one window, or None when the entity does not cover it (shown as n/a, never a shortened number)."""
     fl = sorted(flows)
     base: list[tuple[date, float]] = []  # the opening value, as the first deposit of a windowed calculation
-    if start is None:
+    if start is None and not market:
+        irr = report.irr
+        out = {"value": end_value, "net_in": report.contributed - report.withdrawn, "irr": irr, "bench_irr": None, "excess": None,
+               "bench_end": None, "twr": None, "sharpe": None, "dd": None, "exact": True, "open": None}
+        ext_flows = fl
+    elif start is None:
         irr = report.irr
         out = {"value": end_value, "net_in": report.contributed - report.withdrawn, "irr": irr, "bench_irr": report.index_irr,
                "excess": report.excess_irr, "bench_end": report.index_end_value, "twr": report.twr_annual,
@@ -56,6 +61,10 @@ def _stats(flows, report, end, end_value, index: Series, start: date | None, ext
             return None
         irr = M.xirr(M.investor_flows(ext_flows, end, end_value) + [(od, -ov)])
         base = [(od, ov)]
+        if not market:
+            out = {"value": end_value, "net_in": sum(a for _, a in ext_flows), "irr": irr, "bench_irr": None, "excess": None,
+                   "bench_end": None, "twr": None, "sharpe": None, "dd": None, "exact": False, "open": str(od), "extras": {}}
+            return out
         cf = M.index_counterfactual(base + ext_flows, index, end)
         g = M.growth_index(report.port_returns[i + 1:])
         out = {"value": end_value, "net_in": sum(a for _, a in ext_flows), "irr": irr, "bench_irr": cf.irr,
@@ -63,6 +72,8 @@ def _stats(flows, report, end, end_value, index: Series, start: date | None, ext
                "twr": M.annualize(g[-1], len(g)) if g else None, "sharpe": None, "dd": M.max_drawdown(g) if g else None,
                "exact": False, "open": str(od)}
     out["extras"] = {}
+    if not market:
+        return out
     for name, (weights, series) in extras.items():
         steps = M.basket_units(sorted(base + ext_flows), weights, series)
         v = M.basket_value(steps, series, end)
@@ -76,13 +87,13 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
     ents = []
     notes_ = {g.name: g.note for g in groups}
     pairs = [(r.account.label, "account", "", r.account, r.events and [(e.when, e.external_flow) for e in r.events if e.external_flow],
-              r.result.report if r.result else None, r.end, r.end_value, r.quality, r.flags, r.error) for r in runs]
+              r.result.report if r.result else None, r.end, r.end_value, r.quality, r.flags, r.error, r.market) for r in runs]
     for g in groups:
-        pairs.append((g.name, "group", g.kind, None, g.flows, g.report, g.end, g.end_value, g.quality, [], g.error))
-    for label, kind, gk, acct, flows, rep, end, ev, quality, flags, err in pairs:
+        pairs.append((g.name, "group", g.kind, None, g.flows, g.report, g.end, g.end_value, g.quality, [], g.error, True))
+    for label, kind, gk, acct, flows, rep, end, ev, quality, flags, err, market in pairs:
         e = {"label": label, "kind": kind, "groupKind": gk, "error": err, "flags": flags}
         if acct is not None:
-            e.update(type=acct.wrapper.value, brokerage=acct.brokerage, owner=acct.owner)
+            e.update(market=acct.market, type=acct.wrapper.value, brokerage=acct.brokerage, owner=acct.owner)
             run = next((r for r in runs if r.account is acct), None)
             if run and run.holdings:
                 e["holdings"] = dict(summarize(run.holdings, classes or {}), as_of=str(run.holdings_as_of))
@@ -95,10 +106,10 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
         note = notes_.get(label, "") if kind == "group" else ""
         e.update(start=str(rep.start), as_of=str(end), quality=quality, closed=closed,
                  windows={k: (None if (k != "inception" and (closed or end < asof)) else
-                              _stats(flows, rep, end, ev, index, window_start(k, asof), extras)) for k, _ in WINDOWS},
+                              _stats(flows, rep, end, ev, index, window_start(k, asof), extras, market)) for k, _ in WINDOWS},
                  months=[str(m) for m in rep.months] + ([str(end)] if end not in rep.months else []),
                  values=[round(v, 2) for v in rep.values] + ([round(ev, 2)] if end not in rep.months else []),
-                 bench=[round(v, 2) for v in rep.index_values] + ([round(rep.index_end_value, 2)] if end not in rep.months else []), note=note)
+                 bench=([round(v, 2) for v in rep.index_values] + ([round(rep.index_end_value, 2)] if end not in rep.months else [])) if market else [], note=note)
         ents.append(e)
     return {"benchmark": benchmark, "asof": str(asof), "windows": WINDOWS, "extras": list(extras), "entities": ents,
             "classes": [[k, v] for k, v in CLASSES.items()]}
@@ -164,7 +175,7 @@ function lines(rs){
  const y0=new Date(t0).getUTCFullYear(),y1=new Date(t1).getUTCFullYear();
  for(let y=y0+1;y<=y1;y++){const d=`${y}-01-01`;s+=`<text class="axis" x="${X(d)}" y="${H-8}" text-anchor="middle">${y}</text>`;}
  es.forEach((e,i)=>{const c=COLORS[i%8],pts=a=>e.months.map((m,j)=>`${X(m).toFixed(1)},${Y(a[j]).toFixed(1)}`).join(' ');
-  if(showBench)s+=`<polyline fill="none" stroke="${c}" stroke-width="1.6" stroke-dasharray="5 4" opacity=".7" points="${pts(e.bench)}"/>`;
+  if(showBench&&e.bench.length)s+=`<polyline fill="none" stroke="${c}" stroke-width="1.6" stroke-dasharray="5 4" opacity=".7" points="${pts(e.bench)}"/>`;
   s+=`<polyline fill="none" stroke="${c}" stroke-width="2.4" stroke-linejoin="round" points="${pts(e.values)}"/>`;});
  $('#lines').innerHTML=s+'</svg>';
  $('#key').innerHTML=es.map((e,i)=>`<span><i style="background:${COLORS[i%8]}"></i>${esc(e.label)}</span>`).join('')+(showBench?`<span class="small">dashed: same deposits and withdrawals in ${esc(D.benchmark)}</span>`:'');}
