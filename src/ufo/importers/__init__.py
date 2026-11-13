@@ -36,4 +36,4 @@ def names() -> set[str]:
     return set(_REGISTRY)
 
 
-from ufo.importers import fidelity, manual, voya  # noqa: E402,F401  (register themselves)
+from ufo.importers import acorns, fidelity, manual, voya  # noqa: E402,F401  (register themselves)
