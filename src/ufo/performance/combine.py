@@ -116,7 +116,9 @@ def combine(kind: str, name: str, runs: list[AccountRun], store: PriceStore, ben
                    if e.external_flow and id(e) not in skip and e.when <= end)
     by_month: dict[date, float] = {}
     for r in runs:
-        for m, v in zip(r.result.report.months, r.result.report.values):
+        # every month-end of the member, including its first partial month (the report drops it because it has no return),
+        # so a deposit and the value it bought land in the same month of the combined line
+        for m, v in r.result.month_values or zip(r.result.report.months, r.result.report.values):
             if m > end:
                 continue
             by_month[m] = by_month.get(m, 0.0) + v
