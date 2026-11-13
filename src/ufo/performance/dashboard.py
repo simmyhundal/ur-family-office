@@ -34,7 +34,8 @@ def window_start(key: str, asof: date) -> date | None:
         return asof.replace(year=asof.year - n, day=28)
 
 
-def _stats(flows, report, end, end_value, index: Series, start: date | None, extras: dict[str, tuple[dict, Series]], market: bool = True, rf: Series | None = None) -> dict | None:
+def _stats(flows, report, end, end_value, index: Series, start: date | None, extras: dict[str, tuple[dict, Series]], market: bool = True, rf: Series | None = None,
+           opening: dict[date, float] | None = None) -> dict | None:
     """Figures for one window, or None when the entity does not cover it (shown as n/a, never a shortened number)."""
     fl = sorted(flows)
     base: list[tuple[date, float]] = []  # the opening value, as the first deposit of a windowed calculation
@@ -57,23 +58,27 @@ def _stats(flows, report, end, end_value, index: Series, start: date | None, ext
         if not idx:
             return None
         i = idx[-1]
-        od, ov = report.months[i], report.values[i]
+        od, ov = report.months[i], (opening or {}).get(report.months[i], report.values[i])
         ext_flows = [(d, a) for d, a in fl if d > od]
         if (end - od).days < 28:
             return None
         irr = M.xirr(M.investor_flows(ext_flows, end, end_value) + [(od, -ov)])
         base = [(od, ov)]
         cf = M.index_counterfactual(base + ext_flows, index, end)
-        chart = _window_chart(report, i, end, end_value, base + ext_flows, index, market)
+        chart = _window_chart(report, i, end, end_value, base + ext_flows, index, market, ov)
         if not market:  # the benchmark comparison needs only dated flows and values; the return measures need prices
             return {"value": end_value, "net_in": sum(a for _, a in ext_flows), "irr": irr, "bench_irr": cf.irr,
                     "excess": (irr - cf.irr) if irr is not None and cf.irr is not None else None, "bench_end": cf.terminal_value,
                     "twr": None, "sharpe": None, "dd": None, "exact": False, "open": str(od), "extras": {}, "chart": chart, "risk": None}
-        g = M.growth_index(report.port_returns[i + 1:])
+        rets = [r for r in report.port_returns[i + 1:] if r is not None]
+        vol = M.volatility(rets)
+        unstable = any(r <= -1 for r in rets) or (vol is not None and vol > MAX_PLAUSIBLE_VOL)  # months with almost no capital
+        g = [] if unstable else M.growth_index(rets)
         out = {"value": end_value, "net_in": sum(a for _, a in ext_flows), "irr": irr, "bench_irr": cf.irr,
                "excess": (irr - cf.irr) if irr is not None and cf.irr is not None else None, "bench_end": cf.terminal_value,
                "twr": M.annualize(g[-1], len(g)) if g else None, "sharpe": None, "dd": M.max_drawdown(g) if g else None,
-               "exact": False, "open": str(od), "chart": chart, "risk": _window_risk(report, i, rf)}
+               "exact": False, "open": str(od), "chart": chart, "unstable": unstable,
+               "risk": {"vol": None, "ret": None, "sharpe": None} if unstable else _window_risk(report, i, rf)}
     out["extras"] = {}
     if not market:
         return out
@@ -85,14 +90,27 @@ def _stats(flows, report, end, end_value, index: Series, start: date | None, ext
     return out
 
 
-def _window_chart(report, i: int, end: date, end_value: float, flows, index: Series, market: bool) -> dict:
+def _window_chart(report, i: int, end: date, end_value: float, flows, index: Series, market: bool, opening: float) -> dict:
     """Month-end values from the window's opening month, and (for market accounts) the same flows held in the benchmark."""
-    months, values = list(report.months[i:]), list(report.values[i:])
+    months, values = list(report.months[i:]), [opening] + list(report.values[i + 1:])
     if end not in months:
         months.append(end)
         values.append(end_value)
     bench = [round(v, 2) for v in M.index_path(flows, index, months)] if market else []
     return {"months": [str(m) for m in months], "values": [round(v, 2) for v in values], "bench": bench}
+
+
+def _group_opening(g: GroupRun, runs: list[AccountRun]) -> dict[date, float]:
+    """A combined line's value at each of its month-ends: the sum of its members' own values there (a statement or
+    snapshot where the account has one, otherwise the rebuilt ledger). A member not yet open, or already closed, counts 0."""
+    out: dict[date, float] = {}
+    for r in runs:
+        if r.account.id not in g.members or r.result is None:
+            continue
+        rep = r.result.report
+        for m, v in zip(rep.months, rep.values):
+            out[m] = out.get(m, 0.0) + (r.anchors.get(m) or (v, ""))[0]
+    return out
 
 
 def _window_risk(report, i: int, rf: Series | None) -> dict:
@@ -190,10 +208,10 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
     ents = []
     notes_ = {g.name: g.note for g in groups}
     pairs = [(r.account.label, "account", "", r.account, r.events and [(e.when, e.external_flow) for e in r.events if e.external_flow],
-              r.result.report if r.result else None, r.end, r.end_value, r.quality, r.flags, r.error, r.market) for r in runs]
+              r.result.report if r.result else None, r.end, r.end_value, r.quality, r.flags, r.error, r.market, None) for r in runs]
     for g in groups:
-        pairs.append((g.name, "group", g.kind, None, g.flows, g.report, g.end, g.end_value, g.quality, [], g.error, True))
-    for label, kind, gk, acct, flows, rep, end, ev, quality, flags, err, market in pairs:
+        pairs.append((g.name, "group", g.kind, None, g.flows, g.report, g.end, g.end_value, g.quality, [], g.error, True, _group_opening(g, runs) if g.report else None))
+    for label, kind, gk, acct, flows, rep, end, ev, quality, flags, err, market, opening in pairs:
         e = {"label": label, "kind": kind, "groupKind": gk, "error": err, "flags": flags}
         if acct is not None:
             e.update(market=acct.market, type=acct.wrapper.value, brokerage=acct.brokerage, owner=acct.owner)
@@ -208,8 +226,8 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
         closed = bool(acct and acct.closed)
         note = notes_.get(label, "") if kind == "group" else ""
         e.update(start=str(rep.start), as_of=str(end), quality=quality, closed=closed,
-                 windows={k: (None if (k != "inception" and (closed or end < asof)) else
-                              _stats(flows, rep, end, ev, index, window_start(k, asof), extras, market, rf)) for k, _ in WINDOWS},
+                 windows={k: (None if (k != "inception" and (closed or (end < asof and kind == "account"))) else
+                              _stats(flows, rep, end, ev, index, window_start(k, asof), extras, market, rf, opening)) for k, _ in WINDOWS},
                  months=[str(m) for m in rep.months] + ([str(end)] if end not in rep.months else []),
                  values=[round(v, 2) for v in rep.values] + ([round(ev, 2)] if end not in rep.months else []),
                  bench=([round(v, 2) for v in rep.index_values] + ([round(rep.index_end_value, 2)] if end not in rep.months else [])) if market else [], note=note)
@@ -251,11 +269,19 @@ function rows(){return D.entities.filter(e=>grp==='accounts'?e.kind==='account':
 function trow(e,label,cls){
   if(e.error||!e.windows)return `<tr class="${cls}"><td>${label}</td><td>${esc(e.type||'')}</td><td colspan="${NCOLS-2}" class="err">not computed: ${esc(e.error)}</td></tr>`;
   const w=e.windows[win];
-  if(!w)return `<tr class="${cls}"><td>${label}</td><td>${esc(e.type)}</td><td>${e.start}</td><td colspan="${NCOLS-3}" class="na">n/a: does not cover this window</td></tr>`;
+  if(!w)return `<tr class="${cls}"><td>${label}</td><td>${esc(e.type)}</td><td>${e.start}</td><td colspan="${NCOLS-3}" class="na" title="${esc(e.kind==='group'?'the combined line starts after this window begins, or has under a month of history in it':'this account starts after the window begins, or is closed')}">n/a: does not cover this window</td></tr>`;
   const q=w.exact&&e.quality==='exact'?'exact':'estimated';
+  const nm=e.market===false?'non-market account: no prices, so no return-based measures':null, wn=win!=='inception';
+  const why={irr:'no IRR: the dated flows and end value do not have both a deposit and a withdrawal or value',
+   excess:'needs both an IRR and a benchmark IRR (none if withdrawals exceed what the benchmark could have funded)',
+   bench:'none if withdrawals exceed what the benchmark could have funded',
+   twr:nm||(w.unstable?'monthly returns in this window are not meaningful: some months had very little capital':wn?'needs at least 12 months of monthly returns inside this window':'needs at least 12 months of monthly returns'),
+   sharpe:nm||(wn?'Sharpe is shown since inception only':'needs at least 12 months of monthly returns'),
+   dd:nm||(w.unstable?'monthly returns in this window are not meaningful: some months had very little capital':'no monthly returns to measure a fall from')};
+  const c=(f,v,k)=>v==null?`<td class="na" title="${esc(why[k])}">n/a</td>`:`<td>${f(v)}</td>`;
   return `<tr class="${cls}"><td>${label}${e.closed?' <span class="small">(closed)</span>':''}</td><td>${esc(e.type)}</td><td>${e.start}</td><td>${money(w.value)}</td><td>${money(w.net_in)}</td>`+
-   `<td>${pct(w.irr)}</td><td>${spct(w.excess)}</td><td>${money(w.bench_end)}</td><td>${pct(w.twr)}</td><td>${num(w.sharpe)}</td><td>${pct(w.dd)}</td>`+
-   `<td class="${q==='exact'?'exact':'est'}">${q}, as of ${e.as_of}${e.note?' (common month-end)':''}</td>`+D.extras.map(n=>`<td>${spct(w.extras[n]&&w.extras[n].excess)}</td>`).join('')+'</tr>';}
+   c(pct,w.irr,'irr')+c(spct,w.excess,'excess')+c(money,w.bench_end,'bench')+c(pct,w.twr,'twr')+c(num,w.sharpe,'sharpe')+c(pct,w.dd,'dd')+
+   `<td class="${q==='exact'?'exact':'est'}">${q}, as of ${e.as_of}${e.note?' (common month-end)':''}</td>`+D.extras.map(n=>c(spct,w.extras[n]&&w.extras[n].excess,'excess')).join('')+'</tr>';}
 let NCOLS=12;
 function table(rs){
  const head=['Account','Type','Started','Value','Net in','IRR','Excess IRR vs '+D.benchmark,'Worth today in '+D.benchmark,'Time-weighted /yr (est.)','Sharpe (est.)','Worst fall','Data']
