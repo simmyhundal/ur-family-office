@@ -24,6 +24,7 @@ from ufo.providers.prices import PriceError, PriceStore, Series
 
 MAX_VALUE_AGE_DAYS = 45
 SHORT_HISTORY_DAYS = 90
+HISTORY_GAP_DAYS = 7  # an ending value this many days after the last transaction may include activity the history lacks
 
 
 class AccountRun(BaseModel):
@@ -155,6 +156,9 @@ def run_account(a: Account, root: Path, store: PriceStore, benchmark: str, today
         out.flags.append(note)
     if (end - res.first_trade).days < SHORT_HISTORY_DAYS:
         out.flags.append("short history")
+    last = max(e.when for e in hist.events)
+    if not a.closed and (end - last).days > HISTORY_GAP_DAYS:
+        out.flags.append(f"history ends {last}, ending value is from {end}: anything in between is not in the figures; windows stop at the last month-end")
     if a.closed:
         out.flags.append("closed")
     return out
