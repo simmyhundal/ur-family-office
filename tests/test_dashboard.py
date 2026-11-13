@@ -152,3 +152,33 @@ console.log(JSON.stringify(out));
     assert o["pct"]["lo"] == pytest.approx(-0.05) and o["pct"]["hi"] == pytest.approx(0.2) and 0 in [round(x, 9) for x in o["pct"]["ticks"]]
     assert o["money"] == ["$0", "$100K", "$250K", "$1.5M"]
     assert '>$0<' in o["lines"] and 'class="zero"' in o["lines"] and 'class="zero"' in o["risk"]
+
+
+def test_windows_under_a_year_are_cumulative_not_annualized(tmp_path):
+    """Decision 0011: a sub-year window shows the cumulative IRR and time-weighted return, a longer one per year."""
+    from datetime import date
+    from ufo.performance import dashboard as DB
+    from ufo.performance import metrics as M
+    from ufo.performance.compare import run_all
+    reg = build(tmp_path)
+    st, _ = store(tmp_path)
+    runs = run_all(reg, tmp_path, st, "IDX", TODAY)
+    r = next(x for x in runs if x.account.id == "a")
+    rep = r.result.report
+    prices, _ = st.report(["IDX"], date(2019, 12, 1), r.end)
+    flows = [(e.when, e.external_flow) for e in r.events if e.external_flow]
+    start = date(2021, 12, 31)
+    ytd = DB._stats(flows, rep, r.end, r.end_value, prices["IDX"], start, {}, True, None)
+    assert ytd["cum"] is True
+    i = max(k for k, m in enumerate(rep.months) if m <= start)
+    od = rep.months[i]
+    ext = [(d, a) for d, a in flows if od < d <= r.end]
+    ann = M.xirr(M.investor_flows(ext, r.end, r.end_value) + [(od, -rep.values[i])])
+    assert ytd["irr"] == pytest.approx((1 + ann) ** ((r.end - od).days / 365) - 1)
+    g = 1.0
+    for x in rep.port_returns[i + 1:]:
+        g *= 1 + x
+    assert ytd["twr"] == pytest.approx(g - 1) and ytd["twr_thru"] == str(rep.months[-1])
+    assert any(f.startswith("history ends 2021-06-15") for f in r.flags)  # the ending value is far after the last transaction
+    two = DB._stats(flows, rep, r.end, r.end_value, prices["IDX"], date(2020, 6, 30), {}, True, None)
+    assert two["cum"] is False

@@ -60,25 +60,32 @@ def _stats(flows, report, end, end_value, index: Series, start: date | None, ext
             return None
         i = idx[-1]
         od, ov = report.months[i], (opening or {}).get(report.months[i], report.values[i])
-        ext_flows = [(d, a) for d, a in fl if d > od]
+        ext_flows = [(d, a) for d, a in fl if od < d <= end]
         if (end - od).days < 28:
             return None
-        irr = M.xirr(M.investor_flows(ext_flows, end, end_value) + [(od, -ov)])
+        span = (end - od).days
+        cum = span < 365  # decision 0011: a window under a year is never annualized; show the cumulative return
+
+        def conv(r):
+            return (1 + r) ** (span / 365) - 1 if cum and r is not None and r > -1 else r
+        irr = conv(M.xirr(M.investor_flows(ext_flows, end, end_value) + [(od, -ov)]))
         base = [(od, ov)]
         cf = M.index_counterfactual(base + ext_flows, index, end)
+        cf = cf.model_copy(update={"irr": conv(cf.irr)})
         chart = _window_chart(report, i, end, end_value, base + ext_flows, index, market, ov)
         if not market:  # the benchmark comparison needs only dated flows and values; the return measures need prices
             return {"value": end_value, "net_in": sum(a for _, a in ext_flows), "irr": irr, "bench_irr": cf.irr,
                     "excess": (irr - cf.irr) if irr is not None and cf.irr is not None else None, "bench_end": cf.terminal_value,
-                    "twr": None, "sharpe": None, "dd": None, "exact": False, "open": str(od), "extras": {}, "chart": chart, "risk": None}
+                    "twr": None, "sharpe": None, "dd": None, "exact": False, "open": str(od), "extras": {}, "chart": chart, "risk": None,
+                    "cum": cum, "thru": str(end), "twr_thru": None}
         rets = [r for r in report.port_returns[i + 1:] if r is not None]
         vol = M.volatility(rets)
         unstable = any(r <= -1 for r in rets) or (vol is not None and vol > MAX_PLAUSIBLE_VOL)  # months with almost no capital
         g = [] if unstable else M.growth_index(rets)
         out = {"value": end_value, "net_in": sum(a for _, a in ext_flows), "irr": irr, "bench_irr": cf.irr,
                "excess": (irr - cf.irr) if irr is not None and cf.irr is not None else None, "bench_end": cf.terminal_value,
-               "twr": M.annualize(g[-1], len(g)) if g else None, "sharpe": None, "dd": M.max_drawdown(g) if g else None,
-               "exact": False, "open": str(od), "chart": chart, "unstable": unstable,
+               "twr": ((g[-1] - 1) if cum else M.annualize(g[-1], len(g))) if g else None, "sharpe": None, "dd": M.max_drawdown(g) if g else None,
+               "exact": False, "open": str(od), "chart": chart, "unstable": unstable, "cum": cum, "thru": str(end), "twr_thru": str(report.months[-1]),
                "risk": {"vol": None, "ret": None, "sharpe": None} if unstable else _window_risk(report, i, rf)}
     out["extras"] = {}
     if not market:
@@ -87,6 +94,7 @@ def _stats(flows, report, end, end_value, index: Series, start: date | None, ext
         steps = M.basket_units(sorted(base + ext_flows), weights, series)
         v = M.basket_value(steps, series, end)
         r = M.xirr(M.investor_flows(sorted(base + ext_flows), end, v)) if v > 0 else None
+        r = (1 + r) ** (((end - base[0][0]).days) / 365) - 1 if out.get("cum") and r is not None and r > -1 and base else r
         out["extras"][name] = {"excess": (irr - r) if irr is not None and r is not None else None, "end": v}
     return out
 
@@ -292,11 +300,11 @@ function trow(e,label,cls){
    dd:nm||(w.unstable?'monthly returns in this window are not meaningful: some months had very little capital':'no monthly returns to measure a fall from')};
   const c=(f,v,k)=>v==null?`<td class="na" title="${esc(why[k])}">n/a</td>`:`<td>${f(v)}</td>`;
   return `<tr class="${cls}"><td>${label}${e.closed?' <span class="small">(closed)</span>':''}</td><td>${esc(e.type)}</td><td>${e.start}</td><td>${money(w.value)}</td><td>${money(w.net_in)}</td>`+
-   c(pct,w.irr,'irr')+c(spct,w.excess,'excess')+c(money,w.bench_end,'bench')+c(pct,w.twr,'twr')+c(num,w.sharpe,'sharpe')+c(pct,w.dd,'dd')+
-   `<td class="${q==='exact'?'exact':'est'}">${q}, as of ${e.as_of}${e.note?' (common month-end)':''}</td>`+D.extras.map(n=>c(spct,w.extras[n]&&w.extras[n].excess,'excess')).join('')+'</tr>';}
+   c(pct,w.irr,'irr')+(w.twr_thru&&w.twr!=null&&w.twr_thru!==w.thru?`<td title="through ${w.twr_thru}">${pct(w.twr)}</td>`:c(pct,w.twr,'twr'))+c(spct,w.excess,'excess')+c(money,w.bench_end,'bench')+c(num,w.sharpe,'sharpe')+c(pct,w.dd,'dd')+
+   `<td class="${q==='exact'?'exact':'est'}" title="${esc((e.flags||[]).join('; '))}">${q}, as of ${w.thru||e.as_of}${e.note?' (common month-end)':''}${(e.flags||[]).some(f=>f.startsWith('history ends'))?' *':''}</td>`+D.extras.map(n=>c(spct,w.extras[n]&&w.extras[n].excess,'excess')).join('')+'</tr>';}
 let NCOLS=12;
 function table(rs){
- const head=['Account','Type','Started','Value','Net in','IRR','Excess IRR vs '+D.benchmark,'Worth today in '+D.benchmark,'Time-weighted /yr (est.)','Sharpe (est.)','Worst fall','Data']
+ const head=['Account','Type','Started','Value','Net in','IRR','Time-weighted return (est.)','Excess IRR vs '+D.benchmark,'Worth today in '+D.benchmark,'Sharpe (est.)','Worst fall','Data']
   .concat(D.extras.map(n=>'Excess vs '+n));
  NCOLS=head.length;
  let h='<tr>'+head.map(x=>`<th>${esc(x)}</th>`).join('')+'</tr>';
@@ -390,8 +398,8 @@ function draw(){
  seg($('#tabs'),[['main','Dashboard'],['sharpe','How Sharpe works']],()=>tab,k=>{tab=k;});showTab();
  seg($('#wins'),D.windows,()=>win,k=>win=k);seg($('#grps'),GROUPS,()=>grp,k=>grp=k);
  const rs=rows();table(rs);bars(rs);lines(rs);holdings();scatter();
- $('#winnote').textContent=win==='inception'?'Since inception: IRR uses exact dated flows plus the ending value.':
-  'Windowed figures are estimated: they start from a reconstructed month-end value. Accounts that do not cover the window show n/a. Sharpe is shown since inception only.';
+ $('#winnote').textContent=win==='inception'?'Since inception: IRR uses exact dated flows plus the ending value; returns are per year.':
+  'Windowed figures are estimated: they start from a month-end value (a statement where there is one, otherwise rebuilt from the history) and end at the last month-end the history covers. A window under a year is cumulative, not annualized (IRR, time-weighted return and excess alike); longer windows are per year. Accounts that do not cover the window show n/a. Sharpe is shown since inception only. A * means the history ends before the ending value (hover for details): the IRR then reaches that later date while the time-weighted return stops at the last month-end.';
  $('#empty').hidden=rs.length>0;}
 $('#bench').onchange=e=>{showBench=e.target.checked;draw();};
 document.querySelectorAll('[data-theme-set]').forEach(b=>b.onclick=()=>{const v=b.dataset.themeSet;v==='auto'?document.documentElement.removeAttribute('data-theme'):document.documentElement.setAttribute('data-theme',v);});
