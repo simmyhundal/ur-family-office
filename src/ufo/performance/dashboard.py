@@ -248,10 +248,12 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
     for label, kind, gk, acct, flows, rep, end, ev, quality, flags, err, market, opening in pairs:
         e = {"label": label, "kind": kind, "groupKind": gk, "error": err, "flags": flags}
         if acct is not None:
-            e.update(market=acct.market, type=acct.wrapper.value, brokerage=acct.brokerage, owner=acct.owner)
+            e.update(market=acct.market, type=acct.wrapper.value, brokerage=acct.institution_name, owner=acct.owner)
             run = next((r for r in runs if r.account is acct), None)
             if run and run.holdings:
                 e["holdings"] = dict(summarize(run.holdings, classes or {}), as_of=str(run.holdings_as_of))
+            elif run and run.holdings_note:
+                e["holdings_note"] = run.holdings_note
         else:
             e.update(type="combined", members=[next((r.account.label for r in runs if r.account.id == m), m) for m in next(g.members for g in groups if g.name == label)])
         if rep is None:
@@ -399,15 +401,19 @@ function scatter(){
   for(const v of yt.ticks)s+=`<line class="${v===0?'zero':'grid'}" x1="${L}" x2="${W-Rr}" y1="${Y(v)}" y2="${Y(v)}"/><text class="axis" x="${L-6}" y="${Y(v)+4}" text-anchor="end">${pct(v)}</text>`;
   for(const u of xt.ticks)s+=`<line class="grid" x1="${X(u)}" x2="${X(u)}" y1="${T}" y2="${H-B}"/><line class="zero" x1="${X(u)}" x2="${X(u)}" y1="${Y(0)}" y2="${Y(0)+4}"/><text class="axis" x="${X(u)}" y="${H-24}" text-anchor="middle">${pct(u)}</text>`;
   s+=`<text class="axis" x="${(L+W-Rr)/2}" y="${H-6}" text-anchor="middle">Volatility (annual, lower is calmer)</text><text class="axis" x="14" y="${(T+H-B)/2}" text-anchor="middle" transform="rotate(-90 14 ${(T+H-B)/2})">Return per year</text>`;
-  const ly={};let last=-99;[...P].sort((a,b)=>Y(a.ret)-Y(b.ret)).forEach(p=>{last=Math.max(Y(p.ret),last+12);ly[p.label+p.kind]=last;});
-  for(const p of P){const tip=`${p.label}: return ${pct(p.ret)}, volatility ${pct(p.vol)}, Sharpe ${num(p.sharpe)}${p.exact?'':' (estimated)'}`;
-   s+=`<g class="pt pt-${p.kind}"><title>${esc(tip)}</title><circle class="${p.exact?'solid':'hollow'}" cx="${X(p.vol)}" cy="${Y(p.ret)}" r="${p.kind==='all'?9:6}"/>`+
-      `<text class="axis" x="${X(p.vol)>W*0.7?X(p.vol)-11:X(p.vol)+11}" text-anchor="${X(p.vol)>W*0.7?'end':'start'}" y="${ly[p.label+p.kind]+4}">${esc(p.label)} · S ${num(p.sharpe)}</text></g>`;}
-  $('#risk').innerHTML=s+'</svg>';}
+  const placed=[];let leg='<ol class="small riskkey">';
+  P.forEach((p,i)=>{const n=i+1,cx=X(p.vol),cy=Y(p.ret),left=cx>W*0.7,tx=left?cx-11:cx+11;let ty=cy+4;
+   while(placed.some(q=>Math.abs(q[0]-tx)<22&&Math.abs(q[1]-ty)<12))ty+=12;placed.push([tx,ty]);
+   const tip=`${p.label}: return ${pct(p.ret)}, volatility ${pct(p.vol)}, Sharpe ${num(p.sharpe)}${p.exact?'':' (estimated)'}`;
+   s+=`<g class="pt pt-${p.kind}"><title>${esc(tip)}</title><circle class="${p.exact?'solid':'hollow'}" cx="${cx}" cy="${cy}" r="${p.kind==='all'?9:6}"/>`+
+      `<text class="axis" x="${tx}" text-anchor="${left?'end':'start'}" y="${ty}">${n}</text></g>`;
+   leg+=`<li value="${n}">${esc(p.label)} · return ${pct(p.ret)}, volatility ${pct(p.vol)}, Sharpe ${num(p.sharpe)}${p.exact?'':' (estimated)'}</li>`;});
+  $('#risk').innerHTML=s+'</svg>'+leg+'</ol>';}
  $('#riskleft').textContent=LO.length?'Not on the chart: '+LO.map(([l,w])=>l+' ('+w+')').join('; ')+'.':'';}
 function holdings(){
- const shown=new Set(rows().flatMap(e=>e.members||[e.label])),es=D.entities.filter(e=>e.kind==='account'&&e.holdings&&(grp==='all'||shown.has(e.label)));
- if(!es.length){$('#hold').innerHTML='';return;}
+ const shown=new Set(rows().flatMap(e=>e.members||[e.label])),vis=D.entities.filter(e=>e.kind==='account'&&(grp==='all'||shown.has(e.label))),es=vis.filter(e=>e.holdings),
+  na=vis.filter(e=>!e.holdings&&e.holdings_note).map(e=>`<li>${esc(e.label)}: ${esc(e.holdings_note)}</li>`).join('');
+ if(!es.length){$('#hold').innerHTML=na?'<h2>What each account holds</h2><ul class="small">'+na+'</ul>':'';return;}
  const keys=D.classes.filter(([k])=>es.some(e=>e.holdings.by_class[k]));
  let h='<h2>What each account holds</h2><div class="scroll"><table><tr><th>Account</th>'+keys.map(([k,l])=>`<th>${esc(l)}</th>`).join('')+'</tr>';
  for(const e of es)h+=`<tr><td>${esc(e.label)}</td>`+keys.map(([k])=>`<td>${e.holdings.by_class[k]?pct(e.holdings.by_class[k]):'-'}</td>`).join('')+'</tr>';
@@ -416,7 +422,7 @@ function holdings(){
  for(const e of es){
   h+=`<details><summary>${esc(e.label)}: ${money(e.holdings.total)} as of ${esc(e.holdings.as_of)}</summary><div class="scroll"><table><tr><th>Fund</th><th>Class</th><th>Value</th><th>Weight</th></tr>`+
    e.holdings.rows.map(r=>`<tr><td>${esc(r.symbol)}${r.name?' <span class="small">'+esc(r.name)+'</span>':''}</td><td>${esc(names[r.cls])}</td><td>${money(r.value)}</td><td>${pct(r.weight)}</td></tr>`).join('')+'</table></div></details>';}
- $('#hold').innerHTML=h+'<p class="small">Classes come from your local file .data/asset_classes.json; tickers missing from it show as Unclassified. Global and balanced funds are filed under Other.</p>';}
+ $('#hold').innerHTML=h+'<p class="small">Classes come from your local file .data/asset_classes.json; tickers missing from it show as Unclassified. Funds with world or global in the name count as Global stock, and balanced or target-date funds as Balanced, unless the file says otherwise.</p>'+(na?'<ul class="small">'+na+'</ul>':'');}
 function sharpeTab(){
  const L=bm===D.benchmark?D.lesson:(D.lessons[bm]||D.lesson);$('#lesson').innerHTML=L.html;
  const P=L.points,c=$('#sharpechart');if(!c)return;
@@ -468,7 +474,7 @@ def render(data: dict) -> str:
 <section><div class="scroll"><table id="tbl"></table></div></section>
 <figure><h2>Excess IRR per account</h2><div id="bars"></div><figcaption>IRR of the real flows minus the IRR of the same deposits and withdrawals put into <span class="bml"></span>. Sorted best first.</figcaption></figure>
 <figure><h2>Value over time</h2><div class="key" id="key"></div><div id="lines"></div><figcaption>Month-end values are estimated; the endpoints are exact.</figcaption></figure>
-<figure><h2>Risk versus return</h2><div id="risk"></div><figcaption>Each point is one account, group, your whole portfolio (large) or a benchmark (grey): time-weighted return per year against how much it swings, with its Sharpe ratio (S, return above the T-bill rate per unit of risk) in the label. Since each one's start; benchmarks cover the whole-portfolio period. Hollow points are estimated from reconstructed month-end values (decision 0011). Hover for the figures.</figcaption><p class="small" id="riskleft"></p></figure>
+<figure><h2>Risk versus return</h2><div id="risk"></div><figcaption>Each point is one account, group, your whole portfolio (large) or a benchmark (grey): time-weighted return per year against how much it swings, numbered, with the names and Sharpe ratio (return above the T-bill rate per unit of risk) in the list below the chart. Since each one's start; benchmarks cover the whole-portfolio period. Hollow points are estimated from reconstructed month-end values (decision 0011). Hover for the figures.</figcaption><p class="small" id="riskleft"></p></figure>
 <section id="hold"></section>
 </div>
 <div id="tab-sharpe" hidden><article id="lesson" class="lesson"></article></div>

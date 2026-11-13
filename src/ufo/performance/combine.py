@@ -19,6 +19,7 @@ from ufo.providers.prices import PriceError, PriceStore
 WINDOW_DAYS = 5
 CASH_TOLERANCE = 0.01  # a cash transfer's two sides may differ by 1% (or $1)
 QTY_TOLERANCE = 1e-6
+NONMARKET_NOTE = "includes non-market accounts"  # their flows are compared with the benchmark too, so the excess IRR is not like for like
 
 
 class Transfer(BaseModel):
@@ -139,13 +140,15 @@ def combine(kind: str, name: str, runs: list[AccountRun], store: PriceStore, ben
     g.end, g.end_value = end, (sum(values_at.values()) if values_at else sum(r.end_value for r in runs))
     g.report = M.analyze(flows, months, [by_month[m] for m in months], prices[benchmark], rf, end, g.end_value)
     g.quality = "exact" if exact else "estimated"
+    if any(not r.market for r in runs):
+        g.note = "; ".join(x for x in (g.note, NONMARKET_NOTE) if x)
     return g
 
 
 def groups(runs: list[AccountRun], singletons: bool = False) -> list[tuple[str, str, list[AccountRun]]]:
     """The combined lines worth showing: everything, and each brokerage / owner / wrapper holding two or more accounts."""
     out = [("all", "All accounts", runs)] if len(runs) > 1 else []
-    for kind, key in (("brokerage", lambda r: r.account.brokerage), ("owner", lambda r: r.account.owner),
+    for kind, key in (("brokerage", lambda r: r.account.institution_name), ("owner", lambda r: r.account.owner),
                       ("wrapper", lambda r: r.account.wrapper.value)):
         by: dict[str, list[AccountRun]] = {}
         for r in runs:

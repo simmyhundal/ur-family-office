@@ -24,6 +24,7 @@ from ufo.providers.prices import PriceError, PriceStore, Series
 
 MAX_VALUE_AGE_DAYS = 45
 SHORT_HISTORY_DAYS = 90
+NARROW_WIDTH = 120  # terminal columns below which the table shows fewer columns
 HISTORY_GAP_DAYS = 7  # an ending value this many days after the last transaction may include activity the history lacks
 
 
@@ -39,6 +40,15 @@ class AccountRun(BaseModel):
     holdings_as_of: date | None = None
     anchors: dict[date, tuple[float, str]] = {}  # dated values the account itself supplies: statement or snapshot
     error: str = ""
+
+    @property
+    def holdings_note(self) -> str:
+        """Why there is no holdings table for this account ('' when there is one or the run failed)."""
+        if self.holdings or self.error:
+            return ""
+        if hasattr(importers.get(self.account.source.importer), "holdings") and self.account.source.snapshot_glob:
+            return "holdings not available: no positions file lists this account"
+        return "holdings not available: this brokerage's files do not list positions"
 
     @property
     def market(self) -> bool:
@@ -194,30 +204,37 @@ def run_all(reg: Registry, root: Path, store: PriceStore, benchmark: str = "VTI"
 def print_table(runs: list[AccountRun], benchmark: str, console: Console | None = None, notes: list[str] | None = None,
                 groups: list | None = None) -> None:
     c = console or Console()
+    narrow = c.width < NARROW_WIDTH  # the full table stays in the HTML dashboard; a narrow terminal drops Type and Net in and folds Data into Notes
     t = Table(title=f"All accounts vs {benchmark}", header_style="bold")
-    for col, right in (("Account", False), ("Type", False), ("Value", True), ("Net in", True), ("IRR", True),
-                       (f"Excess IRR vs {benchmark}", True), ("Data", False), ("Notes", False)):
-        t.add_column(col, justify="right" if right else "left")
+    cols = (("Account", False), ("Value", True), ("IRR", True), (f"Excess vs {benchmark}", True), ("Notes", False)) if narrow else \
+        (("Account", False), ("Type", False), ("Value", True), ("Net in", True), ("IRR", True), (f"Excess IRR vs {benchmark}", True), ("Data", False), ("Notes", False))
+    for col, right in cols:
+        t.add_column(col, justify="right" if right else "left", overflow="fold" if col == "Notes" else "ellipsis", min_width=8 if col != "Notes" else 12)
+
+    def add(label, typ, value, net, irr, excess, data, note, **kw):
+        row = (label, value, irr, excess, ", ".join(x for x in (data, note) if x)) if narrow else (label, typ, value, net, irr, excess, data, note)
+        t.add_row(*row, **kw)
+
     for r in runs:
         a = r.account
         if r.error:
-            t.add_row(a.label, a.wrapper.value, "", "", "", "", "[red]not computed[/red]", r.error)
+            add(a.label, a.wrapper.value, "", "", "", "", "[red]not computed[/red]", r.error)
             continue
         rep = r.result.report
-        t.add_row(a.label, a.wrapper.value, money(r.end_value), ("-" if r.net_contributions < 0 else "") + money(abs(r.net_contributions)), pct(rep.irr),
-                  spct(rep.excess_irr), r.quality, ", ".join(r.flags + (["no market prices: no time-weighted return, Sharpe or drawdown"] if not r.market else [])))
+        add(a.label, a.wrapper.value, money(r.end_value), ("-" if r.net_contributions < 0 else "") + money(abs(r.net_contributions)), pct(rep.irr),
+            spct(rep.excess_irr), r.quality, ", ".join(r.flags + (["no market prices: no time-weighted return, Sharpe or drawdown"] if not r.market else [])))
     first = True
     for g in groups or []:
         total = g.kind == "all"
         name = "Total, all accounts" if total else g.name
         if g.error or g.report is None:
-            t.add_row(f"[bold]{name}[/bold]", "total" if total else "combined", "", "", "", "", "[red]not computed[/red]", g.error)
+            add(f"[bold]{name}[/bold]", "total" if total else "combined", "", "", "", "", "[red]not computed[/red]", g.error)
             continue
         rep = g.report
         net = rep.contributed - rep.withdrawn
-        t.add_row(f"[bold]{name}[/bold]", "total" if total else "combined", money(g.end_value), ("-" if net < 0 else "") + money(abs(net)),
-                  pct(rep.irr), spct(rep.excess_irr), f"{g.quality}, as of {g.end}",
-                  ", ".join([f"{len(g.transfers)} netted"] + ([g.note] if g.note else [])), end_section=first and not total)
+        add(f"[bold]{name}[/bold]", "total" if total else "combined", money(g.end_value), ("-" if net < 0 else "") + money(abs(net)),
+            pct(rep.irr), spct(rep.excess_irr), f"{g.quality}, as of {g.end}",
+            ", ".join([f"{len(g.transfers)} netted"] + ([g.note] if g.note else [])), end_section=first and not total)
         first = False
         if total:
             t.rows[-1].end_section = True
