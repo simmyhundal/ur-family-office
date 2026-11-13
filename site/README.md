@@ -9,3 +9,8 @@ A static page: enter a mix of funds, pick a benchmark (SPY by default), see the 
 - **Locally:** `cd site && python -m http.server 8000`.
 - **Tests:** `node --test tests/site/calc.test.mjs` and `pytest` (parity with `src/ufo/performance/metrics.py`, and the price builder).
 - Information only, not advice.
+
+## Sample portfolio and "How Sharpe works"
+- **Try it with a sample portfolio** loads an invented "Sample MBA student" ($2,000 to start, $500 a month into VTI 50 / VXUS 20 / BND 20 / QQQ 10) against the default benchmark, on the real bundled prices (the demo funds when only demo data exists). It is labelled as a sample; editing anything clears the label.
+- **How Sharpe works** (below the results) walks the loaded mix through the same steps as `docs/lessons/sharpe-ratio.md`: monthly returns with a worked month, minus T-bills, average x12, volatility x sqrt(12) with the one-SD count, divide, the compounding note, then the portfolio-theory part (a 50/50 blend of the mix's two largest funds, and Sharpe as a slope). With a user CSV there is no cash rate, so the steps after the monthly table show n/a.
+- The math lives in `calc.mjs` (`sharpeSteps`, `blend5050`, `correlation`, `priceReturns`) with node tests; no new network calls.

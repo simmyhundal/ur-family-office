@@ -16,7 +16,7 @@
 
 <main class="wrap">
   <section class="panel" aria-labelledby="mix-h">
-    <div class="mix-head"><h2 id="mix-h">Mix</h2><label class="inline">Start from <select id="preset"></select></label></div>
+    <div class="mix-head"><h2 id="mix-h">Mix</h2><button type="button" id="sample" class="secondary">Try it with a sample portfolio</button><label class="inline">Start from <select id="preset"></select></label></div>
     <div id="rows"></div>
     <div class="row-actions">
       <button type="button" id="add-row" class="secondary">Add a fund</button>
@@ -41,6 +41,7 @@
       <label><span class="tip" tabindex="0" data-tip="The amount invested on the first day." aria-description="The amount invested on the first day.">Start ($)</span><input id="initial" type="number" min="1" step="100" value="10000" inputmode="decimal"></label>
       <label><span class="tip" tabindex="0" data-tip="Money added at the end of every month, split by your weights." aria-description="Money added at the end of every month, split by your weights.">Add monthly ($)</span><input id="monthly" type="number" min="0" step="50" value="0" inputmode="decimal"></label>
     </div>
+    <p id="sample-note" class="banner" role="status" hidden><b>Sample portfolio.</b> An invented person (“Sample MBA student”): $2,000 to start, then $500 a month into a made-up mix of funds. The prices are real; the person is not. Change anything above to try your own.</p>
     <p id="error" class="error" role="alert"></p>
   </section>
 
@@ -61,6 +62,11 @@
       <div id="table-wrap" hidden></div>
     </figure>
   </section>
+
+  <details class="panel" id="lesson">
+    <summary>How Sharpe works, step by step</summary>
+    <div id="lesson-body" class="lesson"></div>
+  </details>
 
   <details class="panel own">
     <summary>Use your own prices (CSV)</summary>
