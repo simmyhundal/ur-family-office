@@ -44,18 +44,18 @@ def test_split_keeps_old_and_new_shares_in_the_same_units():
 
 
 def test_cd_accrues_and_matures_into_cash():
-    desc = "ALLY BK CD 2.00000% 01/02/2021"
+    desc = "EXAMPLE BK CD 3.10000% 01/02/2021"
     events = [
         ev(D(2020, 1, 2), Kind.CONTRIBUTION, amt=1000.0, bal=1000.0),
-        ev(D(2020, 1, 2), Kind.BUY, "02007GPF4", 1000, 100.0, -1000.0, 0.0, desc, seq=1),
-        ev(D(2021, 1, 15), Kind.CONTRIBUTION, amt=5.0, bal=1025.0),  # cash jumped by 1020 + 5 deposit => CD proceeds
+        ev(D(2020, 1, 2), Kind.BUY, "7ZQ4B91M3", 1000, 100.0, -1000.0, 0.0, desc, seq=1),
+        ev(D(2021, 1, 15), Kind.CONTRIBUTION, amt=5.0, bal=1036.0),  # cash jumped by 1031 + 5 deposit => CD proceeds
     ]
-    assert is_fixed_income("02007GPF4") and not is_fixed_income("ACME")
+    assert is_fixed_income("7ZQ4B91M3") and not is_fixed_income("ACME")
     L = Ledger(events, {})
     mid = L.value_on(D(2020, 7, 1))
-    assert 1000.0 < mid.fixed_income < 1020.0 and mid.cash == 0.0
+    assert 1000.0 < mid.fixed_income < 1031.0 and mid.cash == 0.0
     after = L.value_on(D(2021, 1, 10))
-    assert after.fixed_income == 0.0 and after.cash == pytest.approx(1020.0, abs=0.5)
+    assert after.fixed_income == 0.0 and after.cash == pytest.approx(1031.0, abs=0.5)
     assert [c.why for c in L.credits] == ["maturity"]
     assert L.flows() == [(D(2020, 1, 2), 1000.0), (D(2021, 1, 15), 5.0)]  # the maturity is never a contribution
 
@@ -118,11 +118,11 @@ def test_in_kind_shares_count_even_without_a_snapshot():
 
 CD_ROWS = [
     "01/02/2020,Electronic Funds Transfer Received (Cash),,No Description,Cash,40000,USD,USD,,40000,0,,,,40000.00,40000,",
-    "01/03/2020,YOU BOUGHT ALLY BK CD 2.00000% 07/03/2020 (02007GPF4) (Cash),02007GPF4,ALLY BK CD 2.00000% 07/03/2020,Cash,10000,USD,USD,100,10000,0,,,,-10000.00,30000,",
+    "01/03/2020,YOU BOUGHT EXAMPLE BK CD 3.10000% 07/03/2020 (7ZQ4B91M3) (Cash),7ZQ4B91M3,EXAMPLE BK CD 3.10000% 07/03/2020,Cash,10000,USD,USD,100,10000,0,,,,-10000.00,30000,",
     "01/03/2020,YOU BOUGHT TREASURY BILL 0.00000% 07/03/2020 (912796XX1) (Cash),912796XX1,UNITED STATES TREAS BILLS 0.000% 07/03/2020,Cash,10000,USD,USD,98,10000,0,,,,-9800.00,20200,",
-    "07/03/2020,REDEMPTION PAYOUT ALLY BK CD 2.00000% 07/03/2020 (02007GPF4) (Cash),02007GPF4,ALLY BK CD 2.00000% 07/03/2020,Cash,-10000,USD,USD,100,-10000,0,,,,10000.00,,",
+    "07/03/2020,REDEMPTION PAYOUT EXAMPLE BK CD 3.10000% 07/03/2020 (7ZQ4B91M3) (Cash),7ZQ4B91M3,EXAMPLE BK CD 3.10000% 07/03/2020,Cash,-10000,USD,USD,100,-10000,0,,,,10000.00,,",
     "07/03/2020,REDEMPTION PAYOUT UNITED STATES TREAS BILLS 0.000% 07/03/2020 (912796XX1) (Cash),912796XX1,UNITED STATES TREAS BILLS 0.000% 07/03/2020,Cash,-10000,USD,USD,100,-10000,0,,,,10000.00,,",
-    "07/03/2020,INTEREST EARNED ALLY BK CD (02007GPF4) (Cash),02007GPF4,ALLY BK CD,Cash,0,USD,USD,,0,0,,,,100.00,40300,",
+    "07/03/2020,INTEREST EARNED EXAMPLE BK CD (7ZQ4B91M3) (Cash),7ZQ4B91M3,EXAMPLE BK CD,Cash,0,USD,USD,,0,0,,,,100.00,40300,",
 ]
 
 
