@@ -18,6 +18,7 @@
       "brokerage": "fidelity",
       "last_digits": "1111",
       "wrapper": "roth_ira",
+      "institution": "",
       "owner": "partner",
       "opened": "2021-01-15",
       "closed": null,

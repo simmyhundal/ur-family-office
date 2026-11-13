@@ -62,6 +62,7 @@ class Account(BaseModel):
     closed: date | None = None
     source: Source
     ending_value: EndValue | None = None
+    institution: str = ""  # who holds the money, for grouping; defaults to the brokerage (set it for 'manual' accounts)
     market: bool = True  # False for a fixed annuity or similar: no market prices, so no benchmark, Sharpe or volatility
 
     @field_validator("id")
@@ -85,6 +86,10 @@ class Account(BaseModel):
         if self.opened and self.closed and self.closed < self.opened:
             raise ValueError("closed date is before the opened date")
         return self
+
+    @property
+    def institution_name(self) -> str:
+        return self.institution.strip().lower() or self.brokerage
 
     @property
     def is_closed(self) -> bool:
