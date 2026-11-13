@@ -47,7 +47,8 @@ def test_toy_importer_events_feed_the_ledger(tmp_path):
                                                     Point(day=date(2024, 4, 1), value=60.0, close=60.0)])}
     led = Ledger(hist.events, prices)
     assert led.flows() == [(date(2024, 1, 2), 1000.0), (date(2024, 3, 1), -300.0)]
-    assert led.value_on(date(2024, 3, 15)).holdings == 10 * 50.0  # in-kind share moves are fixed by snapshot anchoring, as for Fidelity
+    b = led.value_on(date(2024, 3, 15))
+    assert (b.holdings, b.cash) == (5 * 50.0, 500.0)  # 5 of the 10 shares left in kind: shares drop, cash does not move
     assert hist.events[2].transfer_hint and hist.events[2].external_flow == -300.0  # still external for this account alone
 
 

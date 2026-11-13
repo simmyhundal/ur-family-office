@@ -25,6 +25,8 @@ from ufo.providers.prices import PriceError, PriceStore, Series
 MAX_VALUE_AGE_DAYS = 45
 SHORT_HISTORY_DAYS = 90
 NARROW_WIDTH = 120  # terminal columns below which the table shows fewer columns
+RECONCILE_TOLERANCE = 0.02  # a rebuilt month-end value more than this far from a snapshot or statement value is not trusted
+UNRECONCILED = "estimated, does not reconcile"
 HISTORY_GAP_DAYS = 7  # an ending value this many days after the last transaction may include activity the history lacks
 
 
@@ -40,6 +42,7 @@ class AccountRun(BaseModel):
     holdings_as_of: date | None = None
     anchors: dict[date, tuple[float, str]] = {}  # dated values the account itself supplies: statement or snapshot
     error: str = ""
+    unreconciled: str = ""  # why the rebuilt month-end values cannot be trusted ('' when they match every snapshot/statement)
 
     @property
     def holdings_note(self) -> str:
@@ -160,6 +163,13 @@ def run_account(a: Account, root: Path, store: PriceStore, benchmark: str, today
     out.result, out.events, out.end, out.end_value = res, hist.events, end, value
     bad = [q for q in res.reconciliation if not q["ok"]]
     out.quality = "exact" if stmt and not bad and not res.income_credited else "estimated"
+    off = [q for q in res.reconciliation if abs(q["pct"]) > RECONCILE_TOLERANCE]
+    if off:  # month-end values (windows, combined lines, Sharpe, the value chart) rest on the rebuild: do not show them
+        worst = max(off, key=lambda q: abs(q["pct"]))
+        out.unreconciled = (f"the rebuilt value is {worst['pct']:+.0%} from the {worst['source']} on {worst['when']} "
+                            f"({len(off)} of {len(res.reconciliation)} checks off by more than {RECONCILE_TOLERANCE:.0%})")
+        out.quality = UNRECONCILED
+        out.flags.append(f"{UNRECONCILED}: {out.unreconciled}; left out of windowed figures and combined lines (since-inception IRR is unaffected)")
     note = getattr(imp, "estimate_note", "")  # an importer whose statements leave flow dates or values inside a period unknown
     if note:
         out.quality = "estimated"

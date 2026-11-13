@@ -121,7 +121,7 @@ def _group_opening(g: GroupRun, runs: list[AccountRun]) -> dict[date, float]:
     snapshot where the account has one, otherwise the rebuilt ledger). A member not yet open, or already closed, counts 0."""
     out: dict[date, float] = {}
     for r in runs:
-        if r.account.id not in g.members or r.result is None:
+        if r.account.id not in g.members or r.result is None or r.unreconciled:
             continue
         rep = r.result.report
         for m, v in zip(rep.months, rep.values):
@@ -202,6 +202,9 @@ def risk_data(ents: list[dict], runs: list[AccountRun], groups: list[GroupRun], 
             if e.get("error") or "windows" not in e or e["kind"] not in ("account", "group"):
                 continue
             kind = "all" if e.get("groupKind") == "all" else e["kind"]
+            if e.get("unreconciled"):
+                left.append([e["label"], "estimated, does not reconcile: month-end values do not match its statements", kind, ""])
+                continue
             if e.get("market") is False:
                 left.append([e["label"], "non-market account: no volatility", kind, ""])
                 continue
@@ -240,6 +243,7 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
     alts = {sym: s for sym, s in (benchmarks or {}).items() if sym != benchmark}
     order = ([benchmark] if benchmark not in dict(BENCHMARKS) else []) + [sym for sym, _ in BENCHMARKS if sym == benchmark or sym in alts]
     ents = []
+    good = [r for r in runs if not r.unreconciled]
     notes_ = {g.name: g.note for g in groups}
     pairs = [(r.account.label, "account", "", r.account, r.events and [(e.when, e.external_flow) for e in r.events if e.external_flow],
               r.result.report if r.result else None, r.end, r.end_value, r.quality, r.flags, r.error, r.market, {d: v for d, (v, _) in r.anchors.items()}) for r in runs]
@@ -247,6 +251,9 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
         pairs.append((g.name, "group", g.kind, None, g.flows, g.report, g.end, g.end_value, g.quality, [], g.error, True, _group_opening(g, runs) if g.report else None))
     for label, kind, gk, acct, flows, rep, end, ev, quality, flags, err, market, opening in pairs:
         e = {"label": label, "kind": kind, "groupKind": gk, "error": err, "flags": flags}
+        bad_run = next((r for r in runs if r.account is acct and r.unreconciled), None) if acct is not None else None
+        if bad_run:
+            e["unreconciled"] = bad_run.unreconciled
         if acct is not None:
             e.update(market=acct.market, type=acct.wrapper.value, brokerage=acct.institution_name, owner=acct.owner)
             run = next((r for r in runs if r.account is acct), None)
@@ -255,6 +262,7 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
             elif run and run.holdings_note:
                 e["holdings_note"] = run.holdings_note
         else:
+            e["excluded"] = list(next(g.excluded for g in groups if g.name == label))
             e.update(type="combined", members=[next((r.account.label for r in runs if r.account.id == m), m) for m in next(g.members for g in groups if g.name == label)])
         if rep is None:
             ents.append(e)
@@ -262,11 +270,16 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
         closed = bool(acct and acct.closed)
         note = notes_.get(label, "") if kind == "group" else ""
         e.update(start=str(rep.start), as_of=str(end), quality=quality, closed=closed,
-                 windows={k: (None if (k != "inception" and closed) else
+                 windows={k: (None if (k != "inception" and (closed or bad_run)) else
                               _stats(flows, rep, end, ev, index, window_start(k, asof), extras, market, rf, opening)) for k, _ in WINDOWS},
                  months=[str(m) for m in rep.months] + ([str(end)] if end not in rep.months else []),
                  values=[round(v, 2) for v in rep.values] + ([round(ev, 2)] if end not in rep.months else []),
                  bench=([round(v, 2) for v in rep.index_values] + ([round(rep.index_end_value, 2)] if end not in rep.months else [])) if market else [], note=note)
+        if bad_run:  # since-inception IRR and excess rest on dated flows plus the exact ending value; everything on month-ends is dropped
+            w = e["windows"]["inception"]
+            if w:
+                w.update(twr=None, sharpe=None, dd=None, risk=None, extras={})
+            e.update(months=None, values=None, bench=[])
         e["bm"] = {}
         for sym, series in alts.items():
             ws = {}
@@ -281,9 +294,9 @@ def build_data(runs: list[AccountRun], groups: list[GroupRun], benchmark: str, i
         ents.append(e)
     return {"benchmark": benchmark, "asof": str(asof), "windows": WINDOWS, "extras": list(extras), "entities": ents,
             "classes": [[k, v] for k, v in CLASSES.items()],
-            "risk": risk_data(ents, runs, groups, benchmark, extras, rf, asof, {benchmark: index, **alts}),
-            "lesson": build_lesson(runs, groups, label_of(benchmark), rf),
-            "lessons": {sym: build_lesson(runs, groups, label_of(sym), rf, index=s) for sym, s in alts.items()},
+            "risk": risk_data(ents, good, groups, benchmark, extras, rf, asof, {benchmark: index, **alts}),
+            "lesson": build_lesson(good, groups, label_of(benchmark), rf),
+            "lessons": {sym: build_lesson(good, groups, label_of(sym), rf, index=s) for sym, s in alts.items()},
             "benchmarks": [[sym, label_of(sym)] for sym in order], "benchmarkLabel": label_of(benchmark)}
 
 
@@ -334,8 +347,8 @@ function rows(){return D.entities.filter(e=>grp==='accounts'?e.kind==='account':
 function trow(e,label,cls){
   if(e.error||!e.windows)return `<tr class="${cls}"><td>${label}</td><td>${esc(e.type||'')}</td><td colspan="${NCOLS-2}" class="err">not computed: ${esc(e.error)}</td></tr>`;
   const w=WS(e);
-  if(!w)return `<tr class="${cls}"><td>${label}</td><td>${esc(e.type)}</td><td>${e.start}</td><td colspan="${NCOLS-3}" class="na" title="${esc(e.kind==='group'?'the combined line starts after this window begins, or has under a month of history in it':'this account starts after the window begins, or is closed')}">n/a: does not cover this window</td></tr>`;
-  const q=w.exact&&e.quality==='exact'?'exact':'estimated';
+  if(!w)return `<tr class="${cls}"><td>${label}</td><td>${esc(e.type)}</td><td>${e.start}</td><td colspan="${NCOLS-3}" class="na" title="${esc(e.unreconciled?'estimated, does not reconcile: '+e.unreconciled+'. Windowed figures are left out rather than shown wrong; the since-inception IRR is unaffected.':e.kind==='group'?'the combined line starts after this window begins, or has under a month of history in it':'this account starts after the window begins, or is closed')}">n/a: ${e.unreconciled?'estimated, does not reconcile':'does not cover this window'}</td></tr>`;
+  const q=e.unreconciled?'estimated, does not reconcile':w.exact&&e.quality==='exact'?'exact':'estimated';
   const nm=e.market===false?'non-market account: no prices, so no return-based measures':null, wn=win!=='inception';
   const why={irr:'no IRR: the dated flows and end value do not have both a deposit and a withdrawal or value',
    excess:'needs both an IRR and a benchmark IRR (none if withdrawals exceed what the benchmark could have funded)',
@@ -346,7 +359,7 @@ function trow(e,label,cls){
   const c=(f,v,k)=>v==null?`<td class="na" title="${esc(why[k])}">n/a</td>`:`<td>${f(v)}</td>`;
   return `<tr class="${cls}"><td>${label}${e.closed?' <span class="small">(closed)</span>':''}</td><td>${esc(e.type)}</td><td>${e.start}</td><td>${money(w.value)}</td><td>${money(w.net_in)}</td>`+
    c(pct,w.irr,'irr')+(w.twr_thru&&w.twr!=null&&w.twr_thru!==w.thru?`<td title="through ${w.twr_thru}">${pct(w.twr)}</td>`:c(pct,w.twr,'twr'))+c(spct,w.excess,'excess')+c(money,w.bench_end,'bench')+c(num,w.sharpe,'sharpe')+c(pct,w.dd,'dd')+
-   `<td class="${q==='exact'?'exact':'est'}" title="${esc((e.flags||[]).join('; '))}">${q}, as of ${w.thru||e.as_of}${e.note?' (common month-end)':''}${(e.flags||[]).some(f=>f.startsWith('history ends'))?' *':''}</td>`+D.extras.map(n=>c(spct,w.extras[n]&&w.extras[n].excess,'excess')).join('')+'</tr>';}
+   `<td class="${q==='exact'?'exact':'est'}" title="${esc((e.flags||[]).join('; ')+(e.excluded&&e.excluded.length?'; left out, does not reconcile: '+e.excluded.join(', '):''))}">${q}, as of ${w.thru||e.as_of}${e.note?' (common month-end)':''}${e.excluded&&e.excluded.length?'; left out, does not reconcile: '+esc(e.excluded.join(', ')):''}${(e.flags||[]).some(f=>f.startsWith('history ends'))?' *':''}</td>`+D.extras.map(n=>c(spct,w.extras[n]&&w.extras[n].excess,'excess')).join('')+'</tr>';}
 let NCOLS=12;
 function table(rs){
  const head=['Account','Type','Started','Value','Net in','IRR','Time-weighted return (est.)','Excess IRR vs '+BL(),'Worth today in '+BL(),'Sharpe (est.)','Worst fall','Data']
