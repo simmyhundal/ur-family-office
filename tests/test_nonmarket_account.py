@@ -1,4 +1,4 @@
-"""A fixed annuity (market: false) on invented data: n/a for market-only figures, no benchmark, still in the totals."""
+"""A fixed annuity (market: false) on invented data: benchmark comparison from its flows, n/a for price-history measures, still in the totals."""
 import json
 import re
 
@@ -35,7 +35,9 @@ def test_annuity_has_irr_but_no_benchmark_and_prices_untouched(tmp_path):
     ann = runs[-1]
     assert ann.error == "" and not ann.market
     rep = ann.result.report
-    assert rep.irr is not None and 0.03 < rep.irr < 0.06 and rep.excess_irr is None and rep.sharpe is None
+    assert rep.irr is not None and 0.03 < rep.irr < 0.06 and rep.sharpe is None and rep.twr_annual is None and rep.volatility is None and rep.beta is None
+    # the same deposit put into the benchmark gives a benchmark IRR, a worth-today and an excess IRR
+    assert rep.index_irr is not None and rep.index_end_value > 0 and abs(rep.excess_irr - (rep.irr - rep.index_irr)) < 1e-12
     assert ann.net_contributions == 3000.0 and ann.end_value == 3300.0
     assert [h.symbol for h in ann.holdings] == ["Fixed annuity"]
     # month-end values grow to the ending value's neighbourhood
@@ -51,7 +53,7 @@ def test_table_and_holdings_show_na_and_one_line(tmp_path):
     print_holdings(runs, {}, out)
     text = out.export_text()
     line = next(ln for ln in text.splitlines() if "Annuity" in ln and "roth_ira" in ln)
-    assert "n/a" in line and "$3,300" in line and "$3,000" in line
+    assert "n/a" not in line and "$3,300" in line and "$3,000" in line
     assert "Fixed annuity" in text
 
 
@@ -66,7 +68,7 @@ def test_annuity_counts_in_all_accounts(tmp_path):
     assert allg.end_value > without.end_value and (allg.report.contributed - without.report.contributed) == 3000.0
 
 
-def test_dashboard_marks_annuity_na_for_every_window(tmp_path):
+def test_dashboard_annuity_has_benchmark_but_no_price_history_measures(tmp_path):
     reg = _reg(tmp_path)
     st, _ = store(tmp_path)
     runs = run_all(reg, tmp_path, st, "IDX", TODAY)
@@ -77,7 +79,8 @@ def test_dashboard_marks_annuity_na_for_every_window(tmp_path):
     for w in ann["windows"].values():
         if w:
             assert w["irr"] is not None
-            assert all(w[k] is None for k in ("excess", "bench_end", "twr", "sharpe", "dd"))
+            assert w["excess"] is not None and w["bench_end"] is not None and w["bench_irr"] is not None
+            assert all(w[k] is None for k in ("twr", "sharpe", "dd"))
     assert ann["holdings"]["rows"][0]["symbol"] == "Fixed annuity"
     render(data)
 

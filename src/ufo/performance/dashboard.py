@@ -39,8 +39,8 @@ def _stats(flows, report, end, end_value, index: Series, start: date | None, ext
     base: list[tuple[date, float]] = []  # the opening value, as the first deposit of a windowed calculation
     if start is None and not market:
         irr = report.irr
-        out = {"value": end_value, "net_in": report.contributed - report.withdrawn, "irr": irr, "bench_irr": None, "excess": None,
-               "bench_end": None, "twr": None, "sharpe": None, "dd": None, "exact": True, "open": None}
+        out = {"value": end_value, "net_in": report.contributed - report.withdrawn, "irr": irr, "bench_irr": report.index_irr, "excess": report.excess_irr,
+               "bench_end": report.index_end_value if report.index_irr is not None else None, "twr": None, "sharpe": None, "dd": None, "exact": True, "open": None}
         ext_flows = fl
     elif start is None:
         irr = report.irr
@@ -61,11 +61,11 @@ def _stats(flows, report, end, end_value, index: Series, start: date | None, ext
             return None
         irr = M.xirr(M.investor_flows(ext_flows, end, end_value) + [(od, -ov)])
         base = [(od, ov)]
-        if not market:
-            out = {"value": end_value, "net_in": sum(a for _, a in ext_flows), "irr": irr, "bench_irr": None, "excess": None,
-                   "bench_end": None, "twr": None, "sharpe": None, "dd": None, "exact": False, "open": str(od), "extras": {}}
-            return out
         cf = M.index_counterfactual(base + ext_flows, index, end)
+        if not market:  # the benchmark comparison needs only dated flows and values; the return measures need prices
+            return {"value": end_value, "net_in": sum(a for _, a in ext_flows), "irr": irr, "bench_irr": cf.irr,
+                    "excess": (irr - cf.irr) if irr is not None and cf.irr is not None else None, "bench_end": cf.terminal_value,
+                    "twr": None, "sharpe": None, "dd": None, "exact": False, "open": str(od), "extras": {}}
         g = M.growth_index(report.port_returns[i + 1:])
         out = {"value": end_value, "net_in": sum(a for _, a in ext_flows), "irr": irr, "bench_irr": cf.irr,
                "excess": (irr - cf.irr) if irr is not None and cf.irr is not None else None, "bench_end": cf.terminal_value,
