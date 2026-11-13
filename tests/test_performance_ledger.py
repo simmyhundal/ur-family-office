@@ -85,3 +85,51 @@ def test_reconcile_flags_a_miss():
     from ufo.performance.ledger import Checkpoint
     rows = Ledger(BASE, PRICES).reconcile([Checkpoint(when=D(2020, 1, 31), value=2000.0, source="stmt")])
     assert not rows[0]["ok"] and rows[0]["diff"] == pytest.approx(-900.0)
+
+
+# ---- issue 189: month-end values that overstated accounts (all rows invented) ----
+from ufo.providers.fidelity_history import parse_fidelity_history  # noqa: E402
+
+_H = ("Run Date,Action,Symbol,Description,Type,Exchange Quantity,Exchange Currency,Currency,Price,Quantity,Exchange Rate,"
+      "Commission,Fees,Accrued Interest,Amount,Cash Balance,Settlement Date")
+
+
+def _hist(*rows):
+    return parse_fidelity_history("\n\n" + _H + "\n" + "\n".join(rows) + "\n")
+
+
+@pytest.mark.parametrize("balance", ["", "0"])
+def test_in_kind_shares_are_not_also_counted_as_cash(balance):
+    """An IRA funded by shares moved in kind: the shares are the value; the market value on the transfer row is not cash."""
+    p = _hist(f"03/01/2020,TRANSFERRED FROM VS Z00-000000-1 (Cash),ACMEX,ACME FUND,Cash,100,USD,USD,80,100,0,,,,,{balance},")
+    prices = {"ACMEX": px("ACMEX", [(D(2020, 3, 1), 80.0), (D(2020, 3, 31), 81.0)])}
+    L = Ledger(p.events, prices)
+    L.anchor([Snapshot(when=D(2020, 4, 1), quantities={"ACMEX": 100.0})])
+    b = L.value_on(D(2020, 3, 31))
+    assert b.cash == 0.0 and b.holdings == pytest.approx(8100.0) and b.total == pytest.approx(8100.0)
+    assert L.flows() == [(D(2020, 3, 1), 8000.0)]  # still a contribution for the return
+
+
+def test_in_kind_shares_count_even_without_a_snapshot():
+    p = _hist("03/01/2020,TRANSFERRED FROM VS Z00-000000-1 (Cash),ACMEX,ACME FUND,Cash,100,USD,USD,80,100,0,,,,,,")
+    L = Ledger(p.events, {"ACMEX": px("ACMEX", [(D(2020, 3, 1), 80.0), (D(2020, 3, 31), 81.0)])})
+    assert L.value_on(D(2020, 3, 31)).total == pytest.approx(8100.0)
+
+
+CD_ROWS = [
+    "01/02/2020,Electronic Funds Transfer Received (Cash),,No Description,Cash,40000,USD,USD,,40000,0,,,,40000.00,40000,",
+    "01/03/2020,YOU BOUGHT ALLY BK CD 2.00000% 07/03/2020 (02007GPF4) (Cash),02007GPF4,ALLY BK CD 2.00000% 07/03/2020,Cash,10000,USD,USD,100,10000,0,,,,-10000.00,30000,",
+    "01/03/2020,YOU BOUGHT TREASURY BILL 0.00000% 07/03/2020 (912796XX1) (Cash),912796XX1,UNITED STATES TREAS BILLS 0.000% 07/03/2020,Cash,10000,USD,USD,98,10000,0,,,,-9800.00,20200,",
+    "07/03/2020,REDEMPTION PAYOUT ALLY BK CD 2.00000% 07/03/2020 (02007GPF4) (Cash),02007GPF4,ALLY BK CD 2.00000% 07/03/2020,Cash,-10000,USD,USD,100,-10000,0,,,,10000.00,,",
+    "07/03/2020,REDEMPTION PAYOUT UNITED STATES TREAS BILLS 0.000% 07/03/2020 (912796XX1) (Cash),912796XX1,UNITED STATES TREAS BILLS 0.000% 07/03/2020,Cash,-10000,USD,USD,100,-10000,0,,,,10000.00,,",
+    "07/03/2020,INTEREST EARNED ALLY BK CD (02007GPF4) (Cash),02007GPF4,ALLY BK CD,Cash,0,USD,USD,,0,0,,,,100.00,40300,",
+]
+
+
+def test_redeemed_cds_and_bills_leave_the_ledger_once():
+    """Redemption rows with no Cash Balance must not be credited again when the next row's balance catches up."""
+    L = Ledger(_hist(*CD_ROWS).events, {})
+    after = L.value_on(D(2020, 7, 31))
+    assert after.fixed_income == 0.0 and after.cash == pytest.approx(40300.0)
+    assert not [c for c in L.credits if c.why == "maturity"]
+    assert L.income_total() == 0.0

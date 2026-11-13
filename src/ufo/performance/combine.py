@@ -47,6 +47,7 @@ class GroupRun(BaseModel):
     flows: list[tuple[date, float]] = []
     quality: str = "estimated"
     note: str = ""  # e.g. "as of the last common month-end"
+    excluded: list[str] = []  # members left out because their rebuilt values do not reconcile
     error: str = ""
 
 
@@ -222,5 +223,23 @@ def groups(runs: list[AccountRun], singletons: bool = False) -> list[tuple[str, 
     return out
 
 
+def combine_trusted(kind: str, name: str, runs: list[AccountRun], store: PriceStore, benchmark: str = "VTI") -> GroupRun:
+    """`combine`, but accounts whose rebuilt month-end values do not match their snapshots or statements are left out and
+    named, so a combined line never carries a wrong value."""
+    bad = [r for r in runs if r.unreconciled and r.result is not None]
+    if not bad:
+        return combine(kind, name, runs, store, benchmark)
+    left = "left out, does not reconcile: " + ", ".join(r.account.label for r in bad)
+    good = [r for r in runs if r not in bad]
+    if not good:
+        return GroupRun(kind=kind, name=name, members=[r.account.id for r in runs], excluded=[r.account.label for r in bad],
+                        error="not computed: " + left)
+    g = combine(kind, name, good, store, benchmark)
+    g.members = [r.account.id for r in runs]
+    g.excluded = [r.account.label for r in bad]
+    g.note = "; ".join(x for x in (g.note, left) if x)
+    return g
+
+
 def combine_all(runs: list[AccountRun], store: PriceStore, benchmark: str = "VTI", singletons: bool = False) -> list[GroupRun]:
-    return [combine(k, n, rs, store, benchmark) for k, n, rs in groups(runs, singletons)]
+    return [combine_trusted(k, n, rs, store, benchmark) for k, n, rs in groups(runs, singletons)]
