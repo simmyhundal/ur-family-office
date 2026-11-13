@@ -199,3 +199,25 @@ def test_job_writes_private_report_with_standin(tmp_path):
     assert out.stat().st_mode & 0o777 == 0o600
     text = out.read_text()
     assert "NEWF <- OLDF" in text and "Information, not investment advice" in text
+
+
+def test_real_funds_only_ended_by_choice_date_row():
+    # stand-in covers 2004-2006; the fund is real from 2007-01
+    old = series("OLDF", (2004, 1), 160, 0.005)
+    new = series("NEWF", (2007, 1), 130, 0.007, base=40.0)
+    bench = series("BNCH", (2004, 1), 160, 0.006)
+    pan = W.build_panel({"OLDF": old, "NEWF": new, "BNCH": bench}, ["NEWF", "BNCH"], {"NEWF": "OLDF"}, None, date(2030, 1, 1))
+    choice = mon(2013, 1)
+    wins = W.rolling_windows(pan, {"NEWF": 1.0}, "BNCH", 36, True)
+    subs = W.window_subsets(wins, choice)
+    key = "real funds only, ended by choice date"
+    want = [w.diff for w in wins if w.start >= mon(2007, 1) and w.end <= choice]
+    assert want and subs[key] == want
+    assert len(subs[key]) < len(subs["real funds only"]) and len(subs[key]) < len(subs["ended by choice date (visible then)"])
+    assert key not in W.window_subsets(wins, None)
+    res = W.run_whatif(pan, {"NEWF": 1.0}, "BNCH", choice, [(date(2005, 1, 5), 100.0), (date(2006, 1, 5), 50.0)], date(2007, 1, 5))
+    r = res.replay
+    n = sum(1 for s, _ in r.diffs if s >= mon(2007, 1) and s + r.end_offset <= choice)
+    assert n > 0 and res.replay_subsets[key].n == n
+    assert res.replay_subsets[key].n < res.replay_subsets["real funds only"].n
+    assert key in W.render_markdown(res) and "shares above" in W.render_markdown(res)

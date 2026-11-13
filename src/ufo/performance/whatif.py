@@ -29,7 +29,7 @@ ASSUMPTIONS = [
     "Monthly steps. Rolling windows use completed months only; the flow replay also uses the latest price for the final partial month.",
     "Deposits are split by weight, withdrawals are taken pro rata, and the replay never rebalances.",
 ]
-OVERLAP_NOTE = ("Windows that start a month apart overlap almost completely, so the 'ahead' shares below come from only a few "
+OVERLAP_NOTE = ("Windows that start a month apart overlap almost completely, so the 'ahead' shares above come from only a few "
                 "independent periods. They are not odds.")
 
 
@@ -225,6 +225,8 @@ def window_subsets(wins: list[Window], choice: int | None) -> dict[str, list[flo
         subs["ended by choice date (visible then)"] = [w.diff for w in wins if w.end <= choice]
         subs["started at/after choice date (out-of-sample)"] = [w.diff for w in wins if w.start >= choice]
     subs["real funds only"] = [w.diff for w in wins if w.real_only]
+    if choice is not None:
+        subs["real funds only, ended by choice date"] = [w.diff for w in wins if w.real_only and w.end <= choice]
     subs["with stand-ins"] = [w.diff for w in wins if not w.real_only]
     return subs
 
@@ -284,6 +286,7 @@ class ReplayResult:
     actual_bench_value: float | None = None
     irr: tuple[float, float] | None = None
     irr_note: str = ""
+    end_offset: int = 0  # months from a start to the end of the replay
 
 
 def flow_replay(panel: Panel, weights: dict[str, float], bench: str, flows: list[tuple[date, float]], end: date) -> ReplayResult:
@@ -299,7 +302,8 @@ def flow_replay(panel: Panel, weights: dict[str, float], bench: str, flows: list
             continue
         vals[s] = (mv, bv)
         diffs.append((s, mv / bv - 1))
-    res = ReplayResult(diffs=diffs, excluded=excluded, actual_start=None, actual_diff=None, actual_percentile=None)
+    res = ReplayResult(diffs=diffs, excluded=excluded, actual_start=None, actual_diff=None, actual_percentile=None,
+                       end_offset=end_offset)
     if first_month in vals:
         mv, bv = vals[first_month]
         d = mv / bv - 1
@@ -346,6 +350,8 @@ def run_whatif(panel: Panel, mix: dict[str, float], bench: str, choice: int | No
         out.replay_subsets = {"all starts": summarize([d for _, d in rs]),
                               "real funds only": summarize([d for s, d in rs if s >= panel.real_start])}
         if choice is not None:
+            out.replay_subsets["real funds only, ended by choice date"] = summarize(
+                [d for s, d in rs if s >= panel.real_start and s + out.replay.end_offset <= choice])
             out.replay_subsets["starting at/after choice date (out-of-sample)"] = summarize([d for s, d in rs if s >= choice])
     return out
 
