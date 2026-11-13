@@ -61,7 +61,9 @@ def test_group_with_different_end_dates_or_failed_member_is_refused_by_name(tmp_
     reg = build(tmp_path)
     reg.accounts[1].ending_value.as_of = date(2022, 5, 20)
     runs = run_all(reg, tmp_path, st, "IDX", TODAY)
-    assert "not as of the same date" in combine("all", "All", runs, st, "IDX").error
+    g = combine("all", "All", runs, st, "IDX")
+    assert g.error == "" and g.end == date(2022, 4, 30) and "last month-end every account covers" in g.note
+    assert g.quality == "estimated" and all(f[0] <= g.end for f in g.flows)
     reg.accounts[0].ending_value = None
     runs = run_all(reg, tmp_path, st, "IDX", TODAY)
     err = combine("all", "All", runs, st, "IDX").error
@@ -80,3 +82,13 @@ def test_only_matching_opposite_flows_in_different_accounts_pair_up(tmp_path):
     runs = run_all(build(tmp_path), tmp_path, st, "IDX", TODAY)
     pairs, _ = net_transfers([r for r in runs if r.account.id in ("a", "c")])  # no counterpart in this group
     assert pairs == []
+
+
+def test_group_with_no_common_month_end_is_refused_by_name(tmp_path):
+    st, _ = store(tmp_path)
+    reg = build(tmp_path)
+    reg.accounts[1].ending_value.as_of = date(2022, 5, 20)
+    runs = run_all(reg, tmp_path, st, "IDX", TODAY)
+    runs[1].result.report.months = [date(2030, 1, 31)]  # invented: B covers only a later month
+    err = combine("all", "All", runs, st, "IDX").error
+    assert "no month-end is covered by every account" in err and "B from" in err
