@@ -261,6 +261,15 @@ const pct=x=>x==null?'n/a':(x*100).toFixed(1)+'%';
 const spct=x=>x==null?'n/a':(x>=0?'+':'')+(x*100).toFixed(1)+'%';
 const money=x=>x==null?'n/a':(x<0?'-':'')+'$'+Math.abs(Math.round(x)).toLocaleString('en-US');
 const num=x=>x==null?'n/a':x.toFixed(2);
+function niceTicks(lo,hi,mant,maxN){// round steps (mant x 10^k) so the range has at most maxN intervals; lo and hi are widened to whole steps
+ mant=mant||[1,2,5];maxN=maxN||6;const span=Math.max(hi-lo,1e-9);let step=null;
+ for(let e=-6;e<=12&&step===null;e++)for(const m of mant){const st=m*Math.pow(10,e);if(span/st<=maxN){step=st;break;}}
+ const a=Math.floor(lo/step+1e-9)*step,b=Math.ceil(hi/step-1e-9)*step,t=[];
+ for(let v=a;v<=b+step/2;v+=step)t.push(Math.round(v/step)*step);
+ return {step,lo:a,hi:b,ticks:t};}
+const trim=x=>String(+x.toFixed(2));
+const moneyAxis=v=>{const a=Math.abs(v),s=v<0?'-':'';return a>=1e6?s+'$'+trim(a/1e6)+'M':a>=1000?s+'$'+trim(a/1000)+'K':s+'$'+Math.round(a);};
+const MONEY_STEPS=[1,2.5,5,10],PCT_STEPS=[1,2,5];
 const COLORS=Array.from({length:8},(_,i)=>`var(--c${i})`);
 const GROUPS=[['accounts','Accounts'],['all','All combined'],['brokerage','By brokerage'],['owner','By owner'],['wrapper','By wrapper']];
 function seg(el,items,get,set){el.innerHTML=items.map(([k,l])=>`<button type="button" aria-pressed="${get()===k}" data-k="${k}">${esc(l)}</button>`).join('');
@@ -300,9 +309,10 @@ function table(rs){
 function bars(rs){
  const items=rs.filter(e=>e.windows&&e.windows[win]&&e.windows[win].excess!=null).map(e=>[e.label,e.windows[win].excess]).sort((a,b)=>b[1]-a[1]);
  if(!items.length){$('#bars').innerHTML='<p class="na">Nothing to chart for this window.</p>';return;}
- const W=860,rh=30,L=200,R=70,H=items.length*rh+30,m=Math.max(...items.map(i=>Math.abs(i[1])),0.01),half=(W-L-R)/2,x0=L+half;
- let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Excess IRR per account"><line class="zero" x1="${x0}" x2="${x0}" y1="6" y2="${H-20}"/>`;
- items.forEach(([l,v],i)=>{const y=10+i*rh,w=Math.abs(v)/m*(half-60);
+ const W=860,rh=30,L=200,R=70,H=items.length*rh+44,mx=Math.max(...items.map(i=>Math.abs(i[1])),0.01),bt=niceTicks(0,mx,PCT_STEPS.map(q=>q/100),3),m=bt.hi,half=(W-L-R)/2,x0=L+half,sc=(half-60)/m;
+ let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Excess IRR per account">`;
+ for(const u of bt.ticks.flatMap(t=>t===0?[0]:[t,-t]))s+=`<line class="${u===0?'zero':'grid'}" x1="${x0+u*sc}" x2="${x0+u*sc}" y1="6" y2="${H-26}"/><text class="axis" x="${x0+u*sc}" y="${H-10}" text-anchor="middle">${u===0?'0%':spct(u)}</text>`;
+ items.forEach(([l,v],i)=>{const y=10+i*rh,w=Math.abs(v)*sc;
   s+=`<text class="val" x="${L-8}" y="${y+14}" text-anchor="end">${esc(l)}</text><rect class="${v>=0?'bar-pos':'bar-neg'}" x="${v>=0?x0:x0-w}" y="${y}" width="${w}" height="18" rx="3"/>`+
      `<text class="val" x="${v>=0?x0+w+6:x0-w-6}" y="${y+14}" text-anchor="${v>=0?'start':'end'}">${spct(v)}</text>`;});
  $('#bars').innerHTML=s+'</svg>';}
@@ -313,10 +323,10 @@ function lines(rs){
  const es=rs.map(view).filter(Boolean);
  if(!es.length){$('#lines').innerHTML='<p class="na">Nothing to chart for this window.</p>';$('#key').innerHTML='';return;}
  const t=d=>Date.parse(d),all=es.flatMap(e=>e.months.map(t)),t0=Math.min(...all),t1=Math.max(...all);
- const ys=es.flatMap(e=>e.values.concat(showBench?e.bench:[])),ymax=Math.max(...ys,1)*1.05;
+ const ys=es.flatMap(e=>e.values.concat(showBench?e.bench:[])),yt=niceTicks(0,Math.max(...ys,1),MONEY_STEPS,5),ymax=yt.hi;
  const W=860,H=300,L=64,R=14,T=12,B=28,X=d=>L+(t(d)-t0)/((t1-t0)||1)*(W-L-R),Y=v=>T+(H-T-B)*(1-v/ymax);
  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Account value over time">`;
- for(let i=0;i<=4;i++){const v=ymax*i/4;s+=`<line class="grid" x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}"/><text class="axis" x="${L-6}" y="${Y(v)+4}" text-anchor="end">$${Math.round(v/1000)}k</text>`;}
+ for(const v of yt.ticks){s+=`<line class="${v===0?'zero':'grid'}" x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}"/><text class="axis" x="${L-6}" y="${Y(v)+4}" text-anchor="end">${moneyAxis(v)}</text>`;}
  const y0=new Date(t0).getUTCFullYear(),y1=new Date(t1).getUTCFullYear();
  for(let y=y0+1;y<=y1;y++){const d=`${y}-01-01`;s+=`<text class="axis" x="${X(d)}" y="${H-8}" text-anchor="middle">${y}</text>`;}
  es.forEach((e,i)=>{const c=COLORS[i%8],pts=a=>e.months.map((m,j)=>`${X(m).toFixed(1)},${Y(a[j]).toFixed(1)}`).join(' ');
@@ -328,17 +338,17 @@ function scatter(){
  const R=D.risk[win],keep=p=>p.kind==='benchmark'||p.kind==='all'||(grp==='accounts'?p.kind==='account':(grp!=='all'&&p.gk===grp)),P=R.points.filter(keep),LO=R.left_off.filter(keep);
  if(P.length<2){$('#risk').innerHTML='<p class="na">Not enough history (12 months) for a risk and return chart.</p>';}
  else{
-  const W=860,H=380,L=64,Rr=40,T=14,B=44,xm=Math.max(...P.map(p=>p.vol))*1.15,ys=P.map(p=>p.ret),y0=Math.min(0,...ys),y1=Math.max(...ys,0.01)*1.15;
+  const W=860,H=380,L=64,Rr=40,T=14,B=44,PS=PCT_STEPS.map(m=>m/100),xt=niceTicks(0,Math.max(...P.map(p=>p.vol),0.01),PS,6),xm=xt.hi,
+   yt=niceTicks(Math.min(0,...P.map(p=>p.ret)),Math.max(0.01,...P.map(p=>p.ret)),PS,6),y0=yt.lo,y1=yt.hi;
   const X=v=>L+v/xm*(W-L-Rr),Y=v=>T+(H-T-B)*(1-(v-y0)/((y1-y0)||1));
   let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Risk versus return">`;
-  for(let i=0;i<=4;i++){const v=y0+(y1-y0)*i/4,u=xm*i/4;
-   s+=`<line class="grid" x1="${L}" x2="${W-Rr}" y1="${Y(v)}" y2="${Y(v)}"/><text class="axis" x="${L-6}" y="${Y(v)+4}" text-anchor="end">${pct(v)}</text>`+
-      `<text class="axis" x="${X(u)}" y="${H-24}" text-anchor="middle">${pct(u)}</text>`;}
+  for(const v of yt.ticks)s+=`<line class="${v===0?'zero':'grid'}" x1="${L}" x2="${W-Rr}" y1="${Y(v)}" y2="${Y(v)}"/><text class="axis" x="${L-6}" y="${Y(v)+4}" text-anchor="end">${pct(v)}</text>`;
+  for(const u of xt.ticks)s+=`<line class="grid" x1="${X(u)}" x2="${X(u)}" y1="${T}" y2="${H-B}"/><line class="zero" x1="${X(u)}" x2="${X(u)}" y1="${Y(0)}" y2="${Y(0)+4}"/><text class="axis" x="${X(u)}" y="${H-24}" text-anchor="middle">${pct(u)}</text>`;
   s+=`<text class="axis" x="${(L+W-Rr)/2}" y="${H-6}" text-anchor="middle">Volatility (annual, lower is calmer)</text><text class="axis" x="14" y="${(T+H-B)/2}" text-anchor="middle" transform="rotate(-90 14 ${(T+H-B)/2})">Return per year</text>`;
   const ly={};let last=-99;[...P].sort((a,b)=>Y(a.ret)-Y(b.ret)).forEach(p=>{last=Math.max(Y(p.ret),last+12);ly[p.label+p.kind]=last;});
   for(const p of P){const tip=`${p.label}: return ${pct(p.ret)}, volatility ${pct(p.vol)}, Sharpe ${num(p.sharpe)}${p.exact?'':' (estimated)'}`;
    s+=`<g class="pt pt-${p.kind}"><title>${esc(tip)}</title><circle class="${p.exact?'solid':'hollow'}" cx="${X(p.vol)}" cy="${Y(p.ret)}" r="${p.kind==='all'?9:6}"/>`+
-      `<text class="axis" x="${X(p.vol)+11}" y="${ly[p.label+p.kind]+4}">${esc(p.label)} · S ${num(p.sharpe)}</text></g>`;}
+      `<text class="axis" x="${X(p.vol)>W*0.7?X(p.vol)-11:X(p.vol)+11}" text-anchor="${X(p.vol)>W*0.7?'end':'start'}" y="${ly[p.label+p.kind]+4}">${esc(p.label)} · S ${num(p.sharpe)}</text></g>`;}
   $('#risk').innerHTML=s+'</svg>';}
  $('#riskleft').textContent=LO.length?'Not on the chart: '+LO.map(([l,w])=>l+' ('+w+')').join('; ')+'.':'';}
 function holdings(){
