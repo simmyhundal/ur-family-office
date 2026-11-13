@@ -6,6 +6,7 @@ This page is performance. Holdings, drift and trades belong to the IBKR operatio
 """
 from __future__ import annotations
 
+import base64
 import html
 import json
 import os
@@ -329,7 +330,7 @@ h1,h2,h3{margin:0;letter-spacing:-.01em}h2{font-size:19px;font-weight:700}h3{fon
 p{margin:0}.small,small{font-size:13.5px;color:var(--ink-3);line-height:1.45}.muted{color:var(--ink-3)}
 .top{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:calc(10px + env(safe-area-inset-top)) 18px 10px;margin:0 -18px;
  background:color-mix(in srgb,var(--bg) 82%,transparent);-webkit-backdrop-filter:saturate(1.6) blur(16px);backdrop-filter:saturate(1.6) blur(16px)}
-.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;letter-spacing:-.01em;min-width:0}.brand svg{width:30px;height:30px;flex:none;border-radius:9px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;letter-spacing:-.01em;min-width:0}.brand svg{width:32px;height:32px;flex:none}
 .brand small{display:block;font-weight:500;font-size:12px;line-height:1.2}
 .top-r{display:flex;align-items:center;gap:8px}
 .icon{width:44px;height:44px;border-radius:50%;border:0;background:var(--surface);box-shadow:var(--shadow);display:grid;place-items:center;color:var(--ink)}
@@ -345,11 +346,11 @@ p{margin:0}.small,small{font-size:13.5px;color:var(--ink-3);line-height:1.45}.mu
 .view{animation:rise .35s var(--ease)}
 @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .ov{display:grid;gap:18px;padding-top:6px}.col{display:grid;gap:18px;align-content:start;min-width:0}
-.card{background:var(--surface);border-radius:var(--r);box-shadow:var(--shadow);padding:20px}
+.card{--pad:20px;background:var(--surface);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--pad)}
 .sec-h{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:2px 4px 12px}
 .eyebrow{font-size:14px;font-weight:600;color:var(--ink-2);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.bal{font-size:clamp(42px,12vw,56px);font-weight:750;letter-spacing:-.035em;line-height:1.05;margin:6px 0 2px}
-.balsub{font-size:13.5px;color:var(--ink-3);min-height:20px}
+.bal{font-size:clamp(32px,11vw,56px);font-weight:750;letter-spacing:-.035em;line-height:1.05;height:1.05em;margin:6px 0 2px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.balsub{font-size:13.5px;color:var(--ink-3);line-height:20px;height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
 .say{font-size:17px;line-height:1.4;margin-top:14px;font-weight:500;color:var(--ink-2)}.say b{font-weight:750}
 .rate{font-size:14px;color:var(--ink-3);margin-top:6px;line-height:1.45}
 .up{color:var(--up)}.down{color:var(--down)}
@@ -436,6 +437,30 @@ details:not(.demo)>summary::after{content:"";width:8px;height:8px;border-right:2
 .tip{border-bottom:1px dotted var(--ink-3);cursor:help;position:relative}
 .tip:hover::after,.tip:focus::after{content:attr(data-tip);position:absolute;left:0;top:130%;z-index:5;width:min(300px,80vw);background:var(--ink);color:var(--bg);padding:8px 10px;border-radius:10px;font:400 13px/1.4 var(--font);text-align:left;white-space:normal;box-shadow:var(--shadow)}
 [hidden]{display:none!important}
+.tblwrap{position:relative;margin:14px calc(-1*var(--pad)) 0;border-top:1px solid var(--line-2)}
+.tblwrap .scroll{max-height:min(74vh,720px);overflow:auto;overscroll-behavior-x:contain;outline-offset:-3px}
+.tblwrap::after{content:"";position:absolute;top:0;right:0;bottom:0;width:26px;pointer-events:none;background:linear-gradient(to left,color-mix(in srgb,var(--ink) 13%,transparent),transparent);opacity:0;transition:opacity .2s}
+.tblwrap.more-r::after{opacity:1}
+#tbl{width:max-content;min-width:100%;border-collapse:separate;border-spacing:0;font-size:14.5px}
+#tbl th,#tbl td{white-space:nowrap;padding:12px;border-bottom:1px solid var(--line);text-align:right;vertical-align:middle;background:var(--surface)}
+#tbl thead th{position:sticky;top:0;z-index:2;white-space:normal;min-width:76px;max-width:118px;vertical-align:bottom;line-height:1.25;border-bottom:1px solid var(--line-2);padding-top:10px;padding-bottom:10px}
+#tbl th:first-child,#tbl td:first-child{position:sticky;left:0;z-index:1;text-align:left;padding-left:var(--pad);min-width:128px;max-width:min(42vw,220px);white-space:normal;font-weight:650;line-height:1.3}
+#tbl thead th:first-child{z-index:3}
+#tbl th:nth-child(2),#tbl td:nth-child(2),#tbl .dq,#tbl .lt{text-align:left}
+#tbl th:last-child,#tbl td:last-child{padding-right:var(--pad)}
+.tblwrap.more-l #tbl th:first-child,.tblwrap.more-l #tbl td:first-child{box-shadow:8px 0 10px -8px color-mix(in srgb,var(--ink) 30%,transparent)}
+#tbl tbody tr:hover td{background:var(--surface-2)}
+#tbl tr.sub td{font-weight:600}#tbl tr.total td{font-weight:750;border-top:2px solid var(--line-2)}
+#tbl .dq small{font-size:12.5px;margin-left:8px}#tbl .dq .chip{min-height:30px}#tbl .dq .chip+.chip{margin-left:6px}#tbl .dq button.chip::after{inset:-7px -4px}
+#tbl .lt{white-space:normal;min-width:240px}
+.fnm{border:0;background:var(--surface-2);color:var(--ink-2);font-size:11px;font-weight:700;min-width:20px;height:20px;padding:0 5px;border-radius:999px;margin-left:5px;vertical-align:2px;position:relative;line-height:20px}
+.fnm::after{content:"";position:absolute;inset:-12px}
+.chip sup{font-size:10px;margin-left:1px;vertical-align:4px;line-height:0}
+.fine{margin-top:18px;font-size:13.5px;color:var(--ink-2);line-height:1.5}.fine h3{font-size:14px;color:var(--ink-3);font-weight:650;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
+.fine dl{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;margin:0 0 12px}.fine dd{margin:0 0 8px}
+@media (min-width:641px){.fine dl{grid-template-columns:auto 1fr;gap:8px 14px;align-items:baseline}.fine dd{margin:0}}.fine dt b{display:inline-block;min-width:26px;text-align:center}
+.fine-notes{margin:0 0 12px;padding-left:22px;display:grid;gap:4px}.fine-notes li{padding:2px 6px;margin-left:-6px;border-radius:8px;transition:background .3s}.fine-notes li.hit{background:var(--accent-soft)}
+.fine p{margin-top:8px;color:var(--ink-3)}
 @media (min-width:900px){
  main{padding-bottom:48px}
  .top{padding-top:16px;padding-bottom:16px}
@@ -444,7 +469,7 @@ details:not(.demo)>summary::after{content:"";width:8px;height:8px;border-right:2
  .tabs button{flex-direction:row;min-height:44px;min-width:0;font-size:14px;gap:8px;padding:6px 16px}.tabs button svg{width:18px;height:18px}
  .tabs button[aria-current=page]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(19,19,43,.12)}
  .ov{grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:22px;align-items:start}.col{gap:22px}
- .card{padding:26px}.chartbox{margin:20px -26px 0}
+ .card{--pad:26px}.chartbox{margin:20px -26px 0}
  .bal{font-size:60px}
  dialog.sheet{margin:0 0 0 auto;height:100vh;max-height:100vh;max-width:520px;border-radius:28px 0 0 28px}
  dialog.sheet[open]{animation:sheetin .38s var(--ease)}.grab{display:none}
@@ -452,17 +477,10 @@ details:not(.demo)>summary::after{content:"";width:8px;height:8px;border-right:2
 }
 @media (max-width:640px){
  main{padding-left:14px;padding-right:14px}.top{margin:0 -14px;padding-left:14px;padding-right:14px}
- .card{padding:18px}.chartbox{margin:16px -18px 0}
+ .card{--pad:18px}.chartbox{margin:16px -18px 0}
  .donut{grid-template-columns:1fr;justify-items:center}.donut ul{width:100%}
  .figs{grid-template-columns:1fr 1fr}
  .ctl .pills{width:100%}
- #tbl,#tbl tbody{display:block}#tbl tr:first-child{display:none}
- #tbl tr{display:block;border-radius:16px;padding:10px 14px;margin:0 0 10px;background:var(--surface-2)}
- #tbl tr.total{box-shadow:0 0 0 2px var(--accent)}#tbl tr.total td{border-top:0}
- #tbl td{display:flex;justify-content:space-between;align-items:baseline;gap:14px;border:0;padding:3px 0;text-align:right}
- #tbl td::before{content:attr(data-l);color:var(--ink-3);font-size:13px;font-weight:500;text-align:left}
- #tbl td:first-child{font-weight:750;font-size:1.05em;padding-bottom:5px}#tbl td:first-child::before{content:none}
- #tbl td[colspan]{display:block;text-align:left}#tbl td[colspan]::before{content:none}
 }
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 """
@@ -509,10 +527,14 @@ function WS(e,k){// window figures with the benchmark-side numbers of the picked
 function rows(){return D.entities.filter(e=>grp==='accounts'?e.kind==='account':(e.kind==='group'&&e.groupKind===grp));}
 const totalEnt=()=>{const ac=D.entities.filter(e=>e.kind==='account');return D.entities.find(e=>e.kind==='group'&&e.groupKind==='all')||(ac.length===1?ac[0]:null);};
 const isEst=(e,w)=>!(w&&w.exact&&e.quality==='exact');
-function nice(e){if(e.kind!=='group')return e.label;if(e.groupKind==='all')return 'All accounts';
- const i=e.label.indexOf(': '),v=i<0?e.label:e.label.slice(i+2);return e.groupKind==='wrapper'?(WRAP[v]||cap1(v)):cap1(v);}
+function plain(label,gk){// a group's machine key ("wrapper: roth_ira") as people say it ("Roth IRA")
+ if(gk==='all')return 'All accounts';if(!gk)return String(label);
+ const i=label.indexOf(': '),v=i<0?label:label.slice(i+2);return gk==='wrapper'?(WRAP[v]||cap1(v)):cap1(v);}
+function nice(e){return e.kind==='group'?plain(e.label,e.groupKind):e.label;}
+const typeOf=t=>WRAP[t]||cap1(t||'');
+const isoD=s=>String(s).replace(/\b\d{4}-\d{2}-\d{2}\b/g,m=>fmtDate(m));// readable dates inside a sentence; ISO stays in the data blob
 function subOf(e){if(e.kind==='group')return (e.members||[]).length+((e.members||[]).length===1?' account':' accounts');
- return [WRAP[e.type]||cap1(e.type||''),e.owner&&e.owner!=='household'?cap1(e.owner):(e.owner?'Household':'')].filter(Boolean).join(' · ');}
+ return [typeOf(e.type),e.owner&&e.owner!=='household'?cap1(e.owner):(e.owner?'Household':'')].filter(Boolean).join(' · ');}
 function whyOf(e,w){// plain reasons for every n/a, shown on screen (a title tooltip is invisible on a phone)
  const nm=e.market===false?'non-market account: no prices, so no return-based measures':null,wn=win!=='inception';
  return {irr:'no IRR: the dated flows and end value do not have both a deposit and a withdrawal or value',
@@ -529,34 +551,49 @@ function verdict(w,short){// "$23,804 behind the same money in Market (VT)"
  return `<b class="${d>=0?'up':'down'}">${money(Math.abs(d))} ${d>=0?'ahead of':'behind'}</b> the same money in ${esc(lbl)}`;}
 function excessWords(w){if(!w||w.excess==null)return null;if(Math.abs(w.excess)<0.0005)return `<span>About even with ${esc(bm)}${perYr(w)?'':' for the period'}</span>`;const x=Math.abs(w.excess*100).toFixed(1)+'%',ah=w.excess>=0;
  return `<span class="${ah?'up':'down'}">${ah?'▲':'▼'} ${x}${perYr(w)?' a year':''} ${ah?'ahead of':'behind'} ${esc(bm)}</span>`;}
+let NOTES=[];// the fine print under the table: every n/a reason and every row's own note, numbered, readable without hover
+function fn(t){t=capS(isoD(t));let i=NOTES.indexOf(t);if(i<0){NOTES.push(t);i=NOTES.length-1;}
+ return `<button type="button" class="fnm" data-act="fn" data-k="${i+1}" aria-label="Note ${i+1}">${i+1}</button>`;}
 function trow(e,label,cls){
-  if(e.error||!e.windows)return `<tr class="${cls}"><td>${label}</td><td>${esc(e.type||'')}</td><td colspan="${NCOLS-2}" class="err">not computed: ${esc(e.error)}</td></tr>`;
+  const ty=`<td>${esc(typeOf(e.type))}</td>`;
+  if(e.error||!e.windows)return `<tr class="${cls}"><td>${label}</td>${ty}<td colspan="${NCOLS-2}" class="err lt">not computed: ${esc(e.error)}</td></tr>`;
   const w=WS(e);
-  if(!w)return `<tr class="${cls}"><td>${label}</td><td>${esc(e.type)}</td><td>${e.start}</td><td colspan="${NCOLS-3}" class="na" title="${esc(e.unreconciled?'estimated, does not reconcile: '+e.unreconciled+'. Windowed figures are left out rather than shown wrong; the since-inception IRR is unaffected.':e.kind==='group'?'the combined line starts after this window begins, or has under a month of history in it':'this account starts after the window begins, or is closed')}">n/a: ${e.unreconciled?'estimated, does not reconcile':'does not cover this window'}</td></tr>`;
-  const q=e.unreconciled?'estimated, does not reconcile':w.exact&&e.quality==='exact'?'exact':'estimated';
+  if(!w)return `<tr class="${cls}"><td>${label}</td>${ty}<td>${esc(fmtMon(e.start))}</td><td colspan="${NCOLS-3}" class="na lt">n/a: ${e.unreconciled?'estimated, does not reconcile':'does not cover this window'}${fn(e.unreconciled?'estimated, does not reconcile: '+e.unreconciled+'. Windowed figures are left out rather than shown wrong; the since-inception IRR is unaffected.':e.kind==='group'?'the combined line starts after this window begins, or has under a month of history in it.':'this account starts after the window begins, or is closed.')}</td></tr>`;
+  const q=e.unreconciled?['bad','Does not reconcile']:w.exact&&e.quality==='exact'?['ok','Exact']:['est','Estimated'];
   const why=whyOf(e,w);
-  const c=(f,v,k)=>v==null?`<td class="na" title="${esc(why[k])}">n/a</td>`:`<td>${f(v)}</td>`;
-  return `<tr class="${cls}"><td>${label}${e.closed?' <span class="small">(closed)</span>':''}</td><td>${esc(e.type)}</td><td>${e.start}</td><td>${money(w.value)}</td><td>${money(w.net_in)}</td>`+
-   c(pct,w.irr,'irr')+(w.twr_thru&&w.twr!=null&&w.twr_thru!==w.thru?`<td title="through ${w.twr_thru}">${pct(w.twr)}</td>`:c(pct,w.twr,'twr'))+c(spct,w.excess,'excess')+c(money,w.bench_end,'bench')+c(num,w.sharpe,'sharpe')+c(pct,w.dd,'dd')+
-   `<td class="${q==='exact'?'exact':'est'}" title="${esc((e.flags||[]).join('; ')+(e.excluded&&e.excluded.length?'; left out, does not reconcile: '+e.excluded.join(', '):''))}">${q}, as of ${w.thru||e.as_of}${e.note?' (common month-end)':''}${e.excluded&&e.excluded.length?'; left out, does not reconcile: '+esc(e.excluded.join(', ')):''}${(e.flags||[]).some(f=>f.startsWith('history ends'))?' *':''}</td>`+D.extras.map(n=>c(spct,w.extras[n]&&w.extras[n].excess,'excess')).join('')+'</tr>';}
+  const c=(f,v,k)=>v==null?`<td class="na">n/a${fn(why[k])}</td>`:`<td>${f(v)}</td>`;
+  const own=[e.note||'',e.excluded&&e.excluded.length&&!/left out/.test(e.note||'')?'left out, does not reconcile: '+e.excluded.join(', '):''].concat(e.flags||[]).filter(Boolean);
+  let chip=`<span class="chip ${q[0]}">${q[1]}</span>`;
+  if(own.length){const m=fn(plain(e.label,e.kind==='group'?e.groupKind:'')+': '+own.join('; ')+'.'),n=m.match(/data-k="(\d+)"/)[1];
+   chip=`<button type="button" class="chip ${q[0]}" data-act="fn" data-k="${n}" aria-label="${q[1]}, see note ${n}">${q[1]}<sup>${n}</sup></button>`;}
+  if(e.excluded&&e.excluded.length)chip+='<span class="chip bad">Partial</span>';// a total that leaves an account out says so on screen
+  const star=(e.flags||[]).some(f=>f.startsWith('history ends'))?' *':'';
+  return `<tr class="${cls}"><td>${label}${e.closed?' <span class="small">(closed)</span>':''}</td>${ty}<td>${esc(fmtMon(e.start))}</td><td>${money(w.value)}</td><td>${money(w.net_in)}</td>`+
+   c(pct,w.irr,'irr')+(w.twr_thru&&w.twr!=null&&w.twr_thru!==w.thru?`<td>${pct(w.twr)}${fn('time-weighted return runs through '+w.twr_thru+', the last month-end the history covers.')}</td>`:c(pct,w.twr,'twr'))+c(spct,w.excess,'excess')+c(money,w.bench_end,'bench')+c(num,w.sharpe,'sharpe')+c(pct,w.dd,'dd')+
+   `<td class="dq">${chip}<small>${esc(fmtDate(w.thru||e.as_of))}${star}</small></td>`+D.extras.map(n=>c(spct,w.extras[n]&&w.extras[n].excess,'excess')).join('')+'</tr>';}
 let NCOLS=12;
 function table(rs){
  const head=['Account','Type','Started','Value','Net in','IRR','Time-weighted return (est.)','Excess IRR vs '+BL(),'Worth today in '+BL(),'Sharpe (est.)','Worst fall','Data']
   .concat(D.extras.map(n=>'Excess vs '+n));
- NCOLS=head.length;
- let s='<tr>'+head.map(x=>`<th>${esc(x)}</th>`).join('')+'</tr>';
- for(const e of rs)s+=trow(e,esc(e.label),grp==='accounts'||e.kind==='account'?'':'sub');
+ NCOLS=head.length;NOTES=[];
+ let s='<thead><tr>'+head.map(x=>`<th scope="col">${esc(x)}</th>`).join('')+'</tr></thead><tbody>';
+ for(const e of rs)s+=trow(e,esc(nice(e)),grp==='accounts'||e.kind==='account'?'':'sub');
  const tot=D.entities.find(e=>e.kind==='group'&&e.groupKind==='all');
  const showTot=tot&&grp!=='all';
  if(showTot)s+=trow(tot,'Total, all accounts','total');
- $('#tbl').innerHTML=s;
- $('#tbl').querySelectorAll('tr').forEach((tr,i)=>{if(!i)return;let c=0;for(const td of tr.children){td.dataset.l=head[c]||'';c+=td.colSpan||1;}});// card labels on phones
+ $('#tbl').innerHTML=s+'</tbody>';
+ $('#tblnotes').innerHTML=NOTES.map((t,i)=>`<li id="fn-${i+1}" value="${i+1}">${esc(t)}</li>`).join('');
  const t2=grp==='all'?rs[0]:tot;
- $('#totnote').textContent=t2&&t2.as_of?`The total is valued on ${t2.as_of}${t2.note?', the latest month-end every account covers':''}; account rows use each account's own latest date, so the sums can differ. `+
+ $('#totnote').textContent=t2&&t2.as_of?`The total is valued on ${fmtDate(t2.as_of)}${t2.note?', the latest month-end every account covers':''}; account rows use each account's own latest date, so the sums can differ. `+
   'Non-market accounts (a fixed annuity) count in value and net in. Transfers between your own accounts net out of combined lines, so their Net in can differ from the sum of the rows.'+
-  (grp!=='accounts'&&grp!=='all'?' Each group row is a subtotal for its members, valued on that group\'s own common month-end.':''):'';}
+  (grp!=='accounts'&&grp!=='all'?' Each group row is a subtotal for its members, valued on that group\'s own common month-end.':''):'';
+ edges();}
+function edges(){// a soft shadow on whichever side has more table to scroll to
+ const w=typeof document.getElementById==='function'&&document.getElementById('tblwrap'),sc=w&&w.firstElementChild;
+ if(!sc||!w.classList||typeof sc.scrollWidth!=='number')return;const x=sc.scrollLeft,m=sc.scrollWidth-sc.clientWidth;
+ w.classList.toggle('more-l',x>2);w.classList.toggle('more-r',x<m-2);}
 function bars(rs){
- const items=rs.filter(e=>WS(e)&&WS(e).excess!=null).map(e=>[e.label,WS(e).excess]).sort((a,b)=>b[1]-a[1]);
+ const items=rs.filter(e=>WS(e)&&WS(e).excess!=null).map(e=>[nice(e),WS(e).excess]).sort((a,b)=>b[1]-a[1]);
  if(!items.length){$('#bars').innerHTML='<p class="na">Nothing to chart for this window.</p>';return;}
  const W=CW($('#bars')),rh=30,L=Math.min(200,Math.round(W*0.34)),R=W<520?52:70,H=items.length*rh+44,mx=Math.max(...items.map(i=>Math.abs(i[1])),0.01),nar=W<520,bt=niceTicks(0,mx,PCT_STEPS.map(q=>q/100),nar?1:3),m=bt.hi,half=(W-L-R)/2,x0=L+half,sc=(half-(nar?40:60))/m;
  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Excess IRR per account">`;
@@ -567,8 +604,8 @@ function bars(rs){
  $('#bars').innerHTML=s+'</svg>';}
 function view(e){// the series to chart for the picked window, or null when the entity does not cover it
  if(!e||e.error)return null;
- if(win==='inception'){if(!e.months)return null;const a=bm!==D.benchmark&&e.bm&&e.bm[bm]&&e.bm[bm].inception;return a?{label:e.label,months:e.months,values:e.values,bench:a.bench}:e;}
- const w=WS(e);return w&&w.chart?{label:e.label,months:w.chart.months,values:w.chart.values,bench:w.chart.bench}:null;}
+ if(win==='inception'){if(!e.months)return null;const a=bm!==D.benchmark&&e.bm&&e.bm[bm]&&e.bm[bm].inception;return a?{label:nice(e),months:e.months,values:e.values,bench:a.bench}:{...e,label:nice(e)};}
+ const w=WS(e);return w&&w.chart?{label:nice(e),months:w.chart.months,values:w.chart.values,bench:w.chart.bench}:null;}
 function lines(rs){
  const es=rs.map(view).filter(Boolean);
  if(!es.length){$('#lines').innerHTML='<p class="na">Nothing to chart for this window.</p>';$('#key').innerHTML='';return;}
@@ -585,7 +622,7 @@ function lines(rs){
  $('#lines').innerHTML=s+'</svg>';
  $('#key').innerHTML=es.map((e,i)=>`<span><i style="background:${COLORS[i%8]}"></i>${esc(e.label)}</span>`).join('')+(showBench?`<span class="small">dashed: same deposits and withdrawals in ${esc(BL())}</span>`:'');}
 function scatter(){
- const R=D.risk[win],keep=p=>(p.kind==='benchmark'&&p.label!==D.benchmark)||p.kind==='all'||(grp==='accounts'?p.kind==='account':(grp!=='all'&&p.gk===grp)),P=R.points.filter(keep).concat(R.bm[bm]?[{...R.bm[bm],label:BL(),kind:'benchmark',exact:win==='inception'}]:[]),LO=R.left_off.filter(a=>keep({kind:a[2],gk:a[3],label:a[0]}));
+ const R=D.risk[win],keep=p=>(p.kind==='benchmark'&&p.label!==D.benchmark)||p.kind==='all'||(grp==='accounts'?p.kind==='account':(grp!=='all'&&p.gk===grp)),P=R.points.filter(keep).map(p=>({...p,label:plain(p.label,p.gk)})).concat(R.bm[bm]?[{...R.bm[bm],label:BL(),kind:'benchmark',exact:win==='inception'}]:[]),LO=R.left_off.filter(a=>keep({kind:a[2],gk:a[3],label:a[0]}));
  if(P.length<2){$('#risk').innerHTML='<p class="na">Not enough history (12 months) for a risk and return chart.</p>';}
  else{
   const W=CW($('#risk')),H=W<520?320:380,L=64,Rr=40,T=14,B=44,PS=PCT_STEPS.map(m=>m/100),xt=niceTicks(0,Math.max(...P.map(p=>p.vol),0.01),PS,6),xm=xt.hi,
@@ -603,7 +640,7 @@ function scatter(){
       `<text class="axis" x="${tx}" text-anchor="${left?'end':'start'}" y="${ty}">${n}</text></g>`;
    leg+=`<li value="${n}">${esc(p.label)} · return ${pct(p.ret)}, volatility ${pct(p.vol)}, Sharpe ${num(p.sharpe)}${p.exact?'':' (estimated)'}</li>`;});
   $('#risk').innerHTML=s+'</svg>'+leg+'</ol>';}
- $('#riskleft').textContent=LO.length?'Not on the chart: '+LO.map(([l,w])=>l+' ('+w+')').join('; ')+'.':'';}
+ $('#riskleft').textContent=LO.length?'Not on the chart: '+LO.map(([l,w,,g])=>plain(l,g)+' ('+w+')').join('; ')+'.':'';}
 function holdings(){
  const shown=new Set(rows().flatMap(e=>e.members||[e.label])),vis=D.entities.filter(e=>e.kind==='account'&&(grp==='all'||shown.has(e.label))),es=vis.filter(e=>e.holdings),
   na=vis.filter(e=>!e.holdings&&e.holdings_note).map(e=>`<li>${esc(e.label)}: ${esc(e.holdings_note)}</li>`).join('');
@@ -612,7 +649,7 @@ function holdings(){
  let s='<h2>What each account holds</h2><div class="scroll"><table><tr><th>Account</th>'+keys.map(([k,l])=>`<th>${esc(l)}</th>`).join('')+'</tr>';
  for(const e of es)s+=`<tr><td>${esc(e.label)}</td>`+keys.map(([k])=>`<td>${e.holdings.by_class[k]?pct(e.holdings.by_class[k]):'-'}</td>`).join('')+'</tr>';
  s+='</table></div>';
- for(const e of es)s+=`<details><summary>${esc(e.label)}: ${money(e.holdings.total)} as of ${esc(e.holdings.as_of)}</summary>${fundTable(e)}</details>`;
+ for(const e of es)s+=`<details><summary>${esc(e.label)}: ${money(e.holdings.total)} as of ${esc(fmtDate(e.holdings.as_of))}</summary>${fundTable(e)}</details>`;
  $('#hold').innerHTML=s+'<p class="small">Classes come from your local file .data/asset_classes.json; tickers missing from it show as Unclassified. Funds with world or global in the name count as Global stock, and balanced or target-date funds as Balanced, unless the file says otherwise.</p>'+(na?'<ul class="small">'+na+'</ul>':'');}
 function fundTable(e){const names=Object.fromEntries(D.classes);
  return '<div class="scroll"><table><tr><th>Fund</th><th>Class</th><th>Value</th><th>Weight</th></tr>'+
@@ -667,11 +704,13 @@ function scrub(key,i){const g=CH[key];if(!g||typeof document.getElementById!=='f
  const p=g.pv[i];el.querySelector('line').setAttribute('x1',p[0]);el.querySelector('line').setAttribute('x2',p[0]);
  const d=el.querySelector('.d');d.setAttribute('cx',p[0]);d.setAttribute('cy',p[1]);
  const db=el.querySelector('.db');if(db&&g.pb[i]){db.setAttribute('cx',g.pb[i][0]);db.setAttribute('cy',g.pb[i][1]);}
- const last=i===n-1,b=g.v.bench[i],when=`${fmtDate(g.v.months[i])} · ${last?'latest value':'estimated month-end'}`,bt=b!=null?` · ${esc(bm)} path ${money(b)}`:'';
  const val=document.getElementById('val-'+key),sub=document.getElementById('sub-'+key);
- if(val)val.textContent=money(g.v.values[i]);if(sub)sub.innerHTML=when+bt;}
+ if(val)val.textContent=money(g.v.values[i]);if(sub)sub.textContent=scrubCap(g.v,i);}
+function scrubCap(v,i){// one short line under the balance while scrubbing, so nothing below it moves (issue 195): "Mar 2024 · est. · VT $12.3K"
+ const last=i===v.months.length-1,b=v.bench&&v.bench[i];
+ return (last?fmtDate(v.months[i])+' · latest':fmtMon(v.months[i])+' · est.')+(b!=null?' · '+String(bm).slice(0,6)+' '+kmoney(b):'');}
 function unscrub(key){const g=CH[key];if(!g)return;g.i=null;const el=document.getElementById('sc-'+key);if(el&&el.setAttribute)el.setAttribute('opacity','0');
- const val=document.getElementById('val-'+key),sub=document.getElementById('sub-'+key);if(val&&val.dataset)val.textContent=val.dataset.d;if(sub&&sub.dataset)sub.innerHTML=sub.dataset.d;}
+ const val=document.getElementById('val-'+key),sub=document.getElementById('sub-'+key);if(val&&val.dataset)val.textContent=val.dataset.d;if(sub&&sub.dataset)sub.textContent=sub.dataset.d;}
 function hero(){// the first thing on a phone: what it is worth, and the same money in the benchmark, in dollars
  const accts=D.entities.filter(e=>e.kind==='account'),t=totalEnt(),wi=t&&!t.error&&WS(t,'inception');
  if(!wi||wi.value==null){$('#hero').innerHTML='';$('#chart').innerHTML='';$('#src').innerHTML='<p class="small">Nothing to show yet.</p>';return;}
@@ -679,7 +718,7 @@ function hero(){// the first thing on a phone: what it is worth, and the same mo
  let s=`<h1 class="eyebrow">All investments ${est?'<button type="button" class="chip est" data-act="info" data-k="est">Estimated</button>':'<span class="chip ok">Exact</span>'}</h1>`+
   `<p class="bal" id="val-hero" data-d="${money(wi.value)}">${money(wi.value)}</p><p class="balsub" id="sub-hero" data-d="${esc(sub)}">${esc(sub)}</p>`;
  if(ex.length)s+=`<p class="small"><span class="chip bad">Partial</span> Left out of this total because their history does not match their statements yet: ${esc(ex.join(', '))}.</p>`;
- if(t.note)s+=`<p class="small">The total is ${esc(t.note)}${/non-market/.test(t.note)?' (a fixed annuity counts in value and deposits; it has no market prices)':''}.</p>`;
+ if(t.note)s+=`<p class="small">The total is ${esc(isoD(t.note))}${/non-market/.test(t.note)?' (a fixed annuity counts in value and deposits; it has no market prices)':''}.</p>`;
  if(!w)s+=`<p class="say">Your accounts do not go back ${({ytd:'to the start of the year','1y':'a full year','3y':'3 years','5y':'5 years'})[win]||'that far'} yet. Pick a shorter period.</p>`;
  else{const v=verdict(w),pd=period(w);
   s+=`<p class="say">${v?(pd?capS(pd)+', ':'')+v+(pd?'.':' since '+esc(fmtMon(t.start))+'.'):'No benchmark comparison for this period.'}</p>`;
@@ -689,7 +728,7 @@ function hero(){// the first thing on a phone: what it is worth, and the same mo
  box.innerHTML=v&&v.months.length>1?area('hero',v,CW(box),CW(box)<520?210:260):'';
  $('#lgd').innerHTML=v?`<span><i></i>Your accounts</span>${showBench&&v.bench&&v.bench.length?`<span><i class="b"></i>Same money in ${esc(bm)}</span>`:''}`:'';
  $('#wins').innerHTML=pills(D.windows.map(([k])=>[k,WSHORT[k]||k]),win,'win',k=>!WS(t,k));
- $('#chartcap').textContent='Touch and drag the chart to see a month. Month-end values are estimated from your history; today\'s value is '+(t.quality==='exact'?'exact':'from your statements and snapshots')+'.';
+ $('#chartcap').textContent='Touch and drag the chart to see a month. Month-end values (est.) are estimated from your history; today\'s value is '+(t.quality==='exact'?'exact':'from your statements and snapshots')+'.';
  sources(t,w);}
 function sources(t,w){// where the money came from: opening value, deposits, withdrawals and what the investments earned
  if(!w){$('#src').innerHTML='<p class="small">Not available for this period.</p>';return;}
@@ -715,7 +754,7 @@ function card(e){// one rounded card per row: name, balance, sparkline and one p
  return `<button ${open}><span class="n">${esc(nice(e))}</span><span class="v">${money(val)}</span><span class="s">${esc(subOf(e))}</span><span class="sp">${spark(view(e))}</span>`+
   `<span class="h">${head}${tags.join('')}<span class="chev">›</span></span></button>`;}
 function cards(){const rs2=rows();$('#cards').innerHTML=rs2.length?rs2.map(card).join(''):'<p class="small">No accounts to show for this grouping.</p>';
- $('#grpbtn').innerHTML=`${esc((GROUPS.find(g=>g[0]===grp)||GROUPS[0])[1])} <span aria-hidden="true">▾</span>`;}
+ const gl=`${esc((GROUPS.find(g=>g[0]===grp)||GROUPS[0])[1])} <span aria-hidden="true">▾</span>`;$('#grpbtn').innerHTML=gl;$('#grpbtn2').innerHTML=gl;}
 function classMix(es){const by={};for(const e of es){const h=e.holdings;for(const [k,wt] of Object.entries(h.by_class))by[k]=(by[k]||0)+wt*h.total;}
  const sum=Object.values(by).reduce((a,b)=>a+b,0);return {by,sum};}
 function donut(by,sum,center){const R=54,C=2*Math.PI*R;let off=0,s='';const keys=D.classes.map(c=>c[0]).filter(k=>by[k]>0);
@@ -752,7 +791,7 @@ function sheetHtml(e){
   ['Time-weighted return (est.)',...(()=>{const r=f(pct,w.twr,'twr');return [r[0],r[1]||twrN];})()],['Sharpe (est.)',...f(num,w.sharpe,'sharpe')],['Worst fall',...f(pct,w.dd,'dd')]]
   .concat(D.extras.map(n=>['Excess vs '+n,...f(spct,w.extras[n]&&w.extras[n].excess,'excess')]));
  s+=`<section><h3 style="margin-bottom:10px">The figures</h3><div class="figs">${F.map(([l,x,n],i)=>fig(l,x,n||(i<3&&cumN?cumN:''))).join('')}</div></section>`;
- const notes=(e.unreconciled?['Estimated, does not reconcile: '+e.unreconciled+'. It is left out of combined totals and of periods other than since the start, rather than shown wrong.']:[]).concat([`${est?'Estimated':'Exact'}, as of ${w.thru||e.as_of}${e.note?' ('+e.note+')':''}.`]).concat((e.flags||[]).map(capS)).concat(w.unstable?['Some months had very little capital, so monthly returns in this window are not meaningful.']:[]);
+ const notes=(e.unreconciled?['Estimated, does not reconcile: '+isoD(e.unreconciled)+'. It is left out of combined totals and of periods other than since the start, rather than shown wrong.']:[]).concat([`${est?'Estimated':'Exact'}, as of ${fmtDate(w.thru||e.as_of)}${e.note?' ('+isoD(e.note)+')':''}.`]).concat((e.flags||[]).map(f=>capS(isoD(f)))).concat(w.unstable?['Some months had very little capital, so monthly returns in this window are not meaningful.']:[]);
  if(e.members)notes.push('Includes: '+e.members.join(', ')+'. Transfers between these accounts net out.');
  s+=`<section><h3 style="margin-bottom:8px">About these numbers</h3><ul class="notes">${notes.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></section>`;
  return s+sheetHold(e);}
@@ -783,18 +822,19 @@ function draw(){
  document.querySelectorAll('.bml').forEach(x=>x.textContent=BL());
  showTab();
  hero();cards();mix();
- $('#wins2').innerHTML=pills(D.windows,win,'win');$('#grps').innerHTML=pills(GROUPS,grp,'grp');
+ const tt=totalEnt();$('#wins2').innerHTML=pills(D.windows.map(([k])=>[k,WSHORT[k]||k]),win,'win',k=>!(tt&&WS(tt,k)));
  const rs2=rows();table(rs2);bars(rs2);lines(rs2);holdings();scatter();
  $('#opts-body').innerHTML=optsHtml();
  const sd=dlg('sheet');if(sd&&sd.open)renderSheet();
  $('#winnote').textContent=win==='inception'?'Since inception: IRR uses exact dated flows plus the ending value; returns are per year.':
-  'Windowed figures are estimated: they start from a month-end value (a statement where there is one, otherwise rebuilt from the history) and end at the last month-end the history covers. A window under a year is cumulative, not annualized (IRR, time-weighted return and excess alike); longer windows are per year. Each row runs to the latest value date of its own account (see Data). Accounts that do not cover the window show n/a. Sharpe is shown since inception only. A * means the history ends before the ending value (hover for details): the IRR then reaches that later date while the time-weighted return stops at the last month-end.';
+  'Windowed figures are estimated: they start from a month-end value (a statement where there is one, otherwise rebuilt from the history) and end at the last month-end the history covers. A window under a year is cumulative, not annualized (IRR, time-weighted return and excess alike); longer windows are per year. Each row runs to the latest value date of its own account (see Data). Accounts that do not cover the window show n/a. Sharpe is shown since inception only. The numbered notes below the table say why a figure is n/a.';
  $('#empty').hidden=rs2.length>0;}
 function act(a,k,el){
  if(a==='win')win=k;else if(a==='grp')grp=k;else if(a==='bm')bm=k;else if(a==='theme'){setTheme(k);}
  else if(a==='tab'){tab=k;if(typeof scrollTo==='function')scrollTo({top:0});}
  else if(a==='open'||a==='info'){sheetFor=a==='info'?'__est':k;const d=dlg('sheet');renderSheet();openDlg(d);const b=$('#sheet-body');if(b&&b.parentNode)b.parentNode.scrollTop=0;return;}
  else if(a==='opts'){$('#opts-body').innerHTML=optsHtml();openDlg(dlg('opts'));return;}
+ else if(a==='fn'){const li=dlg('fn-'+k);if(li&&li.scrollIntoView){li.scrollIntoView({block:'center',behavior:'smooth'});li.classList.add('hit');setTimeout(()=>li.classList.remove('hit'),1800);}return;}
  else if(a==='close'){const d=el.closest('dialog');if(d)d.close();return;}
  draw();
  if(a==='tab'){const v=$('#tab-'+k);if(v&&v.classList){v.classList.remove('view');void v.offsetWidth;v.classList.add('view');}}}
@@ -802,6 +842,7 @@ try{const th=localStorage.getItem('ufo-theme');if(th&&th!=='auto')document.docum
 if(typeof document.addEventListener==='function'){
  document.addEventListener('click',ev=>{const b=ev.target.closest('[data-act]');if(b){ev.preventDefault();act(b.dataset.act,b.dataset.k,b);return;}
   if(ev.target.tagName==='DIALOG')ev.target.close();});// a tap on the backdrop closes a sheet
+ document.addEventListener('scroll',ev=>{if(ev.target&&ev.target.id==='tblscroll')edges();},true);
  document.addEventListener('change',ev=>{if(ev.target.id==='bench'){showBench=ev.target.checked;draw();}});
  const keyOf=t=>{const b=t.closest&&t.closest('.chartbox');return b?[b,b.dataset.chart]:null;};
  const at=(ev,b,key)=>{const g=CH[key],sv=b.querySelector('svg');if(!g||!sv)return;const r=sv.getBoundingClientRect(),x=(ev.clientX-r.left)/r.width*g.W;
@@ -814,13 +855,35 @@ if(typeof document.addEventListener==='function'){
  document.addEventListener('focusout',ev=>{const k=keyOf(ev.target);if(k)unscrub(k[1]);});
  const sd=dlg('sheet');if(sd&&sd.addEventListener)sd.addEventListener('close',()=>{sheetFor=null;});
 }
-if(typeof addEventListener==='function'){let rz,lastW=innerWidth;addEventListener('resize',()=>{if(innerWidth===lastW)return;lastW=innerWidth;clearTimeout(rz);rz=setTimeout(draw,150);});}// redraw on rotation, not on a phone's scroll-driven height changes
+if(typeof addEventListener==='function'){let rz,lastW=innerWidth;addEventListener('resize',()=>{if(innerWidth===lastW)return;lastW=innerWidth;clearTimeout(rz);rz=setTimeout(draw,150);});addEventListener('resize',()=>edges());}// redraw on rotation, not on a phone's scroll-driven height changes
 draw();
 """
 
-LOGO = ('<svg viewBox="0 0 16 16" aria-hidden="true"><rect width="16" height="16" rx="3.5" fill="#4b30d6"/><path d="M6 3.9a2 2 0 0 1 4 0z" fill="#cfc4ff"/>'
-        '<ellipse cx="8" cy="4.6" rx="5" ry="1.5" fill="#fff"/><rect x="3.5" y="10" width="2.2" height="3.5" rx=".5" fill="#fff"/>'
-        '<rect x="6.9" y="8.2" width="2.2" height="5.3" rx=".5" fill="#fff"/><rect x="10.3" y="6.6" width="2.2" height="6.9" rx=".5" fill="#fff"/></svg>')
+# The brand mark, copied verbatim from the site (site/img/logo.svg and favicon.svg, M14) so the page stays one file with no
+# requests. tests/test_dashboard_logo_parity.py fails if these drift from the site; change the logo there, then copy it here.
+BRAND_LOGO_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Ur Family Office">
+  <defs>
+    <linearGradient id="ufo-bg" x1="6" y1="2" x2="58" y2="62" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#6d4dff"/><stop offset="1" stop-color="#2e1a9e"/></linearGradient>
+    <linearGradient id="ufo-beam" x1="32" y1="24" x2="32" y2="56" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff" stop-opacity=".34"/><stop offset="1" stop-color="#fff" stop-opacity=".04"/></linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#ufo-bg)"/>
+  <path d="M22 22h20l10 33H12z" fill="url(#ufo-beam)"/>
+  <rect x="16" y="43" width="8" height="12" rx="2" fill="#fff"/>
+  <rect x="28" y="36" width="8" height="19" rx="2" fill="#fff"/>
+  <rect x="40" y="28" width="8" height="27" rx="2" fill="#fff"/>
+  <path d="M23.5 17.5a8.5 8.5 0 0 1 17 0z" fill="#cfc4ff"/>
+  <ellipse cx="32" cy="19" rx="19" ry="5.5" fill="#fff"/>
+</svg>"""
+BRAND_FAVICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <rect width="16" height="16" rx="3.5" fill="#4b30d6"/>
+  <path d="M6 3.9a2 2 0 0 1 4 0z" fill="#cfc4ff"/>
+  <ellipse cx="8" cy="4.6" rx="5" ry="1.5" fill="#fff"/>
+  <rect x="3.5" y="10" width="2.2" height="3.5" rx=".5" fill="#fff"/>
+  <rect x="6.9" y="8.2" width="2.2" height="5.3" rx=".5" fill="#fff"/>
+  <rect x="10.3" y="6.6" width="2.2" height="6.9" rx=".5" fill="#fff"/>
+</svg>"""
+LOGO = BRAND_LOGO_SVG.replace('role="img" aria-label="Ur Family Office"', 'aria-hidden="true" focusable="false"', 1)
+FAVICON = "data:image/svg+xml;base64," + base64.b64encode(BRAND_FAVICON_SVG.encode()).decode()
 LOCK = ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
         '<rect x="5" y="11" width="14" height="10" rx="3"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>')
 SLIDERS = ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">'
@@ -835,7 +898,7 @@ def render(data: dict) -> str:
               f'<p>{html.escape(demo)}</p></details>') if demo else ""
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="color-scheme" content="light dark"><title>All investments side by side</title>
+<meta name="color-scheme" content="light dark"><link rel="icon" type="image/svg+xml" href="{FAVICON}"><title>All investments side by side</title>
 <style>{PAGE_CSS}</style></head><body><main>
 <header class="top"><div class="brand">{LOGO}<div>Ur Family Office<small class="muted">All investments side by side</small></div></div>
 <div class="top-r"><button type="button" class="icon" data-act="opts" aria-label="View options: benchmark, grouping and theme">{SLIDERS}</button></div></header>
@@ -853,9 +916,18 @@ def render(data: dict) -> str:
 <section class="card" aria-labelledby="mix-h"><h2 id="mix-h" style="margin-bottom:14px">Your mix</h2><div id="mix"></div></section>
 </div></div></div>
 <div id="tab-details" hidden><div class="dt">
-<section class="card"><h2>Every figure</h2><div class="ctl"><div class="pills" id="wins2" role="group" aria-label="Window"></div><div class="pills" id="grps" role="group" aria-label="Grouping"></div></div>
-<p class="small" id="winnote"></p><p class="small" id="totnote" style="margin-top:6px"></p><p id="empty" hidden class="na">No accounts to show for this grouping.</p>
-<div class="scroll" style="margin-top:12px"><table id="tbl"></table></div></section>
+<section class="card"><div class="sec-h" style="margin:0 0 12px"><h2 style="margin:0">Every figure</h2><button type="button" class="chip lg" id="grpbtn2" data-act="opts" aria-label="Change grouping and benchmark"></button></div>
+<div class="pills" id="wins2" role="group" aria-label="Period"></div>
+<p id="empty" hidden class="na" style="margin-top:12px">No accounts to show for this grouping.</p>
+<div class="tblwrap" id="tblwrap"><div class="scroll" id="tblscroll" tabindex="0" aria-label="Every figure; scroll sideways for more columns"><table id="tbl"></table></div></div>
+<div class="fine"><h3>Fine print</h3>
+<dl><dt><span class="chip ok">Exact</span></dt><dd>Rests only on today's value and the dated deposits and withdrawals in your files.</dd>
+<dt><span class="chip est">Estimated</span></dt><dd>Needs month-end values, which are rebuilt from your history (or taken from a statement where there is one), so it can be a little off.</dd>
+<dt><span class="chip bad">Does not reconcile</span></dt><dd>Rebuilt month-end values differ from the account's own statements or snapshots, so it is left out of shorter periods and combined lines rather than shown wrong.</dd>
+<dt><span class="chip bad">Partial</span></dt><dd>A combined line that leaves out an account that does not reconcile; the note names it.</dd>
+<dt><b>*</b></dt><dd>The history ends before the ending value: the IRR reaches that later date while the time-weighted return stops at the last month-end.</dd></dl>
+<ol class="fine-notes" id="tblnotes"></ol>
+<p id="winnote"></p><p id="totnote"></p></div></section>
 <figure class="card"><h2>Excess IRR per account</h2><div id="bars"></div><figcaption>IRR of the real flows minus the IRR of the same deposits and withdrawals put into <span class="bml"></span>. Sorted best first.</figcaption></figure>
 <figure class="card"><h2>Value over time</h2><div class="key" id="key"></div><div id="lines"></div><figcaption>Month-end values are estimated; the endpoints are exact.</figcaption></figure>
 <figure class="card"><h2>Risk versus return</h2><div id="risk"></div><figcaption>Each point is one account, group, your whole portfolio (large) or a benchmark (grey): time-weighted return per year against how much it swings, numbered, with the names and Sharpe ratio (return above the T-bill rate per unit of risk) in the list below the chart. Since each one's start; benchmarks cover the whole-portfolio period. Hollow points are estimated from reconstructed month-end values (decision 0011). Hover for the figures.</figcaption><p class="small" id="riskleft"></p></figure>
