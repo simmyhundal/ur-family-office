@@ -1,7 +1,8 @@
 {
   "name": "UFO",
   "wordmark": "UFO",
-  "tagline": "See how your investments really did",
+  "tagline": "Out of this world possibilities",
+  "logo": "img/logo.svg",
   "contact_email": "",
   "signup_endpoint": "",
   "checkout_urls": {}

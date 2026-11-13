@@ -72,6 +72,8 @@ def test_single_page_build_inlines_everything():
     out = B.build('{"dates":["2024-01-31"],"labels":{"A":"</script>"},"series":{"A":[1]}}')
     assert "<style>" in out and "globalThis.UFO_DATA" in out and "../js/app.js" not in out and "export " not in out and "import {" not in out
     assert "</script>\"" not in out.split("globalThis.UFO_DATA")[1].split("</script>")[0]  # data cannot close the tag early
+    assert "../img/" not in out and "../css/" not in out and "chrome.mjs" not in out  # logo, extra CSS and header script are inlined or dropped
+    assert 'rel="icon" type="image/svg+xml" href="data:image/svg+xml,' in out and 'class="brand-mark" src="data:image/svg+xml,' in out
 
 
 def test_presets_are_well_formed():

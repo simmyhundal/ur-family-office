@@ -22,10 +22,20 @@ test("config: loader falls back to defaults on failure and reads on success", as
 test("header and footer render the name and links", () => {
   const cfg = mergeConfig({ name: "Renamed", contact_email: "a@example.com" });
   const h = headerHtml(cfg, "../", "pricing");
-  assert.match(h, /Renamed<span>/); assert.match(h, /href="..\/pricing\/" aria-current="page"/); assert.match(h, /Sign up/);
+  assert.match(h, /href="..\/pricing\/" aria-current="page"/); assert.match(h, /Sign up/);
+  assert.match(h, /<img class="brand-mark" src="..\/img\/logo.svg"/); assert.match(h, /Out of this world possibilities/);
+  assert.match(h, /aria-label="Renamed, home"/); assert.ok(!/>Renamed</.test(h), "the name is not shown in the header");
   const f = footerHtml(cfg, "../");
+  assert.match(f, /<span class="brand-name">Renamed<\/span>/); assert.match(f, /src="..\/img\/logo.svg"/);
   for (const p of ["pricing/", "privacy/", "terms/", "about/"]) assert.ok(f.includes(p));
   assert.match(f, /mailto:a@example.com/);
+});
+
+test("config: logo is a path inside the site, anything else falls back", () => {
+  assert.equal(mergeConfig({}).logo, "img/logo.svg");
+  assert.equal(mergeConfig({ logo: "img/mark.svg" }).logo, "img/mark.svg");
+  for (const bad of ["https://x.example/a.svg", "//x.example/a.svg", "javascript:alert(1)", "../a.svg", "img/a.svg\" onerror=\"x", "/img/a.svg"])
+    assert.equal(mergeConfig({ logo: bad }).logo, "img/logo.svg", bad);
 });
 
 test("plan button: no checkout_url goes to sign-up with the plan", () => {
