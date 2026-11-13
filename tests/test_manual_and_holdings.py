@@ -21,37 +21,37 @@ def _row(d, action, sym="", qty="0", amount="", price=""):
 
 def test_ira_and_transfer_actions_are_recognized():
     p = parse_fidelity_history(_csv(
-        _row("01/18/2022", "CASH CONTRIBUTION CURRENT YEAR (Cash)", amount="6000"),
-        _row("04/05/2022", "CASH CONTRIBUTION PRIOR YEAR (Cash)", amount="500"),
-        _row("10/16/2022", "EARLY DIST NO EXCEPT EARLY DST/NO EXCP A1 /WEB (Cash)", amount="-700"),
-        _row("04/17/2022", "TRANSFER OF ASSETS ACAT RECEIVE ACME FUND (ACMEX) (Cash)", "ACMEX", "20", "1500"),
-        _row("04/17/2022", "TRANSFER OF ASSETS ACAT RECEIVE (Cash)", amount="-170"),
-        _row("06/17/2022", "LONG-TERM CAP GAIN ACME FUND (ACMEX) (Cash)", "ACMEX", amount="24"),
-        _row("10/11/2022", "DISTRIBUTION ACME FUND (ACMEX) (Cash)", "ACMEX", "80", "2250"),
-        _row("03/31/2022", "REDEMPTION PAYOUT ACME BK CD 1.1% 03/31/2022 (Cash)", "02007GPF4", "-1000", "1000", "1"),
-        _row("01/29/2022", "MERGER MER FROM 26924G409#REOR OLD (NEWX) (Cash)", "NEWX", "2", "90"),
+        _row("02/09/2021", "CASH CONTRIBUTION CURRENT YEAR (Cash)", amount="1234"),
+        _row("05/11/2021", "CASH CONTRIBUTION PRIOR YEAR (Cash)", amount="321"),
+        _row("08/23/2021", "EARLY DIST NO EXCEPT EARLY DST/NO EXCP A1 /WEB (Cash)", amount="-456"),
+        _row("07/14/2021", "TRANSFER OF ASSETS ACAT RECEIVE ACME FUND (ACMEX) (Cash)", "ACMEX", "20", "1777"),
+        _row("07/14/2021", "TRANSFER OF ASSETS ACAT RECEIVE (Cash)", amount="-55"),
+        _row("09/20/2021", "LONG-TERM CAP GAIN ACME FUND (ACMEX) (Cash)", "ACMEX", amount="17"),
+        _row("11/03/2021", "DISTRIBUTION ACME FUND (ACMEX) (Cash)", "ACMEX", "80", "999"),
+        _row("12/15/2021", "REDEMPTION PAYOUT ACME BK CD 1.1% 12/15/2021 (Cash)", "00000AAA1", "-800", "800", "1"),
+        _row("03/02/2021", "MERGER MER FROM 26924G409#REOR OLD (NEWX) (Cash)", "NEWX", "2", "90"),
     ))
     assert not p.warnings
     kinds = {e.description or e.symbol or e.kind: e.kind for e in p.events}
     by_amount = {e.amount: e.kind for e in p.events if e.amount}
-    assert by_amount[6000] == Kind.CONTRIBUTION and by_amount[500] == Kind.CONTRIBUTION
-    assert by_amount[-700] == Kind.WITHDRAWAL
-    assert by_amount[1500] == Kind.CONTRIBUTION and next(e for e in p.events if e.amount == 1500).in_kind
-    assert by_amount[-170] == Kind.FEE
-    assert by_amount[24] == Kind.DIVIDEND and by_amount[2250] == Kind.DIVIDEND
-    assert by_amount[1000] == Kind.SELL and by_amount[90] == Kind.BUY
+    assert by_amount[1234] == Kind.CONTRIBUTION and by_amount[321] == Kind.CONTRIBUTION
+    assert by_amount[-456] == Kind.WITHDRAWAL
+    assert by_amount[1777] == Kind.CONTRIBUTION and next(e for e in p.events if e.amount == 1777).in_kind
+    assert by_amount[-55] == Kind.FEE
+    assert by_amount[17] == Kind.DIVIDEND and by_amount[999] == Kind.DIVIDEND
+    assert by_amount[800] == Kind.SELL and by_amount[90] == Kind.BUY
     assert kinds
 
 
 def test_manual_importer_reads_contributions_and_withdrawals(tmp_path):
     f = tmp_path / "bonds.csv"
-    f.write_text("# invented\ndate,kind,amount,description\n2022-07-27,contribution,\"5,000\",first\n2023-01-05,withdrawal,1000,partial\nnot-a-date,contribution,1,x\n")
+    f.write_text("# invented\ndate,kind,amount,description\n2021-03-10,contribution,\"2,500\",first\n2021-09-05,withdrawal,400,partial\nnot-a-date,contribution,1,x\n")
     h = importers.get("manual").parse([str(f)])
     assert [(e.when, e.kind, e.amount) for e in h.events] == [
-        (date(2022, 7, 27), Kind.CONTRIBUTION, 5000.0), (date(2023, 1, 5), Kind.WITHDRAWAL, -1000.0)]
-    assert [e.external_flow for e in h.events] == [5000.0, -1000.0]
+        (date(2021, 3, 10), Kind.CONTRIBUTION, 2500.0), (date(2021, 9, 5), Kind.WITHDRAWAL, -400.0)]
+    assert [e.external_flow for e in h.events] == [2500.0, -400.0]
     assert len(h.warnings) == 1 and "row 4" in h.warnings[0]
-    assert h.first == date(2022, 7, 27) and h.last == date(2023, 1, 5)
+    assert h.first == date(2021, 3, 10) and h.last == date(2021, 9, 5)
     assert importers.get("manual").positions([str(f)]) == []
 
 
