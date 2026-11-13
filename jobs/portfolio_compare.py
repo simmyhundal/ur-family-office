@@ -29,6 +29,7 @@ def main(argv: list[str] | None = None, store: PriceStore | None = None, today: 
     ap.add_argument("--out", default="exports/portfolio-compare.html", help="local dashboard (owner-only file); '' to skip")
     ap.add_argument("--root", default=".")
     ap.add_argument("--cache", default=".data/prices")
+    ap.add_argument("--demo", default="", help=argparse.SUPPRESS)  # banner text for a page built from invented data (scripts/build_demo_dashboard.py)
     a = ap.parse_args(argv)
     con = Console()
     root = Path(a.root)
@@ -75,6 +76,8 @@ def main(argv: list[str] | None = None, store: PriceStore | None = None, today: 
         except (PriceError, KeyError) as e:
             con.print(f"[red]Could not build the dashboard: {e}[/red]")
             return 1
+        if a.demo:
+            data["demo"] = a.demo
         out = root / a.out
         write(out, render_page(data))
         con.print(f"\nDashboard: [bold]{out}[/bold] (owner-only file; open it in a browser)")

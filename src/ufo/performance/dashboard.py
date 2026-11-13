@@ -6,6 +6,7 @@ This page is performance. Holdings, drift and trades belong to the IBKR operatio
 """
 from __future__ import annotations
 
+import html
 import json
 import os
 from datetime import date, timedelta
@@ -301,6 +302,20 @@ svg .pt circle{stroke:var(--pc);stroke-width:2.2}svg .pt circle.solid{fill:var(-
 :root{--c0:#1d6f5b;--c1:#4a55c4;--c2:#b13b86;--c3:#2a7fa8;--c4:#8a7a14;--c5:#7a4a2a;--c6:#c25a1b;--c7:#5d6862}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--c0:#4fc3a3;--c1:#9ba6ff;--c2:#ef8fcb;--c3:#7cc4e8;--c4:#d8c25a;--c5:#c9a27a;--c6:#f0925a;--c7:#9aa8a0}}
 :root[data-theme="dark"]{--c0:#4fc3a3;--c1:#9ba6ff;--c2:#ef8fcb;--c3:#7cc4e8;--c4:#d8c25a;--c5:#c9a27a;--c6:#f0925a;--c7:#9aa8a0}
+.hero{margin:.2em 0 1.1em}.hero p{margin:.15em 0;line-height:1.45}.hero .big{font-size:2.1em;font-weight:700;line-height:1.1;margin-bottom:.15em}
+.demo{border:1px solid var(--warn);border-radius:8px;padding:8px 12px;margin:.4em 0 .8em;background:var(--card)}
+@media (max-width:640px){
+ h1{font-size:1.55em;line-height:1.15}.controls{gap:10px}
+ .seg{display:flex;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}.seg::-webkit-scrollbar{display:none}
+ .seg button{white-space:nowrap;flex:0 0 auto;padding:9px 12px}
+ #tbl,#tbl tbody{display:block}#tbl tr:first-child{display:none}
+ #tbl tr{display:block;border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:0 0 10px;background:var(--card)}
+ #tbl tr.total{border:2px solid var(--port)}#tbl tr.total td{border-top:0}
+ #tbl td{display:flex;justify-content:space-between;align-items:baseline;gap:14px;border:0;padding:3px 0;text-align:right}
+ #tbl td::before{content:attr(data-l);color:var(--muted);font-size:13px;font-weight:400;text-align:left}
+ #tbl td:first-child{font-weight:700;font-size:1.05em;padding-bottom:5px}#tbl td:first-child::before{content:none}
+ #tbl td[colspan]{display:block;text-align:left}#tbl td[colspan]::before{content:none}
+}
 """
 
 JS = r"""
@@ -321,6 +336,8 @@ function niceTicks(lo,hi,mant,maxN){// round steps (mant x 10^k) so the range ha
 const trim=x=>String(+x.toFixed(2));
 const moneyAxis=v=>{const a=Math.abs(v),s=v<0?'-':'';return a>=1e6?s+'$'+trim(a/1e6)+'M':a>=1000?s+'$'+trim(a/1000)+'K':s+'$'+Math.round(a);};
 const MONEY_STEPS=[1,2.5,5,10],PCT_STEPS=[1,2,5];
+const CW=el=>Math.max(300,Math.min(860,(el&&el.clientWidth)||$('main').clientWidth||860));// charts are drawn at the screen's width so their text stays readable on a phone
+const fit=(l,px)=>l.length*6.4<=px?l:l.slice(0,Math.max(3,Math.floor(px/6.4)-1))+'…';
 const COLORS=Array.from({length:8},(_,i)=>`var(--c${i})`);
 const GROUPS=[['accounts','Accounts'],['all','All combined'],['brokerage','By brokerage'],['owner','By owner'],['wrapper','By wrapper']];
 function seg(el,items,get,set){el.innerHTML=items.map(([k,l])=>`<button type="button" aria-pressed="${get()===k}" data-k="${k}">${esc(l)}</button>`).join('');
@@ -358,6 +375,7 @@ function table(rs){
  const showTot=tot&&grp!=='all';
  if(showTot)h+=trow(tot,'Total, all accounts','total');
  $('#tbl').innerHTML=h;
+ $('#tbl').querySelectorAll('tr').forEach((tr,i)=>{if(!i)return;let c=0;for(const td of tr.children){td.dataset.l=head[c]||'';c+=td.colSpan||1;}});// card labels on phones
  const t2=grp==='all'?rs[0]:tot;
  $('#totnote').textContent=t2&&t2.as_of?`The total is valued on ${t2.as_of}${t2.note?', the latest month-end every account covers':''}; account rows use each account's own latest date, so the sums can differ. `+
   'Non-market accounts (a fixed annuity) count in value and net in. Transfers between your own accounts net out of combined lines, so their Net in can differ from the sum of the rows.'+
@@ -365,11 +383,11 @@ function table(rs){
 function bars(rs){
  const items=rs.filter(e=>WS(e)&&WS(e).excess!=null).map(e=>[e.label,WS(e).excess]).sort((a,b)=>b[1]-a[1]);
  if(!items.length){$('#bars').innerHTML='<p class="na">Nothing to chart for this window.</p>';return;}
- const W=860,rh=30,L=200,R=70,H=items.length*rh+44,mx=Math.max(...items.map(i=>Math.abs(i[1])),0.01),bt=niceTicks(0,mx,PCT_STEPS.map(q=>q/100),3),m=bt.hi,half=(W-L-R)/2,x0=L+half,sc=(half-60)/m;
+ const W=CW($('#bars')),rh=30,L=Math.min(200,Math.round(W*0.34)),R=W<520?52:70,H=items.length*rh+44,mx=Math.max(...items.map(i=>Math.abs(i[1])),0.01),nar=W<520,bt=niceTicks(0,mx,PCT_STEPS.map(q=>q/100),nar?1:3),m=bt.hi,half=(W-L-R)/2,x0=L+half,sc=(half-(nar?40:60))/m;
  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Excess IRR per account">`;
  for(const u of bt.ticks.flatMap(t=>t===0?[0]:[t,-t]))s+=`<line class="${u===0?'zero':'grid'}" x1="${x0+u*sc}" x2="${x0+u*sc}" y1="6" y2="${H-26}"/><text class="axis" x="${x0+u*sc}" y="${H-10}" text-anchor="middle">${u===0?'0%':spct(u)}</text>`;
  items.forEach(([l,v],i)=>{const y=10+i*rh,w=Math.abs(v)*sc;
-  s+=`<text class="val" x="${L-8}" y="${y+14}" text-anchor="end">${esc(l)}</text><rect class="${v>=0?'bar-pos':'bar-neg'}" x="${v>=0?x0:x0-w}" y="${y}" width="${w}" height="18" rx="3"/>`+
+  s+=`<text class="val" x="${L-8}" y="${y+14}" text-anchor="end"><title>${esc(l)}</title>${esc(fit(l,L-12))}</text><rect class="${v>=0?'bar-pos':'bar-neg'}" x="${v>=0?x0:x0-w}" y="${y}" width="${w}" height="18" rx="3"/>`+
      `<text class="val" x="${v>=0?x0+w+6:x0-w-6}" y="${y+14}" text-anchor="${v>=0?'start':'end'}">${spct(v)}</text>`;});
  $('#bars').innerHTML=s+'</svg>';}
 function view(e){// the series to chart for the picked window, or null when the entity does not cover it
@@ -380,7 +398,7 @@ function lines(rs){
  if(!es.length){$('#lines').innerHTML='<p class="na">Nothing to chart for this window.</p>';$('#key').innerHTML='';return;}
  const t=d=>Date.parse(d),all=es.flatMap(e=>e.months.map(t)),t0=Math.min(...all),t1=Math.max(...all);
  const ys=es.flatMap(e=>e.values.concat(showBench?e.bench:[])),yt=niceTicks(0,Math.max(...ys,1),MONEY_STEPS,5),ymax=yt.hi;
- const W=860,H=300,L=64,R=14,T=12,B=28,X=d=>L+(t(d)-t0)/((t1-t0)||1)*(W-L-R),Y=v=>T+(H-T-B)*(1-v/ymax);
+ const W=CW($('#lines')),H=W<520?240:300,L=W<520?52:64,R=14,T=12,B=28,X=d=>L+(t(d)-t0)/((t1-t0)||1)*(W-L-R),Y=v=>T+(H-T-B)*(1-v/ymax);
  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Account value over time">`;
  for(const v of yt.ticks){s+=`<line class="${v===0?'zero':'grid'}" x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}"/><text class="axis" x="${L-6}" y="${Y(v)+4}" text-anchor="end">${moneyAxis(v)}</text>`;}
  const y0=new Date(t0).getUTCFullYear(),y1=new Date(t1).getUTCFullYear();
@@ -394,7 +412,7 @@ function scatter(){
  const R=D.risk[win],keep=p=>(p.kind==='benchmark'&&p.label!==D.benchmark)||p.kind==='all'||(grp==='accounts'?p.kind==='account':(grp!=='all'&&p.gk===grp)),P=R.points.filter(keep).concat(R.bm[bm]?[{...R.bm[bm],label:BL(),kind:'benchmark',exact:win==='inception'}]:[]),LO=R.left_off.filter(a=>keep({kind:a[2],gk:a[3],label:a[0]}));
  if(P.length<2){$('#risk').innerHTML='<p class="na">Not enough history (12 months) for a risk and return chart.</p>';}
  else{
-  const W=860,H=380,L=64,Rr=40,T=14,B=44,PS=PCT_STEPS.map(m=>m/100),xt=niceTicks(0,Math.max(...P.map(p=>p.vol),0.01),PS,6),xm=xt.hi,
+  const W=CW($('#risk')),H=W<520?320:380,L=64,Rr=40,T=14,B=44,PS=PCT_STEPS.map(m=>m/100),xt=niceTicks(0,Math.max(...P.map(p=>p.vol),0.01),PS,6),xm=xt.hi,
    yt=niceTicks(Math.min(0,...P.map(p=>p.ret)),Math.max(0.01,...P.map(p=>p.ret)),PS,6),y0=yt.lo,y1=yt.hi;
   const X=v=>L+v/xm*(W-L-Rr),Y=v=>T+(H-T-B)*(1-(v-y0)/((y1-y0)||1));
   let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Risk versus return">`;
@@ -428,7 +446,7 @@ function sharpeTab(){
  const P=L.points,c=$('#sharpechart');if(!c)return;
  if(!P){c.innerHTML='<p class="na">n/a: the chart needs the T-bill rate and at least two months of returns.</p>';return;}
  const pts=[{k:'portfolio',label:'Your portfolio',...P.portfolio},{k:'benchmark',label:BL(),...P.benchmark}].filter(p=>p.ret!=null&&p.vol!=null);
- const W=860,H=340,Lm=64,Rm=40,T=14,B=44,PS=PCT_STEPS.map(m=>m/100),
+ const W=CW(c),H=W<520?300:340,Lm=64,Rm=40,T=14,B=44,PS=PCT_STEPS.map(m=>m/100),
   xt=niceTicks(0,Math.max(...pts.map(p=>p.vol),0.01),PS,6),xm=xt.hi,
   yt=niceTicks(Math.min(0,P.rf,...pts.map(p=>p.ret)),Math.max(0.01,P.rf,...pts.map(p=>p.ret)),PS,6),y0=yt.lo,y1=yt.hi;
  const X=v=>Lm+v/xm*(W-Lm-Rm),Y=v=>T+(H-T-B)*(1-(v-y0)/((y1-y0)||1));
@@ -438,21 +456,28 @@ function sharpeTab(){
  s+=`<text class="axis" x="${(Lm+W-Rm)/2}" y="${H-6}" text-anchor="middle">Volatility (annual)</text>`;
  pts.forEach((p,i)=>{const col=p.k==='portfolio'?'var(--c2)':'var(--c7)';
   s+=`<g class="pt"><title>${esc(p.label)}: return ${pct(p.ret)}, volatility ${pct(p.vol)}, Sharpe ${num(p.sharpe)}</title><line x1="${X(0)}" y1="${Y(P.rf)}" x2="${X(p.vol)}" y2="${Y(p.ret)}" stroke="${col}" stroke-width="2" stroke-dasharray="${p.k==='portfolio'?'0':'6 4'}"/>`+
-   `<circle cx="${X(p.vol)}" cy="${Y(p.ret)}" r="6" fill="${col}"/><text class="axis" x="${X(p.vol)>W*0.7?X(p.vol)-10:X(p.vol)+10}" text-anchor="${X(p.vol)>W*0.7?'end':'start'}" y="${Y(p.ret)+(i?16:-8)}">${esc(p.label)} · slope ${num(p.sharpe)}</text></g>`;});
+   `<circle cx="${X(p.vol)}" cy="${Y(p.ret)}" r="6" fill="${col}"/><text class="axis" x="${X(p.vol)>W*(W<520?0.5:0.7)?X(p.vol)-10:X(p.vol)+10}" text-anchor="${X(p.vol)>W*(W<520?0.5:0.7)?'end':'start'}" y="${Y(p.ret)+(i?16:-8)}">${esc(p.label)} · slope ${num(p.sharpe)}</text></g>`;});
  s+=`<circle cx="${X(0)}" cy="${Y(P.rf)}" r="5" fill="none" stroke="var(--ink)" stroke-width="2"/><text class="axis" x="${X(0)+10}" y="${Y(P.rf)-8}">Risk-free (T-bill) ${pct(P.rf)}</text>`;
  c.innerHTML=s+'</svg>';
  $('#sharpecap').textContent='Each line starts at the risk-free point (zero risk, the T-bill return) and ends at a portfolio. The steeper the line, the higher the Sharpe ratio: its slope is the Sharpe ratio. Returns here are the average month times 12, so they differ slightly from the compounded figures in the Risk versus return chart.';}
+function hero(){// the first thing on a phone: what it is worth, and the same money in the benchmark, in dollars
+ const accts=D.entities.filter(e=>e.kind==='account'),t=D.entities.find(e=>e.kind==='group'&&e.groupKind==='all')||(accts.length===1?accts[0]:null),w=t&&!t.error&&WS(t,'inception');
+ if(!w||w.value==null){$('#hero').innerHTML='';return;}
+ const n=accts.length,d=w.bench_end!=null?w.value-w.bench_end:null;
+ $('#hero').innerHTML=`<p class="big">${money(w.value)}</p><p>${n===1?'One account':n+' accounts'}${w.irr!=null?`, earning ${pct(w.irr)} a year since ${esc(t.start)} (money-weighted)`:''}.</p>`+
+  (d!=null?`<p>The same deposits and withdrawals in ${esc(BL())} would be worth ${money(w.bench_end)}: ${Math.abs(d)<1?'even':`<b>${money(Math.abs(d))} ${d>=0?'ahead':'behind'}</b>`}${w.excess!=null?` (${spct(w.excess)} a year)`:''}.</p>`:'');}
 function showTab(){$('#tab-main').hidden=tab!=='main';$('#tab-sharpe').hidden=tab!=='sharpe';if(tab==='sharpe')sharpeTab();}
 function draw(){
  document.querySelectorAll('.bml').forEach(x=>x.textContent=BL());
  seg($('#bms'),D.benchmarks,()=>bm,k=>{bm=k;});seg($('#tabs'),[['main','Dashboard'],['sharpe','How Sharpe works']],()=>tab,k=>{tab=k;});showTab();
  seg($('#wins'),D.windows,()=>win,k=>win=k);seg($('#grps'),GROUPS,()=>grp,k=>grp=k);
- const rs=rows();table(rs);bars(rs);lines(rs);holdings();scatter();
+ hero();const rs=rows();table(rs);bars(rs);lines(rs);holdings();scatter();
  $('#winnote').textContent=win==='inception'?'Since inception: IRR uses exact dated flows plus the ending value; returns are per year.':
   'Windowed figures are estimated: they start from a month-end value (a statement where there is one, otherwise rebuilt from the history) and end at the last month-end the history covers. A window under a year is cumulative, not annualized (IRR, time-weighted return and excess alike); longer windows are per year. Each row runs to the latest value date of its own account (see Data). Accounts that do not cover the window show n/a. Sharpe is shown since inception only. A * means the history ends before the ending value (hover for details): the IRR then reaches that later date while the time-weighted return stops at the last month-end.';
  $('#empty').hidden=rs.length>0;}
 $('#bench').onchange=e=>{showBench=e.target.checked;draw();};
 document.querySelectorAll('[data-theme-set]').forEach(b=>b.onclick=()=>{const v=b.dataset.themeSet;v==='auto'?document.documentElement.removeAttribute('data-theme'):document.documentElement.setAttribute('data-theme',v);});
+if(typeof addEventListener==='function'){let rz,lastW=innerWidth;addEventListener('resize',()=>{if(innerWidth===lastW)return;lastW=innerWidth;clearTimeout(rz);rz=setTimeout(draw,150);});}// redraw on rotation, not on a phone's scroll-driven height changes
 draw();
 """
 
@@ -464,8 +489,10 @@ def render(data: dict) -> str:
 <title>All investments side by side</title>
 <style>{CSS}{PAGE_CSS}</style></head><body><main>
 <header><h1>All investments side by side</h1>
-<p class="muted">As of {data['asof']} · benchmark <span class="bml"></span> · local only, never sent anywhere
+<p class="muted">As of {data['asof']} · benchmark <span class="bml"></span> · {'invented demo data' if data.get('demo') else 'local only, never sent anywhere'}
  · <span class="seg" aria-label="Theme"><button type="button" data-theme-set="auto">Auto</button><button type="button" data-theme-set="light">Light</button><button type="button" data-theme-set="dark">Dark</button></span></p></header>
+{f'<p class="demo">{html.escape(data["demo"])}</p>' if data.get("demo") else ""}
+<section id="hero" class="hero" aria-live="polite"></section>
 <nav class="controls"><div class="seg" id="tabs" aria-label="View"></div><div class="seg" id="bms" aria-label="Benchmark"></div></nav>
 <div id="tab-main">
 <section class="controls"><div class="seg" id="wins" aria-label="Window"></div><div class="seg" id="grps" aria-label="Grouping"></div>
