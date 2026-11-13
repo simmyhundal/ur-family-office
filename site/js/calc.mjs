@@ -166,3 +166,40 @@ export function sliceFor(data, symbols, years) {
     limitedBy: from === first ? limiter : null, // set only when the start came from a late fund, not from the period
   };
 }
+
+// ---------- the "How Sharpe works" lesson: every step of the Sharpe ratio, shown separately ----------
+
+/** Month-to-month returns of one price series. */
+export const priceReturns = (p) => p.slice(1).map((v, i) => v / p[i] - 1);
+
+/** Pearson correlation of two equal-length series. */
+export function correlation(a, b) {
+  const ma = mean(a), mb = mean(b);
+  let sab = 0, saa = 0, sbb = 0;
+  for (let i = 0; i < a.length; i++) { sab += (a[i] - ma) * (b[i] - mb); saa += (a[i] - ma) ** 2; sbb += (b[i] - mb) ** 2; }
+  return sab / Math.sqrt(saa * sbb);
+}
+
+/** The Sharpe ratio in steps (same arithmetic as metrics()). `rf` as in metrics(). Returns null when there is no
+ *  cash rate. `within` counts the months that landed within one standard deviation of the average excess return. */
+export function sharpeSteps(returns, rf) {
+  const rfAt = (k) => (Array.isArray(rf) ? rf[k] : rf);
+  if (rf == null || returns.some((_, k) => rfAt(k) == null) || returns.length < 2) return null;
+  const cash = returns.map((_, k) => monthlyRf(rfAt(k)));
+  const excess = returns.map((r, k) => r - cash[k]);
+  const meanExcess = mean(excess), sd = stdev(excess);
+  return {
+    n: returns.length, cash, excess, meanCash: mean(cash), meanExcess, sd,
+    meanExcessAnnual: meanExcess * 12, sdAnnual: sd * Math.sqrt(12),
+    sharpe: sd > 1e-12 ? (meanExcess / sd) * Math.sqrt(12) : null,
+    within: excess.filter((x) => Math.abs(x - meanExcess) <= sd).length,
+    compoundedAnnual: growthIndex(returns).at(-1) ** (12 / returns.length) - 1,
+  };
+}
+
+/** Two funds, mixed 50/50 each month: volatility of the mix versus the plain average of the two volatilities. */
+export function blend5050(a, b) {
+  const ann = (x) => stdev(x) * Math.sqrt(12);
+  const volA = ann(a), volB = ann(b), volMix = ann(a.map((x, i) => (x + b[i]) / 2));
+  return { volA, volB, volAvg: (volA + volB) / 2, volMix, corr: correlation(a, b) };
+}

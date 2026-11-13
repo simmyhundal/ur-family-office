@@ -196,3 +196,32 @@ test("sliceFor carries the cash-rate array along with the dates", () => {
   assert.equal(w.rf.length, 13);
   assert.equal(w.rf[0], 17);
 });
+
+import { sharpeSteps, correlation, blend5050, priceReturns } from "../../site/js/calc.mjs";
+
+test("sharpeSteps: agrees with metrics() and counts months within one standard deviation", () => {
+  const prices = { A: [100] };
+  for (const r of [0.02, -0.01, 0.03, 0.0, 0.01, -0.02, 0.04, 0.01, -0.01, 0.02, 0.0, 0.03]) prices.A.push(prices.A.at(-1) * (1 + r));
+  const sim = simulate({ prices, weights: { A: 1 }, initial: 1000 });
+  const s = sharpeSteps(sim.returns, 4);
+  close(s.sharpe, metrics(sim, 4).sharpe, 1e-12);
+  close(s.meanExcessAnnual / s.sdAnnual, s.sharpe, 1e-12); // "divide" step equals the code's monthly route
+  close(s.meanCash, (1.04) ** (1 / 12) - 1, 1e-12);
+  assert.equal(s.n, 12);
+  assert.ok(s.within >= 6 && s.within <= 12);
+  assert.equal(sharpeSteps(sim.returns, null), null);
+  assert.equal(sharpeSteps(sim.returns, Array(12).fill(null)), null);
+});
+
+test("correlation and the 50/50 blend: known answers", () => {
+  close(correlation([1, 2, 3], [2, 4, 6]), 1);
+  close(correlation([1, 2, 3], [3, 2, 1]), -1);
+  const a = [0.01, -0.02, 0.03, 0.0], b = [-0.01, 0.02, -0.03, 0.0];
+  const m = blend5050(a, b);
+  close(m.corr, -1);
+  close(m.volMix, 0, 1e-12); // perfectly opposite funds cancel
+  assert.ok(m.volMix < m.volAvg);
+  const same = blend5050(a, a); // identical funds: no benefit
+  close(same.volMix, same.volAvg, 1e-12);
+  close(priceReturns([100, 110, 99])[1], -0.1);
+});
