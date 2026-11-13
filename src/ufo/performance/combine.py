@@ -2,7 +2,8 @@
 
 Transfers between two household accounts in the group are internal: a withdrawal from one and a deposit into the
 other cancel and do not appear as a flow in the combined line (they stay external for each account alone). Matching
-is by date window and amount (cash) or symbol and quantity (in-kind); the importer's `transfer_hint` is only a hint.
+is by date window and amount (cash; to the cent unless an importer flagged it, then marked "assumed internal") or symbol and
+quantity (in-kind, lots summed, longer window). Every netted pair is named in the output.
 Transfer candidates that match nothing are listed, never guessed.
 """
 from __future__ import annotations
@@ -18,6 +19,8 @@ from ufo.providers.prices import PriceError, PriceStore
 
 WINDOW_DAYS = 5
 CASH_TOLERANCE = 0.01  # a cash transfer's two sides may differ by 1% (or $1)
+SHARE_WINDOW_DAYS = 14  # a move of shares between brokerages can take longer than a cash move
+ASSUMED_TOLERANCE = 0.01  # an unflagged cash pair must match to the cent
 QTY_TOLERANCE = 1e-6
 NONMARKET_NOTE = "includes non-market accounts"  # their flows are compared with the benchmark too, so the excess IRR is not like for like
 
@@ -29,6 +32,7 @@ class Transfer(BaseModel):
     in_date: date
     amount: float
     symbol: str = ""
+    assumed: bool = False  # matched on date and amount alone (no importer flagged it)
 
 
 class GroupRun(BaseModel):
@@ -46,39 +50,97 @@ class GroupRun(BaseModel):
     error: str = ""
 
 
-def _compatible(out: Event, inn: Event) -> bool:
-    if out.in_kind != inn.in_kind:
-        return False
-    if out.in_kind:
-        q1, q2 = abs(out.quantity or 0.0), abs(inn.quantity or 0.0)
-        return out.symbol == inn.symbol and q1 > 0 and abs(q1 - q2) <= QTY_TOLERANCE * max(q1, q2)
+def _cash_ok(out: Event, inn: Event, hinted: bool) -> bool:
     a1, a2 = abs(out.amount), abs(inn.amount)
-    return abs(a1 - a2) <= max(1.0, CASH_TOLERANCE * max(a1, a2))
+    return abs(a1 - a2) <= (max(1.0, CASH_TOLERANCE * max(a1, a2)) if hinted else ASSUMED_TOLERANCE)
 
 
-def net_transfers(runs: list[AccountRun], window_days: int = WINDOW_DAYS) -> tuple[list[tuple[Event, Event]], list[str]]:
-    """Pair withdrawals with deposits across different accounts. Returns (pairs, unmatched hinted candidates)."""
+def _qty_ok(q1: float, q2: float) -> bool:
+    return q1 > 0 and abs(q1 - q2) <= QTY_TOLERANCE * max(q1, q2)
+
+
+class Match(BaseModel):
+    """One internal transfer: the lots that left one account and the lots that arrived in another."""
+    outs: list[Event]
+    ins: list[Event]
+    assumed: bool = False  # matched on date and amount alone: neither importer flagged it as a transfer
+
+
+def net_transfers(runs: list[AccountRun], window_days: int = WINDOW_DAYS) -> tuple[list[Match], list[str]]:
+    """Pair withdrawals with deposits across different accounts. Returns (matches, unmatched hinted candidates).
+
+    Share (in-kind) moves match on fund and share count, with a longer window, and may be split into several lots on
+    either side. Cash moves match when an importer flagged either side as a transfer (amounts within 1% or $1); an
+    unflagged cash pair matches only to the cent and is marked `assumed` so it is named, never silent (issue 115)."""
     ext = [e for r in runs for e in r.events if e.external_flow]
     outs = sorted((e for e in ext if e.external_flow < 0), key=lambda e: (e.when, e.seq))
     ins = [e for e in ext if e.external_flow > 0]
     used: set[int] = set()
-    pairs: list[tuple[Event, Event]] = []
-    for o in outs:
+    matches: list[Match] = []
+    for o in outs:  # one lot for one lot
         best = None
         for i in ins:
-            if id(i) in used or i.account_id == o.account_id or abs((i.when - o.when).days) > window_days or not _compatible(o, i):
+            if id(i) in used or id(o) in used or i.account_id == o.account_id or o.in_kind != i.in_kind:
                 continue
-            key = (abs((i.when - o.when).days), abs(abs(i.amount) - abs(o.amount)))
+            gap = abs((i.when - o.when).days)
+            if o.in_kind:
+                if gap > SHARE_WINDOW_DAYS or o.symbol != i.symbol or not _qty_ok(abs(o.quantity or 0.0), abs(i.quantity or 0.0)):
+                    continue
+                hinted = True
+            else:
+                hinted = o.transfer_hint or i.transfer_hint
+                if gap > window_days or not _cash_ok(o, i, hinted):
+                    continue
+            key = (gap, abs(abs(i.amount) - abs(o.amount)))
             if best is None or key < best[0]:
-                best = (key, i)
+                best = (key, i, hinted)
         if best:
-            used.add(id(best[1]))
-            used.add(id(o))
-            pairs.append((o, best[1]))
+            used |= {id(best[1]), id(o)}
+            matches.append(Match(outs=[o], ins=[best[1]], assumed=not best[2]))
+    # shares split into several lots on one side: match the totals per fund between two accounts
+    rest_o = [e for e in outs if id(e) not in used and e.in_kind and e.symbol]
+    rest_i = [e for e in ins if id(e) not in used and e.in_kind and e.symbol]
+    for sym in sorted({e.symbol for e in rest_o}):
+        for a in sorted({e.account_id for e in rest_o if e.symbol == sym}):
+            for b in sorted({e.account_id for e in rest_i if e.symbol == sym and e.account_id != a}):
+                lo = [e for e in rest_o if e.symbol == sym and e.account_id == a and id(e) not in used]
+                li = [e for e in rest_i if e.symbol == sym and e.account_id == b and id(e) not in used]
+                while lo and li:
+                    first = lo[0].when
+                    batch_o = [e for e in lo if (e.when - first).days <= SHARE_WINDOW_DAYS]
+                    batch_i = [e for e in li if abs((e.when - first).days) <= 2 * SHARE_WINDOW_DAYS]
+                    q_o = sum(abs(e.quantity or 0.0) for e in batch_o)
+                    if not _qty_ok(q_o, sum(abs(e.quantity or 0.0) for e in batch_i)):
+                        lo = lo[1:]  # this lot starts no batch that matches; try the next one
+                        continue
+                    matches.append(Match(outs=batch_o, ins=batch_i))
+                    used |= {id(e) for e in batch_o + batch_i}
+                    lo = [e for e in lo if id(e) not in used]
+                    li = [e for e in li if id(e) not in used]
     unmatched = [f"{e.when} {e.account_id}: {'out' if e.external_flow < 0 else 'in'} {abs(e.amount):,.2f}"
                  f"{' ' + e.symbol if e.symbol else ''} looks like a transfer but matches nothing in this group"
-                 for e in ext if e.transfer_hint and id(e) not in used and id(e) not in {id(o) for o, _ in pairs}]
-    return pairs, unmatched
+                 for e in ext if e.transfer_hint and id(e) not in used]
+    return matches, unmatched
+
+
+def _lot_value(e: Event, unit: float) -> float:
+    return abs(e.quantity or 0.0) * unit if e.in_kind else abs(e.amount)
+
+
+def in_transit(matches: list[Match], months: list[date]) -> dict[date, float]:
+    """Value that has left one account but not yet arrived in the other at each month-end, so the combined value does
+    not show a dip that did not happen (issue 118). Valued from the outgoing lots' own amounts."""
+    out: dict[date, float] = {}
+    for m in matches:
+        q = sum(abs(e.quantity or 0.0) for e in m.outs)
+        total = sum(abs(e.amount) for e in m.outs)
+        unit = total / q if q and m.outs[0].in_kind else 0.0
+        for d in months:
+            gone = sum(_lot_value(e, unit) for e in m.outs if e.when <= d)
+            back = sum(_lot_value(e, unit) for e in m.ins if e.when <= d)
+            if gone > back:
+                out[d] = out.get(d, 0.0) + gone - back
+    return out
 
 
 def combine(kind: str, name: str, runs: list[AccountRun], store: PriceStore, benchmark: str = "VTI") -> GroupRun:
@@ -109,10 +171,11 @@ def combine(kind: str, name: str, runs: list[AccountRun], store: PriceStore, ben
                 v = 0.0  # closed before the common date
             values_at[r.account.id] = v
         g.note = f"as of {end}, the last month-end every account covers"
-    pairs, g.unmatched = net_transfers(runs)
-    skip = {id(e) for pair in pairs for e in pair}
-    g.transfers = [Transfer(out_account=o.account_id, in_account=i.account_id, out_date=o.when, in_date=i.when,
-                            amount=abs(o.amount), symbol=o.symbol) for o, i in pairs]
+    matches, g.unmatched = net_transfers(runs)
+    skip = {id(e) for m in matches for e in m.outs + m.ins}
+    g.transfers = [Transfer(out_account=m.outs[0].account_id, in_account=m.ins[0].account_id, out_date=min(e.when for e in m.outs),
+                            in_date=max(e.when for e in m.ins), amount=sum(abs(e.amount) for e in m.outs), symbol=m.outs[0].symbol,
+                            assumed=m.assumed) for m in matches]
     flows = sorted((e.when, e.external_flow) for r in runs for e in r.events
                    if e.external_flow and id(e) not in skip and e.when <= end)
     by_month: dict[date, float] = {}
@@ -124,6 +187,8 @@ def combine(kind: str, name: str, runs: list[AccountRun], store: PriceStore, ben
                 continue
             by_month[m] = by_month.get(m, 0.0) + v
     months = sorted(by_month)
+    for d, v in in_transit(matches, months).items():
+        by_month[d] += v
     if not flows or not months:
         g.error = "not computed: no cash flows left after netting transfers"
         return g

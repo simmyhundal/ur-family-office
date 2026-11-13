@@ -20,6 +20,9 @@ from ufo.performance.events import EXTERNAL, Event, Kind, ParsedHistory, merge_h
 from ufo.providers.fidelity_csv import parse_number
 
 
+HINT_PREFIXES = ("TRANSFERRED FROM", "TRANSFERRED TO", "TRANSFER OF ASSETS")
+
+
 def _classify(action: str, has_symbol: bool) -> tuple[Kind | None, bool]:
     """Map Fidelity's free-text Action to (kind, in_kind). (None, False) means unrecognized."""
     a = " ".join(action.upper().split())
@@ -92,11 +95,12 @@ def parse_fidelity_history(text: str) -> ParsedHistory:
         if kind is None:
             warnings.append(f"Line {n}: unrecognized action {action[:40]!r}; row skipped. Please report it so it can be handled.")
             continue
+        hint = action.upper().startswith(HINT_PREFIXES) and kind in (Kind.CONTRIBUTION, Kind.WITHDRAWAL)  # a move between accounts
         fees = (parse_number(d.get("Commission")) or 0.0) + (parse_number(d.get("Fees")) or 0.0)
         events.append(Event(
             when=when, kind=kind, symbol=symbol,
             quantity=parse_number(d.get("Quantity")), price=parse_number(d.get("Price")),
-            amount=parse_number(d.get("Amount")) or 0.0, fees=fees, in_kind=in_kind,
+            amount=parse_number(d.get("Amount")) or 0.0, fees=fees, in_kind=in_kind, transfer_hint=hint,
             description=d.get("Description", "").strip(),
             cash_balance=parse_number(d.get("Cash Balance")),
             account_ref=(d.get("Account Number") or d.get("Account") or "").strip(),
