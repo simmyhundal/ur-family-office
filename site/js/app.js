@@ -1,22 +1,8 @@
 // The page. All data stays in the browser: no network calls except loading the bundled demo prices.
-import { compare, parsePricesCsv, sliceFor, sharpeSteps, blend5050, priceReturns } from "./calc.mjs";
+import { compare, parsePricesCsv, sliceFor } from "./calc.mjs";
+import { $, el, svg, money, pct, spct, monthYear, revealOnScroll, saveMix, SAMPLE } from "./util.mjs";
+import { loadPrices } from "./data.mjs";
 
-const $ = (id) => document.getElementById(id);
-const el = (tag, attrs = {}, ...kids) => {
-  const n = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) (k === "class" ? (n.className = v) : n.setAttribute(k, v));
-  for (const kid of kids) n.append(kid);
-  return n;
-};
-const NS = "http://www.w3.org/2000/svg";
-const svg = (tag, attrs = {}) => {
-  const n = document.createElementNS(NS, tag);
-  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
-  return n;
-};
-const money = (x) => (x < 0 ? "-" : "") + "$" + Math.round(Math.abs(x)).toLocaleString("en-US");
-const pct = (x, d = 1) => (x == null || Number.isNaN(x) ? "n/a" : (x * 100).toFixed(d) + "%");
-const spct = (x, d = 1) => (x == null ? "n/a" : (x >= 0 ? "+" : "") + (x * 100).toFixed(d) + "%");
 const TIPS = {
   gain: "Ending value minus the money you put in, before taxes.",
   year: "How fast the investments grew each year, as if $1 had stayed in the whole time. Your deposits and timing don't flatter it. Needs 12 months of history.",
@@ -26,34 +12,21 @@ const TIPS = {
   ends: "What the money would be worth on the last date, before taxes.",
 };
 const tip = (label, key) => el("span", { class: "tip", tabindex: "0", "data-tip": TIPS[key], "aria-description": TIPS[key] }, label);
-const monthYear = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "numeric" });
 
 const state = { years: 5, data: null, labels: {}, demo: true, source: "", rows: [], presets: [], mixName: "Your mix", sample: false };
 const OTHER = ["SPY", "VTI", "QQQ", "IWM", "AGG"]; // shown in the "other benchmarks" table when the data has them
 
-async function getJson(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(url + " " + res.status);
-  return res.json();
-}
-
 async function load() {
-  let d, demo = false;
-  if (globalThis.UFO_DATA) d = globalThis.UFO_DATA; // set by scripts/build_single_page.py (one-file copy of the site)
-  else try { d = await getJson("data/prices.json"); } catch { d = await getJson("data/demo-prices.json"); demo = true; }
-  state.data = { dates: d.dates, series: d.series, rf: d.rf ?? null }; // rf: cash rate in % a year (list per date, or one number)
-  state.labels = d.labels || {};
-  state.demo = demo;
-  state.source = d.asOf ? `Prices to ${d.asOf}.` : "";
-  const has = (x) => x in d.series;
-  let presets = [];
-  if (!demo) { try { presets = globalThis.UFO_PRESETS || await getJson("data/presets.json"); } catch { /* no presets is fine */ } }
-  state.presets = presets.filter((p) => Object.keys(p.weights).every(has)); // only mixes whose funds all have prices
-  state.rows = demo ? [{ sym: "DEMOUS", w: 60 }, { sym: "DEMOBD", w: 30 }, { sym: "DEMOGD", w: 10 }]
+  const p = await loadPrices();
+  state.data = p.data; state.labels = p.labels; state.demo = p.demo; state.source = p.source;
+  const has = (x) => x in p.data.series;
+  state.presets = p.presets;
+  state.rows = p.demo ? [{ sym: "DEMOUS", w: 60 }, { sym: "DEMOBD", w: 30 }, { sym: "DEMOGD", w: 10 }]
     : state.presets.length ? rowsOf(state.presets[0]) : starter();
-  state.mixName = state.presets.length && !demo ? state.presets[0].name : "Your mix";
-  $("benchmark").value = has("SPY") ? "SPY" : Object.keys(d.series)[0];
+  state.mixName = state.presets.length && !p.demo ? state.presets[0].name : "Your mix";
+  $("benchmark").value = has("SPY") ? "SPY" : Object.keys(p.data.series)[0];
   setup();
+  if (new URLSearchParams(location.search).get("sample") === "1") loadSample();
 }
 
 const symbols = () => Object.keys(state.data.series);
@@ -121,12 +94,26 @@ function render() {
     const r = compare({ prices: data.series, mix, benchmark: bench, initial, monthly, strategy: $("strategy").value, rf: data.rf });
     draw({ r, dates: data.dates, monthly, bench, limitedBy: data.limitedBy, years: state.years });
     drawOthers({ data, mix, others, initial, monthly, mixEnd: r.mix.m.endValue });
-    drawLesson({ r, data, mix, bench, monthly });
+    drawSummary({ r, bench });
+    saveMix({ rows: state.rows, benchmark: bench, initial, monthly, strategy: $("strategy").value, years: state.years, name: state.mixName, sample: state.sample });
   } catch (e) {
     err.textContent = e.message;
-    for (const id of ["verdict", "period-line", "chart-desc"]) $(id).textContent = "";
-    for (const id of ["cards", "chart", "legend", "table-wrap", "benchmarks", "lesson-body"]) $(id).replaceChildren();
+    for (const id of ["verdict", "period-line", "chart-desc", "headline", "headline-sub"]) $(id).textContent = "";
+    for (const id of ["cards", "chart", "legend", "table-wrap", "benchmarks"]) $(id).replaceChildren();
   }
+}
+
+// The first thing a visitor sees: one headline number and one chart.
+function drawSummary({ r, bench }) {
+  const a = r.mix.m.annualReturn, b = r.bench.m.annualReturn;
+  if (a == null || b == null) {
+    $("headline").textContent = `${state.mixName} ended at ${money(r.mix.m.endValue)}; ${bench} at ${money(r.bench.m.endValue)}.`;
+    $("headline-sub").textContent = "A yearly rate needs 12 months of prices; open the details for the rest.";
+    return;
+  }
+  $("headline").textContent = `${state.mixName} vs ${bench}: ${spct(a)} vs ${spct(b)} a year`;
+  const diff = r.mix.m.endValue - r.bench.m.endValue;
+  $("headline-sub").textContent = diff === 0 ? "The same result." : `${state.mixName} finished ${money(Math.abs(diff))} ${diff > 0 ? "ahead of" : "behind"} ${bench}. Before taxes and costs.`;
 }
 
 function card(kind, title, m) {
@@ -262,119 +249,15 @@ function drawTable(dates, an, bn, a, b, put) {
 
 // ---------- sample portfolio ----------
 // An invented person with invented deposits; the prices are the real bundled ones (or the demo set when running on demo data).
-const SAMPLE = {
-  real: { weights: { VTI: 50, VXUS: 20, BND: 20, QQQ: 10 } },
-  demo: { weights: { DEMOUS: 60, DEMOBD: 30, DEMOGD: 10 } },
-  initial: 2000, monthly: 500,
-};
 function loadSample() {
-  const pick = SAMPLE.real.weights && Object.keys(SAMPLE.real.weights).every((x) => x in state.data.series) ? SAMPLE.real : SAMPLE.demo;
+  const pick = Object.keys(SAMPLE.real.weights).every((x) => x in state.data.series) ? SAMPLE.real : SAMPLE.demo;
   if (!Object.keys(pick.weights).every((x) => x in state.data.series)) { $("error").textContent = "The sample needs the built-in prices; click “Back to built-in prices” first."; return; }
-  state.rows = rowsOf(pick); state.mixName = "Sample MBA student"; state.sample = true;
+  state.rows = rowsOf(pick); state.mixName = SAMPLE.name; state.sample = true;
   $("initial").value = SAMPLE.initial; $("monthly").value = SAMPLE.monthly; $("strategy").value = "hold";
   state.years = 5;
   document.querySelectorAll(".seg button").forEach((o) => o.setAttribute("aria-pressed", String(o.dataset.years === "5")));
   setup();
   $("preset").value = "custom";
-  $("lesson").open = true;
-}
-
-// ---------- How Sharpe works ----------
-const pm = (x, d = 2) => (x == null || Number.isNaN(x) ? "n/a" : (x * 100).toFixed(d) + "%");
-const pp = (x, d = 2) => (x == null || Number.isNaN(x) ? "n/a" : (x >= 0 ? "+" : "") + (x * 100).toFixed(d) + "%");
-
-function drawLesson({ r, data, mix, bench, monthly }) {
-  const body = $("lesson-body");
-  const name = state.mixName, rets = r.mix.sim.returns, n = rets.length, dates = data.dates.slice(1);
-  const P = (...kids) => el("p", {}, ...kids);
-  const H = (t) => el("h3", {}, t);
-  const out = [];
-  const rf = data.rf;
-  const S = sharpeSteps(rets, rf), B = sharpeSteps(r.bench.sim.returns, rf);
-
-  // Step 1: one return per month
-  const k = n - 1, vals = r.mix.sim.values, flow = monthly > 0 ? monthly : 0;
-  const startV = vals[k], endBefore = startV * (1 + rets[k]); // last month runs from vals[k] to vals[k+1]
-  out.push(H("Step 1: one return per month"),
-    P("For each month, compare what the investments are worth at the end with what they were worth at the start. Money you add is not a return, so it is left out: the deposit lands after the month is measured."),
-    P(`Worked example, ${monthYear(dates[k])} for ${name}:`),
-    table(["", ""], [
-      ["Value at the start of the month", money(startV)],
-      ["Value at the end, before that month’s deposit", money(endBefore)],
-      ["Deposit made at month-end (not a return)", money(flow)],
-      ["Gain from the investments themselves", (endBefore - startV >= 0 ? "+" : "") + money(endBefore - startV)],
-      ["Return for the month", pp(rets[k])],
-    ], true));
-  const rows12 = rets.map((x, i) => i).slice(-12);
-  out.push(P(S ? "The last twelve months (the Sharpe ratio uses all " + n + "):" : "The last twelve months:"),
-    table(S ? ["Month", "Return", "Cash (T-bill)", "Above cash"] : ["Month", "Return"],
-      rows12.map((i) => S ? [monthYear(dates[i]), pp(rets[i]), pm(S.cash[i]), pp(S.excess[i])] : [monthYear(dates[i]), pp(rets[i])])));
-
-  if (!S) {
-    out.push(P("The remaining steps need a cash (T-bill) rate, and prices from your own CSV don’t carry one, so the Sharpe ratio is n/a here. Use the built-in prices to see all the steps."));
-  } else {
-    out.push(
-      H("Step 2: subtract what cash would have paid"),
-      P(`Money could have sat in 3-month US Treasury bills, close to risk-free. Over these ${n} months that paid about ${pm(S.meanCash, 3)} a month (${pm(S.meanCash * 12)} a year). Only the return above that rewards you for taking risk, so each month’s return minus the T-bill rate is the excess return (last column above).`),
-      H("Step 3: average the excess returns"),
-      P(`Your average monthly excess return was ${pp(S.meanExcess, 3)}. Times 12 that is about ${pp(S.meanExcessAnnual)} a year.`),
-      P(`Why times 12 and not compounded? Compounding, (1 + monthly)^12 − 1, is the right way to say what you earned in a year (${name} compounded to ${pp(S.compoundedAnnual)} a year here). The Sharpe ratio uses simple scaling instead, because volatility can only be scaled to a year by √12 when returns are added, not multiplied. Scaling the average by 12 and the volatility by √12 keeps both in the same units. This is the standard convention (Sharpe, 1994).`),
-      H("Step 4: measure how bumpy the ride was"),
-      P(`Volatility is the standard deviation of those monthly excess returns: roughly, how far a typical month lands from the average. Here it is ${pm(S.sd, 3)} a month. Good and bad months partly cancel, so the yearly figure scales by √12 (about 3.46): ${pm(S.sdAnnual)} a year.`),
-      P(`Sanity check: ${S.within} of ${n} months landed within one standard deviation of the average (about 68% would be typical, here ${Math.round((S.within / n) * 100)}%).`),
-      H("Step 5: divide"),
-      P(el("b", {}, "Sharpe = average excess return ÷ volatility")),
-      P(`${pp(S.meanExcessAnnual)} ÷ ${pm(S.sdAnnual)} = `, el("b", {}, S.sharpe == null ? "n/a" : S.sharpe.toFixed(2)),
-        `. The code does the same sum in monthly units (${pp(S.meanExcess, 3)} ÷ ${pm(S.sd, 3)} × √12) and gets the same answer.` +
-        (B && B.sharpe != null ? ` ${bench} over the same months: ${B.sharpe.toFixed(2)}.` : "")),
-      P("Reading it: higher is better. Roughly, below 0.5 is modest, around 1 is good, above 1.5 is rare. It treats a surprise gain as “risk” just like a loss, and a short window can show almost anything."));
-  }
-
-  // MPT
-  out.push(el("h3", {}, "How this connects to modern portfolio theory"),
-    P("In 1952 Harry Markowitz showed that what matters is not each investment on its own, but how they move together."));
-  const w = Object.entries(mix).sort((a, b) => b[1] - a[1]).slice(0, 2);
-  if (w.length === 2) {
-    const [fa, fb] = w.map(([s]) => s), ra = priceReturns(data.series[fa]), rb = priceReturns(data.series[fb]);
-    const m = blend5050(ra, rb);
-    out.push(P(el("b", {}, "1. Mixing lowers risk when things don’t move in lockstep. "),
-      `Take two funds in the mix, ${fa} and ${fb}. Their volatilities are ${pm(m.volA, 1)} and ${pm(m.volB, 1)} a year, and their monthly returns have a correlation of ${m.corr.toFixed(2)} (1.0 would mean they always move together, 0 not at all). A 50/50 blend of the two has a volatility of `, el("b", {}, pm(m.volMix, 1)),
-      `, against ${pm(m.volAvg, 1)} for the simple average of the two. That gap is the diversification benefit: ${m.volMix < m.volAvg - 1e-9 ? "less risk without giving up the average return." : "none here, because these two move almost in lockstep."}`));
-  } else out.push(P("Add a second fund to the mix to see the diversification example."));
-  out.push(P(el("b", {}, "2. The efficient frontier. "), "Try every possible mix of a set of funds and plot each one’s risk and return. The upper-left edge of that cloud is the efficient frontier: for each level of risk, the best return any mix achieved. Mixes below the edge take risk without being paid for it."));
-  if (S && S.sharpe != null) {
-    out.push(P(el("b", {}, "3. The Sharpe ratio is a slope. "), `Put a point at zero risk and the T-bill return (${pm(S.meanCash * 12, 1)}). Draw a line from it to any portfolio: the steepness is that portfolio’s Sharpe ratio. ${name} has slope ${S.sharpe.toFixed(2)}${B && B.sharpe != null ? `; ${bench} has ${B.sharpe.toFixed(2)}` : ""}.`),
-      slopeChart(S, B, name, bench));
-  }
-  out.push(P(el("b", {}, "4. The best mix touches the frontier. "), "The steepest line that still reaches the frontier touches it at one mix: the maximum-Sharpe (tangency) portfolio. In practice the frontier is drawn from past returns, which shift, so the “best” mix is an estimate, not a promise."),
-    el("p", { class: "muted small" }, "Information, not investment advice. Before taxes and trading costs; past results don’t predict future ones."));
-  body.replaceChildren(...out);
-}
-
-function table(head, rows, plain = false) {
-  const t = el("table", { class: "lesson-table" });
-  if (!plain) t.append(el("thead", {}, el("tr", {}, ...head.map((h) => el("th", { scope: "col" }, h)))));
-  t.append(el("tbody", {}, ...rows.map((rw) => el("tr", {}, ...rw.map((c, i) => el(i || !plain ? "td" : "th", plain && !i ? { scope: "row" } : {}, c))))));
-  return el("div", { class: "table-scroll" }, t);
-}
-
-function slopeChart(S, B, name, bench) {
-  const pts = [{ n: name, x: S.sdAnnual, y: S.meanExcessAnnual + S.meanCash * 12, c: "var(--mix)" }];
-  if (B && B.sharpe != null) pts.push({ n: bench, x: B.sdAnnual, y: B.meanExcessAnnual + B.meanCash * 12, c: "var(--bench)" });
-  const cash = S.meanCash * 12, W = 520, H = 220, L = 52, Rr = 90, T = 14, Bt = 34;
-  const xm = Math.max(...pts.map((p) => p.x)) * 1.15, ys = [cash, ...pts.map((p) => p.y)];
-  const y0 = Math.min(0, ...ys), y1 = Math.max(...ys) * 1.15 || 0.1;
-  const X = (v) => L + (v / xm) * (W - L - Rr), Y = (v) => T + (1 - (v - y0) / (y1 - y0)) * (H - T - Bt);
-  const root = svg("svg", { viewBox: `0 0 ${W} ${H}`, class: "slope", role: "img", "aria-label": `Risk against return: lines from cash to ${pts.map((p) => p.n).join(" and ")}; steeper means a higher Sharpe ratio.` });
-  root.append(svg("line", { class: "grid", x1: L, x2: W - Rr, y1: Y(0), y2: Y(0) }), svg("line", { class: "grid", x1: L, x2: L, y1: T, y2: H - Bt }));
-  const text = (x, y, t, a = {}) => { const e = svg("text", { class: "axis-text", x, y, ...a }); e.textContent = t; return e; };
-  root.append(text(L + (W - L - Rr) / 2, H - 6, "Ups and downs (yearly volatility) →", { "text-anchor": "middle" }), text(L - 6, Y(cash) + 4, pm(cash, 1), { "text-anchor": "end" }));
-  root.append(svg("circle", { cx: X(0), cy: Y(cash), r: 4, fill: "var(--ink-2)" }), text(L + 8, Y(cash) - 8, "Cash (T-bills)"));
-  for (const p of pts) {
-    root.append(svg("line", { x1: X(0), y1: Y(cash), x2: X(p.x), y2: Y(p.y), stroke: p.c, "stroke-width": 2 }), svg("circle", { cx: X(p.x), cy: Y(p.y), r: 5, fill: p.c }),
-      text(X(p.x) + 9, Y(p.y) + 4, `${p.n} (${((p.y - cash) / p.x).toFixed(2)})`, { "font-weight": 600 }));
-  }
-  return el("figure", { class: "chart-fig" }, root, el("figcaption", { class: "muted small" }, "Return per year (up) against ups and downs (right). Slope of each line = Sharpe ratio."));
 }
 
 // ---------- events ----------
@@ -428,4 +311,5 @@ $("csv").addEventListener("change", async (e) => {
 $("sample").addEventListener("click", loadSample);
 $("reset-data").addEventListener("click", () => { $("csv").value = ""; load(); });
 
+revealOnScroll();
 load().catch((e) => { $("error").textContent = "Could not load prices: " + e.message; });

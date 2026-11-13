@@ -70,7 +70,7 @@ def test_single_page_build_inlines_everything():
     B = importlib.util.module_from_spec(spec2)
     spec2.loader.exec_module(B)
     out = B.build('{"dates":["2024-01-31"],"labels":{"A":"</script>"},"series":{"A":[1]}}')
-    assert "<style>" in out and "globalThis.UFO_DATA" in out and 'src="js/app.js"' not in out and "export " not in out and "import {" not in out
+    assert "<style>" in out and "globalThis.UFO_DATA" in out and "../js/app.js" not in out and "export " not in out and "import {" not in out
     assert "</script>\"" not in out.split("globalThis.UFO_DATA")[1].split("</script>")[0]  # data cannot close the tag early
 
 
