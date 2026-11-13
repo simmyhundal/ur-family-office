@@ -71,7 +71,7 @@ try {
     const featured = p.status === "available";
     return `<article class="plan reveal in${featured ? " featured" : ""}" aria-label="${esc(p.name)}: ${esc(priceLabel(p))}">${featured ? '<span class="plan-badge">Start here</span>' : ""}
       <span class="plan-status${on}">${esc(st)}</span><h2>${esc(p.name)}</h2>
-      ${bigPrice(p)}<p class="blurb">${esc(p.blurb)}</p>
+      ${bigPrice(p)}<p class="blurb">${esc(p.blurb)}${/^#[a-z-]+$/.test(p.teaser || "") ? ` <a class="teaser" href="../${p.teaser}">See what ${esc(p.name)} looks like →</a>` : ""}</p>
       <ul>${p.features.map((f) => `<li>${esc(f)}</li>`).join("")}</ul>
       <a class="btn${featured ? "" : " ghost"}" href="${esc(a.href)}"${ext}>${esc(a.label)}</a></article>`;
   }).join("");

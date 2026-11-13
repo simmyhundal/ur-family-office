@@ -24,7 +24,7 @@
   <div class="signup-side">
     <div class="page-head reveal"><span class="eyebrow">Early access</span><h1>Be first to see what’s next</h1><p class="sub">Join the list and we will email you when new features open. No payment, no portfolio data, no promises about returns.</p></div>
     <ul class="checks reveal">
-      <li><div><b>All your accounts side by side</b><span>The next thing we are building, for the Plus plan.</span></div></li>
+      <li><div><b>Plus: every account side by side</b><span>With what-if tests to lower risk. <a href="../#plus">See what Plus looks like</a>.</span></div></li>
       <li><div><b>Class pilots for instructors</b><span>Choose “Instructor” and we will get in touch about your course.</span></div></li>
       <li><div><b>Only what you type here is sent</b><span>Email, role, school, plan interest and consent. Nothing else.</span></div></li>
     </ul>
@@ -61,12 +61,17 @@
 <script type="module" src="../js/chrome.mjs"></script>
 <script type="module">
 import { cfg } from "../js/chrome.mjs";
-import { parseParams, buildSignupPayload, validateSignup, submitSignup } from "../js/signup.mjs";
+import { parseParams, buildSignupPayload, validateSignup, submitSignup, mailtoJoin } from "../js/signup.mjs";
 const $ = (id) => document.getElementById(id);
 const pre = parseParams(location.search);
 if (pre.plan) $("f-plan").value = pre.plan;
 if (pre.role) $("f-role").value = pre.role;
-if (!cfg.signup_endpoint) { $("status").textContent = "Sign-ups open soon. Nothing is sent from this form yet."; $("go").disabled = true; }
+if (!cfg.signup_endpoint) {
+  $("go").disabled = true;
+  const href = mailtoJoin(cfg.contact_email, pre.plan);
+  if (href) { $("status").textContent = "Sign-ups by form open soon. Until then: "; const a = document.createElement("a"); a.href = href; a.textContent = "email us to join the list"; $("status").append(a, "."); }
+  else $("status").textContent = "Sign-ups open soon. Nothing is sent from this form yet.";
+}
 $("signup").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const p = buildSignupPayload({ email: $("f-email").value, role: $("f-role").value, school: $("f-school").value, plan: $("f-plan").value, consent: $("f-consent").checked });

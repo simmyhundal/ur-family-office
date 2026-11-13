@@ -579,3 +579,9 @@ mark, .hl { background: linear-gradient(104deg, transparent 0.4em, color-mix(in 
 .scale span.on { background: var(--accent); color: var(--accent-ink); }
 .ph-chart .key text { font-size: 8.5px; fill: var(--p2); } .ph-chart .key circle { fill: none; stroke: var(--pm); stroke-width: 2; } .ph-chart .key rect { fill: none; stroke: currentColor; stroke-width: 1.5; }
 .float-a { bottom: -48px; }
+.lesson-head { padding-bottom: 8px; }
+.step-nav { align-items: center; }
+.end-actions { display: inline-flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.lesson-plus { margin: 18px 0 0; text-align: center; }
+.plan .teaser { display: inline-block; margin-top: 6px; font-weight: 650; text-decoration: none; font-size: var(--t-sm); }
+.plan .teaser:hover { text-decoration: underline; }

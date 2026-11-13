@@ -12,7 +12,7 @@ from pathlib import Path
 SITE = Path(__file__).resolve().parents[1] / "site"
 
 
-MODULES = ["calc.mjs", "util.mjs", "data.mjs", "portfolios.mjs", "positions.mjs", "share.mjs"]  # then app.js; keep in step with its imports
+MODULES = ["calc.mjs", "util.mjs", "data.mjs", "result.mjs", "portfolios.mjs", "positions.mjs", "share.mjs"]  # then app.js; keep in step with its imports
 
 
 def _strip(src: str) -> str:
@@ -30,7 +30,8 @@ def build(prices_json: str, presets_json: str | None = None) -> str:
     tools = (SITE / "css" / "try-tools.css").read_text()
     html = html.replace('<link rel="stylesheet" href="../css/try-tools.css">', f"<style>\n{tools}</style>")
     logo = "data:image/svg+xml," + quote((SITE / "img" / "logo.svg").read_text().strip(), safe=" =:/'")
-    html = html.replace('href="../img/logo.svg"', f'href="{logo}"').replace('src="../img/logo.svg"', f'src="{logo}"')
+    icon = "data:image/svg+xml," + quote((SITE / "img" / "favicon.svg").read_text().strip(), safe=" =:/'")
+    html = html.replace('href="../img/favicon.svg"', f'href="{icon}"').replace('src="../img/logo.svg"', f'src="{logo}"')
     html = html.replace('<script type="module" src="../js/chrome.mjs"></script>\n', "")  # header and footer are already in the page
     presets = presets_json if presets_json is not None else (SITE / "data" / "presets.json").read_text()
     presets = json.dumps(json.loads(presets), separators=(",", ":")).replace("</", "<\\/")

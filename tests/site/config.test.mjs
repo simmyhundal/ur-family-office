@@ -103,3 +103,25 @@ test("the shipped site.json has the legal name, tagline and founder", async () =
   assert.equal(c.legal_name, "Mycorrhiza Partners LLC DBA Ur Family Office");
   assert.equal(c.founder.name, "Simmy Hundal"); assert.equal(c.founder.photo, "img/founder.jpg");
 });
+
+test("mailto fallback only with a contact email; subject names the plan", async () => {
+  const { mailtoJoin } = await import("../../site/js/signup.mjs");
+  assert.equal(mailtoJoin(""), ""); assert.equal(mailtoJoin("not-an-email"), ""); assert.equal(mailtoJoin("a@b.example?bcc=x@y.z"), "");
+  assert.equal(mailtoJoin("hello@invented.example", "plus"), "mailto:hello@invented.example?subject=Join%20the%20Plus%20list");
+  assert.equal(mailtoJoin("hello@invented.example", "nonsense"), "mailto:hello@invented.example?subject=Join%20the%20list");
+});
+test("every page's static header and footer match what chrome.mjs renders (pages without JS, the one-file copy)", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const site = new URL("../../site/", import.meta.url);
+  const cfg = mergeConfig(JSON.parse(await readFile(new URL("data/site.json", site), "utf8")));
+  const pages = { "index.html": ["", "home"], "try/index.html": ["../", "try"], "learn/index.html": ["../", "learn"], "learn/sharpe/index.html": ["../../", "learn"],
+    "teach/index.html": ["../", "teach"], "pricing/index.html": ["../", "pricing"], "signup/index.html": ["../", "signup"], "privacy/index.html": ["../", "privacy"],
+    "terms/index.html": ["../", "terms"], "about/index.html": ["../", "about"] };
+  for (const [f, [root, key]] of Object.entries(pages)) {
+    const html = await readFile(new URL(f, site), "utf8");
+    assert.ok(html.includes(`<header class="site-head">${headerHtml(cfg, root, key)}</header>`), f + " header: run node scripts/sync_site_chrome.mjs");
+    assert.ok(html.includes(`<footer class="site-foot">${footerHtml(cfg, root)}</footer>`), f + " footer: run node scripts/sync_site_chrome.mjs");
+    assert.ok(html.includes("© 2026 Mycorrhiza Partners LLC DBA Ur Family Office"), f);
+    assert.ok(!/about \d+ minutes|Running on/.test(html), f);
+  }
+});

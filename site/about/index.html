@@ -21,13 +21,25 @@
 <main id="main">
 
 <div class="page-top mesh"><div class="wrap narrow">
-  <div class="page-head reveal"><span class="eyebrow">Our story</span><h1>About</h1><p class="sub">A small, careful tool for comparing your investments with the market.</p></div>
+  <div class="page-head reveal"><span class="eyebrow">Our story</span><h1>About</h1><p class="sub">A small, careful tool for seeing how your investments really did.</p></div>
 </div></div>
 <div class="wrap narrow prose">
+  <section class="founder reveal" id="founder" aria-labelledby="founder-h">
+    <img id="founder-photo" src="../img/founder.jpg" alt="Simmy Hundal" width="148" height="148">
+    <div>
+      <span class="eyebrow">Why I built this</span>
+      <h2 id="founder-h"><span id="founder-name">Simmy Hundal</span></h2>
+      <p class="role">Founder · MBA student</p>
+      <p>I wanted to know whether my own investments were really doing well, or just going up because everything was. Answering that fairly took spreadsheets and guesswork, so I built a tool to do it, privately, in the browser.</p>
+      <p>UFO is that tool, opened up. I hope it helps you feel informed about your money, not intimidated by it.</p>
+      <a class="li" id="founder-li" href="#" rel="noopener noreferrer" hidden><svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M4.5 3.5a2 2 0 1 1 0 4 2 2 0 0 1 0-4zM3 9h3v12H3zM9 9h2.9v1.7h.1c.4-.8 1.4-1.9 3.1-1.9 3.3 0 3.9 2.2 3.9 5V21h-3v-6.4c0-1.5 0-3.5-2.1-3.5s-2.4 1.6-2.4 3.4V21H9z"/></svg>Connect on LinkedIn</a>
+    </div>
+  </section>
+  <p class="legal-name reveal" id="legal-name">UFO is a service of Mycorrhiza Partners LLC DBA Ur Family Office.</p>
   <h2 class="reveal">How it works</h2>
   <ul class="reveal">
     <li><b>Nothing is uploaded.</b> The math runs in your browser. The mix you enter, and any CSV you load, never leave your device. There are no accounts, no analytics and no trackers.</li>
-    <li><b>Prices</b> are month-end adjusted closes, which count dividends as reinvested. They are fetched on weekdays and bundled with the site.</li>
+    <li><b>Prices</b> are month-end adjusted closes, which count dividends as reinvested. Only completed months are used: a month counts once it has ended.</li>
     <li><b>The cash rate</b> used for the Sharpe ratio is the 3-month US Treasury bill rate from FRED, the Federal Reserve Bank of St. Louis data service.</li>
   </ul>
   <h2 class="reveal">Limits</h2>
@@ -39,9 +51,7 @@
   </ul>
   <h2 class="reveal">Information, not investment advice</h2>
   <p class="reveal">UFO is for personal and educational use. It does not recommend that you buy or sell anything, and it is not a licensed adviser. Talk to a qualified professional before making financial decisions.</p>
-  <h2 class="reveal">Who builds this</h2>
-  <p class="reveal">UFO is a small, independent project, built by one person who wanted a clear, private way to see how a mix of investments compares with the market, and to teach the ideas behind it. It started as a personal tool and is being opened up for students and instructors.</p>
-  <p class="reveal">Questions or a class pilot? Use the <a href="../signup/?role=instructor">sign-up page</a> or the contact address in the footer. See also <a href="../privacy/">Privacy</a>, <a href="../terms/">Terms</a> and <a href="../pricing/">Pricing</a>.</p>
+  <p class="reveal">Questions or a class pilot? Use the <a href="../signup/?role=instructor">sign-up page</a>. See also <a href="../privacy/">Privacy</a>, <a href="../terms/">Terms</a> and <a href="../pricing/">Pricing</a>.</p>
   <p class="reveal"><a class="btn" href="../try/?sample=1">Try it with a sample portfolio</a></p>
 </div>
 </main>
@@ -57,6 +67,14 @@
   <p class="copy">© 2026 Mycorrhiza Partners LLC DBA Ur Family Office</p>
 </div></footer>
 <script type="module">import { revealOnScroll } from "../js/util.mjs"; revealOnScroll();</script>
+<script type="module">
+import { cfg } from "../js/chrome.mjs";
+const $ = (id) => document.getElementById(id), f = cfg.founder;
+if (f.name) { $("founder-name").textContent = f.name; $("founder-photo").alt = f.name; }
+if (f.photo) $("founder-photo").src = "../" + f.photo;
+if (f.linkedin) { $("founder-li").href = f.linkedin; $("founder-li").hidden = false; }
+$("legal-name").textContent = `UFO is a service of ${cfg.legal_name}.`;
+</script>
 <script type="module" src="../js/chrome.mjs"></script>
 </body>
 </html>
