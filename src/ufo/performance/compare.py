@@ -201,6 +201,13 @@ def run_all(reg: Registry, root: Path, store: PriceStore, benchmark: str = "VTI"
     return [run_account(a, root, store, benchmark, today, max_age) for a in reg.accounts]
 
 
+def _describe(tr, labels: dict[str, str]) -> str:
+    what = f"{tr.symbol} " if tr.symbol else ""
+    when = str(tr.out_date) if tr.out_date == tr.in_date else f"{tr.out_date} to {tr.in_date}"
+    return (f"{what}{tr.amount:,.2f} from {labels.get(tr.out_account, tr.out_account)} to {labels.get(tr.in_account, tr.in_account)}, {when}"
+            + (" (assumed internal: matched on date and amount only)" if tr.assumed else ""))
+
+
 def print_table(runs: list[AccountRun], benchmark: str, console: Console | None = None, notes: list[str] | None = None,
                 groups: list | None = None) -> None:
     c = console or Console()
@@ -224,6 +231,9 @@ def print_table(runs: list[AccountRun], benchmark: str, console: Console | None 
         add(a.label, a.wrapper.value, money(r.end_value), ("-" if r.net_contributions < 0 else "") + money(abs(r.net_contributions)), pct(rep.irr),
             spct(rep.excess_irr), r.quality, ", ".join(r.flags + (["no market prices: no time-weighted return, Sharpe or drawdown"] if not r.market else [])))
     first = True
+    labels = {r.account.id: r.account.label for r in runs}
+    unmatched: dict[str, list[str]] = {}
+    nets: dict[str, list[str]] = {}
     for g in groups or []:
         total = g.kind == "all"
         name = "Total, all accounts" if total else g.name
@@ -238,7 +248,12 @@ def print_table(runs: list[AccountRun], benchmark: str, console: Console | None 
         first = False
         if total:
             t.rows[-1].end_section = True
-        notes = list(notes or []) + g.unmatched
+        for u in g.unmatched:
+            unmatched.setdefault(u, []).append(g.name)
+        for tr in g.transfers:
+            nets.setdefault(_describe(tr, labels), []).append(g.name)
+    notes = list(notes or []) + [f"Netted (in {', '.join(w)}): {d}" for d, w in nets.items()] + \
+        [f"{u} (in {', '.join(w)})" for u, w in unmatched.items()]
     tot = next((g for g in groups or [] if g.kind == "all" and g.report is not None), None)
     if tot is not None:
         notes = list(notes or []) + [
